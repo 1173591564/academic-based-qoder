@@ -1,6 +1,6 @@
 ---
 name: reading-progress
-description: "Track reading progress, coverage analysis, and reading plan generation"
+description: "追踪阅读进度、覆盖率分析与阅读计划生成"
 ---
 
 ## 触发

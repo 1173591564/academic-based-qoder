@@ -1,6 +1,6 @@
 ---
 name: gap-analysis-flow
-description: "Gap discovery workflow: citation-network → concept-evolution → research-gap → recommendation"
+description: "研究空白发现流程：引用网络 → 概念演化 → 研究缺口 → 论文推荐"
 ---
 
 ## 触发

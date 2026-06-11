@@ -1,6 +1,6 @@
 ---
 name: math-verification
-description: "Verify mathematical formulas and theorems, with Lean4 formalization"
+description: "数学公式与定理验证，支持 Lean4 形式化"
 ---
 
 ## 触发

@@ -1,6 +1,6 @@
 ---
 name: writing-flow
-description: "Academic writing workflow: survey → compare → related-work → bibtex → review"
+description: "学术写作流程：调研 → 对比 → Related Work → BibTeX → 审稿"
 ---
 
 ## 触发

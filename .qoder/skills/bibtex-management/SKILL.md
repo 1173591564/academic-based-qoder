@@ -1,6 +1,6 @@
 ---
 name: bibtex-management
-description: "Export, organize, and validate BibTeX references"
+description: "导出、管理和验证 BibTeX 引用文件"
 ---
 
 ## 触发

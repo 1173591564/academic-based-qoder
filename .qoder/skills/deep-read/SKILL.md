@@ -1,6 +1,6 @@
 ---
 name: deep-read
-description: "Deep reading and structured analysis of individual papers"
+description: "单篇论文深度阅读与结构化分析"
 ---
 
 ## 触发

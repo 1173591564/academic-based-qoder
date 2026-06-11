@@ -1,6 +1,6 @@
 ---
 name: paper-compare
-description: "Compare multiple papers on methods, experiments, and evolution"
+description: "对比多篇论文的方法、实验和演化关系"
 ---
 
 ## 触发

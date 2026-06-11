@@ -1,6 +1,6 @@
 ---
 name: citation-network
-description: "Analyze citation networks, identify key papers and bridge nodes"
+description: "分析引用网络，识别关键论文和桥接节点"
 ---
 
 ## 触发

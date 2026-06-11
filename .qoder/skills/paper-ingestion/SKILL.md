@@ -1,6 +1,6 @@
 ---
 name: paper-ingestion
-description: "Scan, parse, and import papers into the knowledge base"
+description: "扫描、解析并导入论文到知识库"
 ---
 
 ## 触发

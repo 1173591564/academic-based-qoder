@@ -1,6 +1,6 @@
 ---
 name: cold-start
-description: "Build a knowledge map and learning path for unfamiliar research fields"
+description: "为陌生研究领域构建知识地图和学习路径"
 ---
 
 ## 触发

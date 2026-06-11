@@ -1,6 +1,6 @@
 ---
 name: paper-analysis-flow
-description: "Deep analysis workflow: deep-read → quality-check → formula-derivation → experiment-code"
+description: "论文深度分析流程：精读 → 质量评分 → 公式推导 → 实验复现"
 ---
 
 ## 触发

@@ -1,6 +1,6 @@
 ---
 name: research-survey
-description: "Conduct comprehensive literature surveys on any research topic"
+description: "对任意研究主题进行全面文献调研"
 ---
 
 ## 触发

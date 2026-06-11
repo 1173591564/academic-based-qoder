@@ -1,6 +1,6 @@
 ---
 name: related-work
-description: "Write Related Work sections with proper citations and narrative structure"
+description: "撰写带规范引用和叙事结构的 Related Work 章节"
 ---
 
 ## 触发

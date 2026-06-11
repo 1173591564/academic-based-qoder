@@ -1,6 +1,6 @@
 ---
 name: research-gap
-description: "Discover research gaps through cross-paper limitation analysis"
+description: "通过跨论文局限性分析发现研究空白"
 ---
 
 ## 触发

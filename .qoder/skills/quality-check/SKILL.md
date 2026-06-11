@@ -1,6 +1,6 @@
 ---
 name: quality-check
-description: "Evaluate paper quality across multiple dimensions with a scoring card"
+description: "多维度论文质量评估，生成评分卡"
 ---
 
 ## 触发

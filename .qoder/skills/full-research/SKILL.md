@@ -1,6 +1,6 @@
 ---
 name: full-research
-description: "Complete research workflow: survey → deep-read → compare → related-work"
+description: "完整研究流程：调研 → 精读 → 对比 → 写 Related Work"
 ---
 
 ## 触发

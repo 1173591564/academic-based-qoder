@@ -1,6 +1,6 @@
 ---
 name: paper-recommendation
-description: "Recommend papers based on citation network, research direction, or reading gaps"
+description: "基于引用网络、研究方向或阅读缺口推荐论文"
 ---
 
 ## 触发

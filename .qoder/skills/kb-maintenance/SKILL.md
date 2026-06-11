@@ -1,6 +1,6 @@
 ---
 name: kb-maintenance
-description: "Knowledge base health checks, data cleanup, and incremental updates"
+description: "知识库健康检查、数据清理与增量更新"
 ---
 
 ## 触发

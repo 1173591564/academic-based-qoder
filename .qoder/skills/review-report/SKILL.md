@@ -1,6 +1,6 @@
 ---
 name: review-report
-description: "Write structured peer review reports with scoring and recommendations"
+description: "撰写结构化同行评审报告，含评分与改进建议"
 ---
 
 ## 触发

@@ -1,6 +1,6 @@
 ---
 name: formula-derivation
-description: "Step-by-step mathematical formula derivation with verification"
+description: "逐步数学公式推导与验证"
 ---
 
 ## 触发

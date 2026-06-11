@@ -1,6 +1,6 @@
 ---
 name: concept-evolution
-description: "Track concept evolution, technology replacement chains, and paradigm shifts"
+description: "追踪概念演化、技术替代链和范式变迁"
 ---
 
 ## 触发

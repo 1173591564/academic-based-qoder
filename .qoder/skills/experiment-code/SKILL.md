@@ -1,6 +1,6 @@
 ---
 name: experiment-code
-description: "Generate experiment code (PyTorch) from paper methods and formulas"
+description: "根据论文方法与公式生成 PyTorch 实验代码"
 ---
 
 ## 触发
