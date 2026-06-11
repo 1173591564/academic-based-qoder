@@ -1,6 +1,6 @@
 ---
 alwaysApply: true
-description: 18 academic pipeline routing — matches user intent to skill
+description: 22 academic pipeline routing (18 skills + 4 workflows) — matches user intent to skill
 ---
 # Academic Pipelines
 
@@ -26,6 +26,13 @@ When the user expresses one of these intents, invoke the matching skill via its 
 | 16 | BibTeX Management | export bibtex, manage references | `bibtex-management` |
 | 17 | Concept Evolution | concept evolution, tech replacement, 概念演化 | `concept-evolution` |
 | 18 | Cold Start | get started with XX, new field, 入门 | `cold-start` |
+| 19 | Full Research | 全面调研, full research, 系统研究 | `full-research` |
+| 20 | Gap Analysis | gap analysis, 找空白, 研究机会 | `gap-analysis-flow` |
+| 21 | Deep Analysis | 深度分析, analyze in depth, 彻底搞懂 | `paper-analysis-flow` |
+| 22 | Writing Flow | 写论文, writing flow, 从调研到写作 | `writing-flow` |
+
+### Composite Workflows (#19-22)
+Workflow skills **chain multiple atomic skills** in sequence, passing data between stages. When a workflow is triggered, execute each stage in order, pausing between stages to show progress.
 
 Skills are in `.qoder/skills/<name>/SKILL.md`. Execute via slash command or read the SKILL.md for step-by-step instructions.
 

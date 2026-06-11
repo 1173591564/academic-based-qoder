@@ -77,3 +77,13 @@ python -m scholar export-bib
 - 永远不要编造不存在的引用！如果不确定，先搜索确认
 - 每篇被引用的论文，至少读取其 abstract 后再写
 - Related Work 不是简单的论文列表，需要有分析和综合
+
+## Next Steps
+
+Related Work 写完后，自然的后续动作：
+
+- **`/bibtex-management`** — 导出引用论文的 BibTeX 文件
+- **`/review-report`** — 对自己写的内容做审稿式审查
+- **`/paper-compare`** — 补充更多论文对比细节
+
+> 传递数据：LaTeX 草稿中的 `\cite{}` 引用列表可直接用于 BibTeX 导出。

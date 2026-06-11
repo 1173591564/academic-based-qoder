@@ -70,3 +70,13 @@ Paper A (2020) → Paper B (2022) → Paper C (2024)
 - 对比要基于论文的实际内容（parsed JSON），不要凭印象
 - 公式对比时，尽量用统一的数学符号
 - 如果某篇论文有 Lean4 形式化定义，将其属性（scalability/simplicity/stability）纳入对比
+
+## Next Steps
+
+对比完成后，自然的后续动作：
+
+- **`/related-work`** — 基于对比结果，撰写 Related Work 章节
+- **`/concept-evolution`** — 追踪对比中涉及的概念之间的替代/演化关系
+- **`/research-gap`** — 从方法差异中发现尚未解决的问题
+
+> 传递数据：对比报告 `output/drafts/compare-<topic>.md` 中的方法对比表可直接嵌入 Related Work。

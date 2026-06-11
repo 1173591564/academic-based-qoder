@@ -94,3 +94,12 @@ BibTeX 导出完成:
 - 不要编造 BibTeX 条目！每条都必须基于论文的 `output/parsed/` JSON 或实际检索结果
 - 如果某字段缺失（如缺少页码），不要填假数据，省略该字段
 - 对于 Lean4 中有条目的论文，可以在 note 字段标注 `note={Lean4 formalized}`
+
+## Next Steps
+
+BibTeX 导出后，自然的后续动作：
+
+- **`/related-work`** — 如果还没写 Related Work，现在有了完整的引用列表
+- **`/reading-progress`** — 检查 BibTeX 中的论文是否都已阅读
+
+> 传递数据：导出的 `.bib` 文件可直接用于 LaTeX 论文的参考文献管理。

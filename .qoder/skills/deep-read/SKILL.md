@@ -107,3 +107,14 @@ python -m scholar parse <ULID>
 ## 注意事项
 - 如果论文有 Lean4 形式化定义（检查 LEAN/AiEvolution/Database.lean），将其关联起来
 - 对比论文时，分别做深度阅读后再对比，不要跳步
+
+## Next Steps
+
+精读完成后，自然的后续动作：
+
+- **`/paper-compare`** — 精读多篇后，对比它们的方法差异和演化关系
+- **`/formula-derivation`** — 对论文中的核心公式做逐步推导，加深理解
+- **`/experiment-code`** — 复现论文的关键实验代码（PyTorch）
+- **`/quality-check`** — 对这篇论文做 7 维度质量评分
+
+> 传递数据：阅读笔记 `output/notes/<ULID>.md` 中的「核心贡献」和「关键公式」可直接用于对比和推导。

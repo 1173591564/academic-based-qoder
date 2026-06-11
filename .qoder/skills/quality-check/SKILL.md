@@ -102,3 +102,13 @@ python -m scholar graph-query <概念名>
 - 质量评估要基于论文的实际内容，不要仅凭会议/期刊名气打分
 - 对于预印本（arXiv），适当降低"引用量"维度的权重
 - 如果论文的某些维度无法评估（如缺少实验部分），标注"无法评估"
+
+## Next Steps
+
+质量评分完成后，自然的后续动作：
+
+- **`/review-report`** — 对低分论文（D/F 级）写详细审稿报告
+- **`/reading-progress`** — 标记已评估的论文，优先阅读高分论文
+- **`/paper-recommendation`** — 基于质量评分过滤，只推荐 B 级以上的论文
+
+> 传递数据：质量评分卡 `output/notes/<ULID>-quality.json` 中的 7 维度分数和总评可直接用于审稿和筛选。

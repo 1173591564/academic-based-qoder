@@ -88,3 +88,13 @@ python -m scholar graph-query <概念>
 - 阅读进度仅基于 `output/notes/` 目录下的阅读笔记
 - 如果用户之前有非结构化的阅读记录，帮助整理为标准格式
 - 阅读计划要考虑论文的依赖关系（先读被引论文）
+
+## Next Steps
+
+查看阅读进度后，自然的后续动作：
+
+- **`/paper-recommendation`** — 基于未读论文和已读论文的知识缺口，推荐下一篇
+- **`/research-survey`** — 对未覆盖的方向做调研，发现更多值得读的论文
+- **`/deep-read`** — 继续阅读计划中的下一篇论文
+
+> 传递数据：阅读进度中的「未读高优先级论文」列表可直接传给 paper-recommendation。

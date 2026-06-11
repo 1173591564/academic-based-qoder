@@ -72,3 +72,13 @@ python -m scholar info <ULID>
 - 批量解析时逐篇处理，失败的跳过不影响整体
 - 如果 Neo4j 和 PostgreSQL 已启动（`cd infra && docker compose up -d`），解析结果会同时写入数据库
 - 缺少 TeX 源码（只有 PDF）的论文无法解析，跳过即可
+
+## Next Steps
+
+论文导入完成后，自然的后续动作：
+
+- **`/research-survey`** — 新论文入库后，重新调研可能发现新关联
+- **`/reading-progress`** — 更新阅读进度，标记新导入的论文
+- **`/quality-check`** — 对新导入的论文做质量评分
+
+> 传递数据：新论文的 ULID 和解析结果已自动进入知识库，后续 skill 可直接使用。

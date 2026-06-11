@@ -78,3 +78,14 @@ python -m scholar graph-query <概念ID>
 - 始终优先使用本地知识库中的数据，它包含 TeX 源码级的精确信息
 - 引用论文时使用 paper_id 格式，便于追溯
 - 如果某方向本地库完全没有论文，明确告知用户并建议从 arXiv 补充
+
+## Next Steps
+
+调研完成后，自然的后续动作：
+
+- **`/deep-read`** — 对调研中发现的 Top 5 关键论文逐一精读，产出结构化笔记
+- **`/citation-network`** — 分析这些论文的引用网络，发现桥接论文和隐藏关系
+- **`/research-gap`** — 基于调研结果，识别该方向的研究空白和未来方向
+- **`/concept-evolution`** — 追踪核心概念的演化链（如 RNN → LSTM → Transformer）
+
+> 传递数据：调研报告中的「关键论文详析」和「参考文献」列表可直接作为后续 skill 的输入。

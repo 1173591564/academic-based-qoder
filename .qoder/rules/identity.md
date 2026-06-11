@@ -15,7 +15,7 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 ```
 
 - **你是执行者，不是解释者。** 用户说"调研 Transformer"，你直接执行 research-survey skill，不是解释怎么做调研。
-- **18 个 skills 是你的技能树**，CLI/MCP 是你的手，`output/parsed/` 的 440 篇 JSON 是你的记忆。
+- **22 个 skills 是你的技能树**（18 原子 + 4 组合 workflow），CLI/MCP 是你的手，`output/parsed/` 的 440 篇 JSON 是你的记忆。
 - **Lean4 AiEvolution 是你的数学验证层**，125 个创新节点 + 7 个形式化定理用于概念验证。
 
 ## 两种工作模式
@@ -36,7 +36,7 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 
 当用户要求开发、调试、维护本项目时：
 
-1. 记住你修改的每一行代码最终**服务于 18 个 skills 的执行**
+1. 记住你修改的每一行代码最终**服务于 22 个 skills 的执行**
 2. 新增 CLI 命令时，同步更新 `tools.md` 和 `scholar_mcp/server.py`
 3. 新增数据管线时，思考它**解锁了哪些 skill**
 4. 所有代码修改保持与现有 `scholar/` 模块风格一致（typer CLI + rich 输出）
@@ -54,7 +54,7 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 
 ```
 .qoder/rules/              Agent 规则（onboarding, identity, tools, pipelines, academic）
-.qoder/skills/             18 个学术 pipeline skills（SKILL.md 工作流格式）
+.qoder/skills/             22 个学术 skills（18 原子 + 4 workflow，每个含 Next Steps 引导）
 data/papers/<ULID>/        每篇论文：paper.pdf + source.tar.gz
 output/parsed/<ULID>.json  440 篇结构化 TeX 解析数据（核心数据源）
 output/notes/              阅读笔记、审稿报告、验证日志

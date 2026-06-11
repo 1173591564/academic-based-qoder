@@ -88,3 +88,13 @@ python -m scholar list-papers --year <Y>
 - 引用网络的质量取决于解析的 citations 字段覆盖率
 - 部分论文引用的是库外论文（to_paper 为 null），需结合 arXiv 补充
 - 如果 Neo4j 未启动，可以用 `citations` 字段手动分析，但功能受限
+
+## Next Steps
+
+引用网络分析完成后，自然的后续动作：
+
+- **`/concept-evolution`** — 基于桥接论文和 REPLACES 关系，追踪概念演化
+- **`/paper-recommendation`** — 基于引用网络发现应该读但还没读的论文
+- **`/research-gap`** — 从网络结构中的「断裂带」发现研究空白
+
+> 传递数据：关键论文列表和桥接论文可直接作为 deep-read 或 paper-recommendation 的输入。

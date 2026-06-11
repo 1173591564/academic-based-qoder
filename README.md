@@ -1,6 +1,6 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、18 个学术 pipeline skills 和 Lean4 形式化验证。
+基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、22 个学术 skills（18 原子 + 4 组合 workflow）和 Lean4 形式化验证。
 
 ## 快速开始（3 步）
 
@@ -37,12 +37,14 @@ Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（29 
 | [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 分析 RLHF/DPO 的研究缺口 |
 | [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 建立知识图谱和学习路径 |
 
-## 18 个学术 Skills
+## 18 个原子 Skills + 4 个组合 Workflow
 
 在 Qoder 对话中直接使用，或输入 `/skill-name` 触发：
 
+### 原子 Skills
+
 | 类别 | Skill | 用法示例 |
-|------|-------|---------|
+|------|-------|--------|
 | **研究与阅读** | `research-survey` | "调研 Diffusion Model 的发展历程" |
 | | `deep-read` | "精读这篇论文" + 指定 ULID |
 | | `paper-compare` | "对比 BERT 和 GPT" |
@@ -61,6 +63,17 @@ Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（29 
 | | `bibtex-management` | "导出 BibTeX" |
 | | `kb-maintenance` | "知识库健康检查" |
 | | `reading-progress` | "查看阅读进度" |
+
+### 组合 Workflow
+
+每个 workflow 串联多个原子 skill，自动传递数据，一键完成完整研究流程：
+
+| Workflow | 链路 | 用法示例 |
+|----------|------|--------|
+| `full-research` | survey → deep-read → compare → related-work | "全面调研 Transformer" |
+| `gap-analysis-flow` | citation-network → concept-evolution → research-gap → recommend | "找 RLHF 的研究空白" |
+| `paper-analysis-flow` | deep-read → quality-check → formula-derivation → experiment-code | "深度分析 Attention Is All You Need" |
+| `writing-flow` | survey → compare → related-work → bibtex → review | "帮我写论文的 Related Work" |
 
 ## CLI 命令参考
 
@@ -100,7 +113,7 @@ python -m scholar arxiv-search "query"      # 搜索 arXiv
 ```
 .qoder/
   rules/           Agent 规则（onboarding, identity, pipelines, tools, academic）
-  skills/          18 个学术 pipeline skills（SKILL.md 格式）
+  skills/          22 个学术 skills（18 原子 + 4 workflow，每个含 Next Steps 引导）
   mcp.json         MCP Server 配置（Qoder 自动读取）
 
 data/papers/       445 篇论文（每篇：paper.pdf + source.tar.gz）
