@@ -1,0 +1,10 @@
+name = "AiEvolution"
+version = "0.1.0"
+defaultTargets = ["AiEvolution", "aievolution"]
+
+[[lean_lib]]
+name = "AiEvolution"
+
+[[lean_exe]]
+name = "aievolution"
+root = "Main"

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "scholar": {
+      "command": "python",
+      "args": ["-m", "scholar_mcp"],
+      "cwd": "c:\\Users\\11735\\Desktop\\论文\\Artificial Intelligence"
+    }
+  }
+}

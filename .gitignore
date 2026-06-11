@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+infra/pgdata/
+infra/neo4jdata/
+
+# Scholar data (papers: PDF + TeX source, too large for GitHub)
+data/papers/
+
+# Scholar output (generated, re-run bootstrap to regenerate)
+output/
+
+# Temp files
+*.log
+pg_hba_new.conf
+_run_*.py
+
+# Environment
+.env
+.env.local

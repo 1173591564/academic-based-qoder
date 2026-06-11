@@ -1,0 +1,43 @@
+services:
+  # PostgreSQL + pgvector: 结构化数据 + RAG 向量检索
+  pg:
+    image: pgvector/pgvector:pg16
+    container_name: scholar-pg
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: scholar
+      POSTGRES_USER: scholar
+      POSTGRES_PASSWORD: scholar2024
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholar"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j: 概念图谱 + 引用网络
+  neo4j:
+    image: neo4j:5-community
+    container_name: scholar-neo4j
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/scholar2024
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "neo4j status || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  pgdata:
+  neo4jdata:
