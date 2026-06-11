@@ -144,20 +144,12 @@ def resolve_via_arxiv(ref_key: str) -> Optional[dict]:
     Returns: {title, authors, year, arxiv_id} or None
     """
     try:
-        import urllib.request
-        import urllib.parse
         import xml.etree.ElementTree as ET
+        from . import config as _cfg
 
         # Clean up ref_key for search
         query = ref_key.replace("_", " ").replace("-", " ")
-        encoded = urllib.parse.quote(query[:200])
-        url = (
-            f"http://export.arxiv.org/api/query?"
-            f"search_query=ti:{encoded}&max_results=1&sortBy=relevance"
-        )
-        req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            xml_data = resp.read().decode("utf-8")
+        xml_data = _cfg.arxiv_request(f"ti:{query[:200]}", max_results=1)
 
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(xml_data)

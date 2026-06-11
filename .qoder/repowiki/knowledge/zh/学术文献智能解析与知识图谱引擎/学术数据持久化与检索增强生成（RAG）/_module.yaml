@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: scholar/data_and_rag
+title: 学术数据持久化与检索增强生成（RAG）
+scope:
+    - scholar/db.py
+    - scholar/graph_db.py
+    - scholar/rag.py
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar/paper_processing

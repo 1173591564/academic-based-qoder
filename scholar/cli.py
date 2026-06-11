@@ -550,18 +550,10 @@ def author_fix(
 
         queried += 1
         try:
-            import urllib.request
-            import urllib.parse
             import xml.etree.ElementTree as ET
+            from . import config as _cfg
 
-            encoded = urllib.parse.quote(title[:200])
-            url = (
-                f"http://export.arxiv.org/api/query?"
-                f"search_query=ti:{encoded}&max_results=1&sortBy=relevance"
-            )
-            req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                xml_data = resp.read().decode("utf-8")
+            xml_data = _cfg.arxiv_request(f"ti:{title[:200]}", max_results=1)
 
             ns = {"atom": "http://www.w3.org/2005/Atom"}
             root = ET.fromstring(xml_data)
@@ -612,27 +604,20 @@ def arxiv_search(
 ):
     """Search arXiv for papers."""
     try:
-        import urllib.request
-        import urllib.parse
         import xml.etree.ElementTree as ET
     except ImportError:
-        console.print("[red]urllib/xml required (should be in stdlib)[/]")
+        console.print("[red]xml required (should be in stdlib)[/]")
         raise typer.Exit(1)
 
-    encoded = urllib.parse.quote(query)
-    url = (
-        f"http://export.arxiv.org/api/query?"
-        f"search_query=all:{encoded}&max_results={max_results}&sortBy=relevance"
-    )
+    from . import config as _cfg
 
     console.print(f"Searching arXiv for [cyan]'{query}'[/]...")
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            xml_data = resp.read().decode("utf-8")
+        xml_data = _cfg.arxiv_request(f"all:{query}", max_results=max_results)
     except Exception as e:
         console.print(f"[red]arXiv request failed:[/] {e}")
+        console.print("[dim]Tip: set HTTP_PROXY env var if behind a proxy[/]")
         raise typer.Exit(1)
 
     ns = {"atom": "http://www.w3.org/2005/Atom"}

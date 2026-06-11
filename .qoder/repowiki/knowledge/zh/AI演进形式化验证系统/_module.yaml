@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: lean_project
+title: AI演进形式化验证系统
+scope:
+    - LEAN/
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar

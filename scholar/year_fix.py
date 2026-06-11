@@ -242,18 +242,10 @@ def complete_years(parsed_dir: Path = None, dry_run: bool = True) -> dict:
 def fetch_arxiv_year(title: str) -> Optional[int]:
     """Try to fetch publication year from arXiv API by title search."""
     try:
-        import urllib.request
-        import urllib.parse
         import xml.etree.ElementTree as ET
+        from . import config as _cfg
 
-        encoded = urllib.parse.quote(title[:200])
-        url = (
-            f"http://export.arxiv.org/api/query?"
-            f"search_query=ti:{encoded}&max_results=1&sortBy=relevance"
-        )
-        req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            xml_data = resp.read().decode("utf-8")
+        xml_data = _cfg.arxiv_request(f"ti:{title[:200]}", max_results=1)
 
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(xml_data)
@@ -345,18 +337,10 @@ def _infer_year_from_content(data: dict) -> Optional[int]:
 def fetch_arxiv_authors(title: str) -> Optional[list]:
     """Try to fetch author list from arXiv API by title search."""
     try:
-        import urllib.request
-        import urllib.parse
         import xml.etree.ElementTree as ET
+        from . import config as _cfg
 
-        encoded = urllib.parse.quote(title[:200])
-        url = (
-            f"http://export.arxiv.org/api/query?"
-            f"search_query=ti:{encoded}&max_results=1&sortBy=relevance"
-        )
-        req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            xml_data = resp.read().decode("utf-8")
+        xml_data = _cfg.arxiv_request(f"ti:{title[:200]}", max_results=1)
 
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(xml_data)

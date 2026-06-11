@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: scholar/cli_and_config
+title: 命令行接口与配置管理
+scope:
+    - scholar/cli.py
+    - scholar/config.py
+    - scholar/__init__.py
+    - scholar/__main__.py
+source_files: []
+depends_on: []
+related_to: []
