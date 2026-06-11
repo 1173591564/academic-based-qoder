@@ -426,6 +426,36 @@ cd LEAN && lake build
 
 ---
 
+## Qoder Plugin
+
+本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 22 个 Skills + 4 个 Commands + MCP Server。
+
+### 构建 Plugin
+
+```bash
+python build_plugin.py
+```
+
+产出在 `plugin/` 目录：
+
+```
+plugin/
+  .qoder-plugin/plugin.json   ← 插件元数据
+  skills/                     ← 22 个 Skills
+  commands/                   ← 4 个快捷指令
+  .mcp.json                   ← MCP Server 配置
+```
+
+### 安装使用
+
+1. 在 Qoder Quest 中安装此 Plugin
+2. 克隆主仓库并执行 `pip install -r requirements.txt` + `python -m scholar bootstrap`
+3. 启动数据库后，所有 22 个 Skills 即可使用
+
+> **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
+
+---
+
 ## 常见问题
 
 ### Docker 容器启动失败

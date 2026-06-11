@@ -1,0 +1,8 @@
+{
+  "name": "scholar-studio",
+  "version": "1.0.0",
+  "description": "AI 学术研究助手 — 论文管理、RAG 语义检索、22 个学术 Skills、引用图谱分析",
+  "author": "Scholar Studio",
+  "homepage": "https://gitee.com/gu-yulong1217317/academic-based-qoder",
+  "license": "MIT"
+}

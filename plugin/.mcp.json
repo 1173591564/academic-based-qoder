@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "scholar": {
+      "command": "python",
+      "args": [
+        "-m",
+        "scholar_mcp"
+      ],
+      "env": {
+        "SCHOLAR_PG_HOST": "localhost",
+        "SCHOLAR_PG_PORT": "5433",
+        "SCHOLAR_NEO4J_URI": "bolt://localhost:7687"
+      }
+    }
+  }
+}
