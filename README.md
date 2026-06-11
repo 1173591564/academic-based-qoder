@@ -26,6 +26,17 @@ Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（29 
 你：写 Attention 方向的 Related Work
 ```
 
+### 一键开始（Deeplinks）
+
+点击链接直接唤起 Qoder 并开始任务：
+
+| 任务 | 说明 |
+|------|------|
+| [调研 Transformer](qoder://aicoding.aicoding-deeplink/chat?text=%E8%B0%83%E7%A0%94+Transformer+%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E7%9A%84%E5%8F%91%E5%B1%95%E5%8E%86%E7%A8%8B%EF%BC%8C%E6%8C%89%E6%97%B6%E9%97%B4%E7%BA%BF%E6%95%B4%E7%90%86%E5%85%B3%E9%94%AE%E8%AE%BA%E6%96%87&mode=agent) | 按时间线整理注意力机制关键论文 |
+| [精读 Attention Is All You Need](qoder://aicoding.aicoding-deeplink/chat?text=%E7%B2%BE%E8%AF%BB%E8%AE%BA%E6%96%87+01KT6MTBBH03MN0Z6PK902XKC2+%28Attention+Is+All+You+Need%29%EF%BC%8C%E8%BE%93%E5%87%BA%E7%BB%93%E6%9E%84%E5%8C%96%E5%88%86%E6%9E%90&mode=agent) | 结构化分析经典论文 |
+| [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 分析 RLHF/DPO 的研究缺口 |
+| [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 建立知识图谱和学习路径 |
+
 ## 18 个学术 Skills
 
 在 Qoder 对话中直接使用，或输入 `/skill-name` 触发：
@@ -159,3 +170,23 @@ echo "SCHOLAR_EMBEDDING_API_KEY=your_key" > .env
 # 4. 全量初始化（约 40 分钟，含 RAG 向量索引）
 python -m scholar bootstrap
 ```
+
+## 自动化 Hooks
+
+配置在 `.qoder/settings.json`，Qoder 重启后生效：
+
+| Hook | 事件 | 作用 |
+|------|------|------|
+| `task-done.ps1` | Stop | Agent 完成任务后弹出 Windows 通知 |
+| `block-dangerous.ps1` | PreToolUse | 拦截 `DROP TABLE`、`docker rm` 等危险操作 |
+
+## 快捷指令
+
+放在 `.qoder/commands/`，在对话中输入 `/` 即可调用：
+
+| 指令 | 用法 |
+|------|------|
+| `/stats` | 查看知识库状态（论文数、图谱、RAG 覆盖） |
+| `/find` | 全文 + 语义混合搜索论文 |
+| `/paper` | 查看单篇论文详情 + 引用关系 |
+| `/health` | 知识库健康检查 + 修复建议 |
