@@ -1,8 +1,22 @@
 {
   "name": "scholar-studio",
   "version": "1.0.0",
-  "description": "AI 学术研究助手 — 论文管理、RAG 语义检索、22 个学术 Skills、引用图谱分析",
-  "author": "Scholar Studio",
+  "displayName": "Scholar Studio — AI 学术研究助手",
+  "description": "论文管理、RAG 语义检索、22 个学术 Skills（调研/精读/对比/写作/公式推导/实验复现）、Neo4j 引用图谱、Lean4 形式化验证",
+  "author": {
+    "name": "Scholar Studio"
+  },
+  "keywords": [
+    "academic", "research", "paper", "survey", "RAG",
+    "citation", "literature", "related-work", "formula",
+    "experiment", "Lean4", "Neo4j", "bibtex"
+  ],
   "homepage": "https://gitee.com/gu-yulong1217317/academic-based-qoder",
-  "license": "MIT"
+  "repository": "https://gitee.com/gu-yulong1217317/academic-based-qoder",
+  "license": "MIT",
+  "skills": "./skills",
+  "commands": "./commands",
+  "rules": "./rules",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./mcp.json"
 }
