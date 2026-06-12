@@ -87,7 +87,7 @@ def _parse_arxiv_entries(xml_data: str) -> list[dict]:
 def arxiv_download(
     query: str,
     max_results: int = 10,
-    download_pdf: bool = False,
+    download_pdf: bool = True,
     output_dir: Optional[Path] = None,
 ) -> list[dict]:
     """批量下载 arXiv 论文 TeX 源码。
@@ -415,19 +415,21 @@ def batch_ingest(
 def kb_update(
     query: str = "",
     max_results: int = 10,
+    download_pdf: bool = True,
 ) -> dict:
     """一键更新知识库：搜索 → 下载 → 批量入库。
 
     Args:
         query: arXiv 搜索关键词（空则只处理本地未入库论文）
         max_results: 最大下载数量
+        download_pdf: 是否同时下载 PDF（默认 True，与现有论文结构一致）
     """
     results = {"downloaded": [], "ingest": None}
 
     # Step 1: 下载（如果有 query）
     if query:
         try:
-            download_results = arxiv_download(query, max_results=max_results)
+            download_results = arxiv_download(query, max_results=max_results, download_pdf=download_pdf)
             results["downloaded"] = download_results
             # 提取新下载的 ULID 列表
             new_ulids = [r["ulid"] for r in download_results if r.get("status") == "downloaded"]

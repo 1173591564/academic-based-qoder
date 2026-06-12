@@ -1637,7 +1637,7 @@ def landscape(
 def arxiv_download(
     query: str = typer.Argument(help="arXiv search query"),
     max_results: int = typer.Option(10, "--max", help="Max papers to download"),
-    pdf: bool = typer.Option(False, "--pdf", help="Also download PDF"),
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also download PDF (default: yes)"),
 ):
     """从 arXiv 下载论文 TeX 源码到知识库。"""
     from . import kb_update as kb
@@ -1697,6 +1697,7 @@ def batch_ingest(
 def kb_update(
     query: str = typer.Option("", help="arXiv search query (empty=local only)"),
     max_results: int = typer.Option(10, "--max", help="Max papers to download"),
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also download PDF (default: yes)"),
 ):
     """一键更新知识库：搜索 → 下载 → 批量入库。"""
     from . import kb_update as kb
@@ -1706,7 +1707,7 @@ def kb_update(
     else:
         console.print("[cyan]KB Update:[/] processing local unparsed papers...")
 
-    results = kb.kb_update(query=query, max_results=max_results)
+    results = kb.kb_update(query=query, max_results=max_results, download_pdf=pdf)
 
     dl = results.get("downloaded", [])
     ing = results.get("ingest", {})
