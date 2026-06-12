@@ -39,7 +39,7 @@ python -m scholar bootstrap
 
 ### 第二步：安装本插件
 
-在 QoderWork → 插件市场中搜索 **Scholar Studio** 并安装，或手动导入 `scholar-studio-1.0.0.zip`。
+在 QoderWork → 插件市场中搜索 **Scholar Studio** 并安装，或手动导入 `scholar-studio-2.0.0.zip`。
 
 ### 第三步：验证
 

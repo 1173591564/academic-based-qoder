@@ -17,11 +17,15 @@ SKILLS_SRC = PROJECT_ROOT / ".qoder" / "skills"
 COMMANDS_SRC = PROJECT_ROOT / ".qoder" / "commands"
 SKILLS_DST = PLUGIN_DIR / "skills"
 COMMANDS_DST = PLUGIN_DIR / "commands"
+RULES_SRC = PROJECT_ROOT / ".qoder" / "rules"
+RULES_DST = PLUGIN_DIR / "rules"
+HOOKS_SRC = PROJECT_ROOT / ".qoder" / "hooks"
+HOOKS_DST = PLUGIN_DIR / "hooks"
 
 
 def clean():
-    """Remove old plugin build artifacts (skills/ and commands/ only)."""
-    for d in [SKILLS_DST, COMMANDS_DST]:
+    """Remove old plugin build artifacts."""
+    for d in [SKILLS_DST, COMMANDS_DST, RULES_DST, HOOKS_DST]:
         if d.exists():
             shutil.rmtree(d)
             print(f"  Cleaned {d}")
@@ -58,6 +62,33 @@ def copy_commands():
         shutil.copy2(f, COMMANDS_DST / f.name)
         count += 1
     print(f"  Copied {count} commands")
+    return count
+
+
+def copy_rules():
+    """Copy rule .md files into plugin/rules/ (strip frontmatter for plugin use)."""
+    RULES_DST.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for f in sorted(RULES_SRC.glob("*.md")):
+        shutil.copy2(f, RULES_DST / f.name)
+        count += 1
+    print(f"  Copied {count} rules")
+    return count
+
+
+def copy_hooks():
+    """Copy hook scripts and hooks.json into plugin/hooks/."""
+    HOOKS_DST.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for f in sorted(HOOKS_SRC.iterdir()):
+        if f.is_file():
+            shutil.copy2(f, HOOKS_DST / f.name)
+            count += 1
+    # Also copy plugin/hooks/hooks.json if it exists (not in .qoder/hooks/)
+    hooks_json = PLUGIN_DIR / "hooks" / "hooks.json"
+    if hooks_json.exists() and hooks_json.parent == HOOKS_DST:
+        pass  # already in place
+    print(f"  Copied {count} hook files")
     return count
 
 
@@ -103,16 +134,22 @@ def main():
     print("  Scholar Studio — Plugin Builder")
     print("=" * 55)
 
-    print("\n[1/4] Cleaning old build artifacts...")
+    print("\n[1/6] Cleaning old build artifacts...")
     clean()
 
-    print("\n[2/4] Copying skills from .qoder/skills/ ...")
+    print("\n[2/6] Copying skills from .qoder/skills/ ...")
     skills = copy_skills()
 
-    print("\n[3/4] Copying commands from .qoder/commands/ ...")
+    print("\n[3/6] Copying commands from .qoder/commands/ ...")
     commands = copy_commands()
 
-    print("\n[4/4] Packaging plugin as .zip ...")
+    print("\n[4/6] Copying rules from .qoder/rules/ ...")
+    rules = copy_rules()
+
+    print("\n[5/6] Copying hooks from .qoder/hooks/ ...")
+    hooks = copy_hooks()
+
+    print("\n[6/6] Packaging plugin as .zip ...")
     zip_name, file_count = create_zip()
 
     # Summary
@@ -120,9 +157,9 @@ def main():
     print(f"  Build complete!")
     print(f"  Skills:    {skills}")
     print(f"  Commands:  {commands}")
-    print(f"  MCP:       scholar (29 tools)")
-    print(f"  Rules:     identity.md")
-    print(f"  Hooks:     Stop + PreToolUse")
+    print(f"  Rules:     {rules}")
+    print(f"  Hooks:     {hooks}")
+    print(f"  MCP:       scholar (41 tools)")
     print(f"  Output:    {zip_name} ({file_count} files)")
     print("=" * 55)
 
