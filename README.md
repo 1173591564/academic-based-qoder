@@ -109,7 +109,7 @@ Bootstrap 按顺序执行 **9 步**，全程约 **40 分钟**：
 ### Step 6: 在 Qoder 中打开
 
 1. 用 Qoder 打开项目目录
-2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（29 个工具）
+2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（41 个工具）
 3. 在对话框中直接开始使用
 
 ### Step 7: 验证一切正常
@@ -154,20 +154,29 @@ python -m scholar stats
 
 ```
 你：调研 Transformer 的注意力机制演进
-你：精读 01KT6MTBBH03MN0Z6PK902XKC2
-你：写 Attention 方向的 Related Work
+你：精读 2401.04088                  ← 支持 arXiv ID / DOI / ULID / 关键词
+你：帮我写一篇 Attention 方向的论文
+你：复现 LoRA 论文的实验
+你：分析 RLHF 和 DPO 的研究空白
+你：入门 State Space Model
+你：推荐接下来该读什么
+你：维护知识库
 ```
 
 ### 一键开始（Deeplinks）
 
 点击链接直接唤起 Qoder 并开始任务：
 
-| 任务 | 说明 |
-|------|------|
-| [调研 Transformer](qoder://aicoding.aicoding-deeplink/chat?text=%E8%B0%83%E7%A0%94+Transformer+%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E7%9A%84%E5%8F%91%E5%B1%95%E5%8E%86%E7%A8%8B%EF%BC%8C%E6%8C%89%E6%97%B6%E9%97%B4%E7%BA%BF%E6%95%B4%E7%90%86%E5%85%B3%E9%94%AE%E8%AE%BA%E6%96%87&mode=agent) | 按时间线整理注意力机制关键论文 |
-| [精读 Attention Is All You Need](qoder://aicoding.aicoding-deeplink/chat?text=%E7%B2%BE%E8%AF%BB%E8%AE%BA%E6%96%87+01KT6MTBBH03MN0Z6PK902XKC2+%28Attention+Is+All+You+Need%29%EF%BC%8C%E8%BE%93%E5%87%BA%E7%BB%93%E6%9E%84%E5%8C%96%E5%88%86%E6%9E%90&mode=agent) | 结构化分析经典论文 |
-| [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 分析 RLHF/DPO 的研究缺口 |
-| [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 建立知识图谱和学习路径 |
+| 工作流 | 一键入口 | 说明 |
+|--------|----------|------|
+| 文献调研 | [调研 Transformer](qoder://aicoding.aicoding-deeplink/chat?text=%E8%B0%83%E7%A0%94+Transformer+%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E7%9A%84%E5%8F%91%E5%B1%95%E5%8E%86%E7%A8%8B%EF%BC%8C%E6%8C%89%E6%97%B6%E9%97%B4%E7%BA%BF%E6%95%B4%E7%90%86%E5%85%B3%E9%94%AE%E8%AE%BA%E6%96%87&mode=agent) | RAG + 图谱 + 时间线 → 调研报告 |
+| 深度分析 | [精读 Attention Is All You Need](qoder://aicoding.aicoding-deeplink/chat?text=%E7%B2%BE%E8%AF%BB%E8%AE%BA%E6%96%87+01KT6MTBBH03MN0Z6PK902XKC2+%28Attention+Is+All+You+Need%29%EF%BC%8C%E8%BE%93%E5%87%BA%E7%BB%93%E6%9E%84%E5%8C%96%E5%88%86%E6%9E%90&mode=agent) | 精读 + 质量评估 + 公式推导 + 实验代码 |
+| 学术写作 | [写 Attention 方向的论文](qoder://aicoding.aicoding-deeplink/chat?text=%E5%B8%AE%E6%88%91%E5%86%99%E4%B8%80%E7%AF%87+Attention+Mechanism+%E6%96%B9%E5%90%91%E7%9A%84%E8%AE%BA%E6%96%87&mode=agent) | 调研 → 撰写 → LaTeX 编译 → 审稿 |
+| 实验复现 | [复现 LoRA 论文](qoder://aicoding.aicoding-deeplink/chat?text=%E5%A4%8D%E7%8E%B0+LoRA+%E8%AE%BA%E6%96%87%E7%9A%84%E5%AE%9E%E9%AA%8C%EF%BC%8C%E7%94%9F%E6%88%90%E4%BB%A3%E7%A0%81%E5%B9%B6%E8%BF%90%E8%A1%8C&mode=agent) | 环境配置 → 代码生成 → 运行 → 结果对比 |
+| 研究空白 | [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 跨论文局限性分析 → 研究缺口报告 |
+| 领域入门 | [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 构建知识地图 + 学习路径 |
+| 论文推荐 | [推荐接下来该读什么](qoder://aicoding.aicoding-deeplink/chat?text=%E6%A0%B9%E6%8D%AE%E6%88%91%E7%9A%84%E7%9F%A5%E8%AF%86%E5%BA%93%EF%BC%8C%E6%8E%A8%E8%8D%90%E6%8E%A5%E4%B8%8B%E6%9D%A5%E8%AF%A5%E8%AF%BB%E5%93%AA%E4%BA%9B%E8%AE%BA%E6%96%87&mode=agent) | 基于引用网络 + 阅读缺口推荐 |
+| 知识库维护 | [维护知识库](qoder://aicoding.aicoding-deeplink/chat?text=%E6%A3%80%E6%9F%A5%E7%9F%A5%E8%AF%86%E5%BA%93%E5%81%A5%E5%BA%B7%E7%8A%B6%E6%80%81%E5%B9%B6%E6%B8%85%E7%90%86%E6%95%B0%E6%8D%AE&mode=agent) | 健康检查 + 数据清理 + 自动更新 |
 
 ---
 
