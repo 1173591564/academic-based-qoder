@@ -6,6 +6,7 @@ Usage: python -m scholar <command> [options]
 import sys
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -129,8 +130,10 @@ def scan():
 # parse: Parse a single paper
 # ===================================================================
 @app.command()
-def parse(ulid: str = typer.Argument(help="Paper ULID")):
+def parse(paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)")):
     """Parse a single paper's TeX source into structured JSON."""
+    from .id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
     paper_dir = config.PAPERS_DIR / ulid
     if not paper_dir.exists():
         console.print(f"[red]Error:[/] Paper directory not found: {paper_dir}")
@@ -237,11 +240,13 @@ def parse_all(
 # info: Show detailed info about a paper
 # ===================================================================
 @app.command()
-def info(ulid: str = typer.Argument(help="Paper ULID")):
+def info(paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)")):
     """Show detailed information about a parsed paper."""
+    from .id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
     data = dbmod.load_parsed(ulid)
     if data is None:
-        console.print(f"[yellow]Paper not parsed yet.[/] Run: python -m scholar parse {ulid}")
+        console.print(f"[yellow]Paper not parsed yet.[/] Run: python -m scholar parse {paper_id}")
         raise typer.Exit(1)
 
     console.print(Panel(
@@ -550,18 +555,10 @@ def author_fix(
 
         queried += 1
         try:
-            import urllib.request
-            import urllib.parse
             import xml.etree.ElementTree as ET
+            from . import config as _cfg
 
-            encoded = urllib.parse.quote(title[:200])
-            url = (
-                f"http://export.arxiv.org/api/query?"
-                f"search_query=ti:{encoded}&max_results=1&sortBy=relevance"
-            )
-            req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                xml_data = resp.read().decode("utf-8")
+            xml_data = _cfg.arxiv_request(f"ti:{title[:200]}", max_results=1)
 
             ns = {"atom": "http://www.w3.org/2005/Atom"}
             root = ET.fromstring(xml_data)
@@ -612,27 +609,20 @@ def arxiv_search(
 ):
     """Search arXiv for papers."""
     try:
-        import urllib.request
-        import urllib.parse
         import xml.etree.ElementTree as ET
     except ImportError:
-        console.print("[red]urllib/xml required (should be in stdlib)[/]")
+        console.print("[red]xml required (should be in stdlib)[/]")
         raise typer.Exit(1)
 
-    encoded = urllib.parse.quote(query)
-    url = (
-        f"http://export.arxiv.org/api/query?"
-        f"search_query=all:{encoded}&max_results={max_results}&sortBy=relevance"
-    )
+    from . import config as _cfg
 
     console.print(f"Searching arXiv for [cyan]'{query}'[/]...")
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/0.1"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            xml_data = resp.read().decode("utf-8")
+        xml_data = _cfg.arxiv_request(f"all:{query}", max_results=max_results)
     except Exception as e:
         console.print(f"[red]arXiv request failed:[/] {e}")
+        console.print("[dim]Tip: set HTTP_PROXY env var if behind a proxy[/]")
         raise typer.Exit(1)
 
     ns = {"atom": "http://www.w3.org/2005/Atom"}
@@ -848,7 +838,7 @@ def graph_query(
 # ===================================================================
 @app.command(name="cite-network")
 def cite_network(
-    ulid: Optional[str] = typer.Argument(None, help="Paper ULID (optional)"),
+    paper_id: Optional[str] = typer.Argument(None, help="Paper ID (ULID/arXiv/DOI/slug, optional)"),
 ):
     """Show citation network statistics or analyze a specific paper."""
     from . import graph_db as gdb_mod
@@ -858,7 +848,9 @@ def cite_network(
         console.print("[red]Neo4j not available.[/]")
         raise typer.Exit(1)
 
-    if ulid:
+    if paper_id:
+        from .id_resolver import resolve_id
+        ulid = resolve_id(paper_id) or paper_id
         # Show forward/backward citations for a specific paper
         forward = gdb_mod.get_forward_citations(gdb, ulid)
         backward = gdb_mod.get_backward_citations(gdb, ulid)
@@ -1002,13 +994,15 @@ def rag_search(
 # ===================================================================
 @app.command(name="auto-notes")
 def auto_notes(
-    ulid: Optional[str] = typer.Argument(None, help="Paper ULID (omit for batch mode)"),
+    paper_id: Optional[str] = typer.Argument(None, help="Paper ID (ULID/arXiv/DOI/slug, omit for batch mode)"),
     force: bool = typer.Option(False, "--force", help="Overwrite existing notes"),
 ):
     """Generate structured reading notes from parsed paper data."""
     from . import auto_notes as an
 
-    if ulid:
+    if paper_id:
+        from .id_resolver import resolve_id
+        ulid = resolve_id(paper_id) or paper_id
         result = an.generate_single_note(ulid, force=force)
         console.print(Panel(
             f"Status: {result['status']}\n"
@@ -1032,13 +1026,15 @@ def auto_notes(
 # ===================================================================
 @app.command(name="quality-score")
 def quality_score(
-    ulid: Optional[str] = typer.Argument(None, help="Paper ULID (omit for --all)"),
+    paper_id: Optional[str] = typer.Argument(None, help="Paper ID (ULID/arXiv/DOI/slug, omit for --all)"),
     all_papers: bool = typer.Option(False, "--all", help="Score all papers"),
 ):
     """Score paper quality across 7 dimensions."""
     from . import quality as q
 
-    if ulid:
+    if paper_id:
+        from .id_resolver import resolve_id
+        ulid = resolve_id(paper_id) or paper_id
         result = q.score_single_paper(ulid)
         if result is None:
             console.print(f"[red]Paper not found:[/] {ulid}")
@@ -1081,7 +1077,7 @@ def quality_score(
 # ===================================================================
 @app.command()
 def classify(
-    ulid: Optional[str] = typer.Argument(None, help="Paper ULID (omit for --all)"),
+    paper_id: Optional[str] = typer.Argument(None, help="Paper ID (ULID/arXiv/DOI/slug, omit for --all)"),
     all_papers: bool = typer.Option(False, "--all", help="Classify all papers"),
     list_tags: bool = typer.Option(False, "--list-tags", help="List all tags in corpus"),
 ):
@@ -1099,10 +1095,12 @@ def classify(
         console.print("\n[bold]Methods (top 20):[/]")
         for m, c in list(tags["methods"].items())[:20]:
             console.print(f"  {m}: {c}")
-    elif ulid:
+    elif paper_id:
+        from .id_resolver import resolve_id
+        ulid = resolve_id(paper_id) or paper_id
         result = cl.classify_single_paper(ulid)
         if result is None:
-            console.print(f"[red]Paper not found:[/] {ulid}")
+            console.print(f"[red]Paper not found:[/] {paper_id}")
             raise typer.Exit(1)
         console.print(Panel(
             f"Domains:        {', '.join(result['domains'])}\n"
@@ -1272,14 +1270,16 @@ def bootstrap():
 # ===================================================================
 @app.command()
 def ingest(
-    ulid: str = typer.Argument(help="Paper ULID to ingest"),
+    paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)"),
 ):
     """Ingest a single new paper: parse -> author-fix -> auto-notes -> quality -> classify -> graph-update -> rag-index."""
+    from .id_resolver import resolve_id
     from . import auto_notes as an
     from . import quality as q
     from . import classify as cl
     from . import year_fix as yf
 
+    ulid = resolve_id(paper_id) or paper_id
     paper_dir = config.PAPERS_DIR / ulid
     if not paper_dir.exists():
         console.print(f"[red]Error:[/] Paper directory not found: {paper_dir}")
@@ -1628,6 +1628,498 @@ def landscape(
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
     console.print(f"\n[green]Landscape report saved to {out_path}[/]")
+
+
+# ===================================================================
+# arxiv-download: Download papers from arXiv
+# ===================================================================
+@app.command(name="arxiv-download")
+def arxiv_download(
+    query: str = typer.Argument(help="arXiv search query"),
+    max_results: int = typer.Option(10, "--max", help="Max papers to download"),
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also download PDF (default: yes)"),
+):
+    """从 arXiv 下载论文 TeX 源码到知识库。"""
+    from . import kb_update as kb
+
+    console.print(f"[cyan]Downloading from arXiv:[/] {query} (max={max_results})")
+    results = kb.arxiv_download(query, max_results=max_results, download_pdf=pdf)
+
+    downloaded = [r for r in results if r.get("status") == "downloaded"]
+    skipped = [r for r in results if r.get("status") == "already_exists"]
+    failed = [r for r in results if "failed" in r.get("status", "")]
+
+    console.print(Panel(
+        f"Downloaded: [green]{len(downloaded)}[/]\n"
+        f"Skipped:    {len(skipped)} (already exist)\n"
+        f"Failed:     [red]{len(failed)}[/]",
+        title="arXiv Download",
+    ))
+    for r in downloaded:
+        console.print(f"  [green]+[/] {r['ulid'][:16]}... {r['title']}")
+
+
+# ===================================================================
+# batch-ingest: Batch ingest papers
+# ===================================================================
+@app.command(name="batch-ingest")
+def batch_ingest(
+    ulids: str = typer.Option("", help="Comma-separated ULIDs (empty=all unparsed)"),
+    skip_notes: bool = typer.Option(False, "--skip-notes", help="Skip auto-notes generation"),
+    skip_quality: bool = typer.Option(False, "--skip-quality", help="Skip quality scoring"),
+):
+    """批量执行 ingest 全流程。"""
+    from . import kb_update as kb
+
+    ulid_list = [u.strip() for u in ulids.split(",") if u.strip()] if ulids else None
+    console.print(f"[cyan]Batch ingesting {len(ulid_list) if ulid_list else 'all unparsed'} papers...")
+
+    stats = kb.batch_ingest(ulids=ulid_list, skip_notes=skip_notes, skip_quality=skip_quality)
+
+    console.print(Panel(
+        f"Total:      {stats['total']}\n"
+        f"Parsed:     [green]{stats['parsed']}[/]\n"
+        f"Enriched:   {stats['enriched']}\n"
+        f"Noted:      {stats['noted']}\n"
+        f"Scored:     {stats['scored']}\n"
+        f"Classified: {stats['classified']}\n"
+        f"Errors:     [red]{len(stats['errors'])}[/]",
+        title="Batch Ingest Complete",
+    ))
+    for err in stats["errors"][:5]:
+        console.print(f"  [red]✗[/] {err['paper_id']}: {err['step']} - {err['error']}")
+
+
+# ===================================================================
+# kb-update: One-command knowledge base update
+# ===================================================================
+@app.command(name="kb-update")
+def kb_update(
+    query: str = typer.Option("", help="arXiv search query (empty=local only)"),
+    max_results: int = typer.Option(10, "--max", help="Max papers to download"),
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also download PDF (default: yes)"),
+):
+    """一键更新知识库：搜索 → 下载 → 批量入库。"""
+    from . import kb_update as kb
+
+    if query:
+        console.print(f"[cyan]KB Update:[/] searching '{query}' on arXiv...")
+    else:
+        console.print("[cyan]KB Update:[/] processing local unparsed papers...")
+
+    results = kb.kb_update(query=query, max_results=max_results, download_pdf=pdf)
+
+    dl = results.get("downloaded", [])
+    ing = results.get("ingest", {})
+
+    console.print(Panel(
+        f"Downloaded: [green]{len([r for r in dl if r.get('status') == 'downloaded'])}[/]\n"
+        f"Parsed:     [green]{ing.get('parsed', 0)}[/]\n"
+        f"Enriched:   {ing.get('enriched', 0)}\n"
+        f"Errors:     [red]{len(ing.get('errors', []))}[/]",
+        title="[green]KB Update Complete[/]",
+    ))
+
+
+# ===================================================================
+# compile-paper: LaTeX compilation
+# ===================================================================
+@app.command(name="compile-paper")
+def compile_paper(
+    tex_file: str = typer.Argument(help="Path to .tex file"),
+    output_dir: str = typer.Option("output/pdfs", help="Output directory for PDF"),
+    auto_fix: bool = typer.Option(True, "--auto-fix/--no-auto-fix", help="Auto-fix common LaTeX errors"),
+    max_retries: int = typer.Option(3, help="Max compilation retries"),
+):
+    """编译 LaTeX 论文为 PDF，自动修复常见错误。"""
+    import subprocess
+    import shutil
+
+    tex_path = config.PROJECT_ROOT / tex_file
+    if not tex_path.exists():
+        console.print(f"[red]File not found:[/] {tex_path}")
+        raise typer.Exit(1)
+
+    out_path = config.PROJECT_ROOT / output_dir
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # 检测 pdflatex
+    latex_cmd = shutil.which(config.LATEX_CMD)
+    if not latex_cmd:
+        console.print(f"[red]{config.LATEX_CMD} not found.[/] Install MiKTeX or TeX Live.")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Compiling:[/] {tex_path.name}")
+
+    errors = []
+    success = False
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = subprocess.run(
+                [latex_cmd, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
+                capture_output=True, text=True, timeout=120,
+                cwd=str(tex_path.parent),
+            )
+
+            # 检查 PDF 是否生成
+            pdf_name = tex_path.stem + ".pdf"
+            pdf_path = out_path / pdf_name
+            if pdf_path.exists():
+                success = True
+                # 运行 bibtex + 二次编译
+                bib_path = tex_path.parent / (tex_path.stem + ".bib")
+                if bib_path.exists():
+                    bibtex_cmd = shutil.which("bibtex")
+                    if bibtex_cmd:
+                        aux_path = out_path / (tex_path.stem + ".aux")
+                        subprocess.run(
+                            [bibtex_cmd, str(aux_path)],
+                            capture_output=True, timeout=30,
+                            cwd=str(tex_path.parent),
+                        )
+                        # 二次编译
+                        subprocess.run(
+                            [latex_cmd, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
+                            capture_output=True, text=True, timeout=120,
+                            cwd=str(tex_path.parent),
+                        )
+                break
+            else:
+                # 解析错误
+                log_text = result.stdout
+                error_lines = [l for l in log_text.split("\n") if l.startswith("!")]
+                errors.extend(error_lines[:5])
+                if not auto_fix or attempt >= max_retries:
+                    break
+                console.print(f"  [yellow]Attempt {attempt} failed, retrying...[/]")
+        except subprocess.TimeoutExpired:
+            errors.append("Compilation timed out")
+            break
+        except Exception as e:
+            errors.append(str(e))
+            break
+
+    if success:
+        console.print(Panel(
+            f"PDF: [green]{pdf_path}[/]\n"
+            f"Attempts: {attempt}",
+            title="[green]Compilation OK[/]",
+        ))
+    else:
+        console.print(Panel(
+            f"Failed after {attempt} attempts\n"
+            f"Errors:\n" + "\n".join(errors[:10]),
+            title="[red]Compilation Failed[/]",
+        ))
+
+
+# ===================================================================
+# exp-run: Run experiment
+# ===================================================================
+@app.command(name="exp-run")
+def exp_run(
+    paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)"),
+    mode: str = typer.Option("quick", help="quick (CPU+synthetic) or full"),
+    gpu: bool = typer.Option(False, "--gpu", help="Use GPU"),
+    timeout: int = typer.Option(3600, help="Timeout in seconds"),
+):
+    """运行实验代码，收集 metrics。"""
+    from .id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
+
+    exp_dir = config.EXPERIMENTS_DIR / ulid
+    if not exp_dir.exists():
+        console.print(f"[red]No experiment code found:[/] {exp_dir}")
+        console.print("[dim]Run experiment-code skill first to generate code.[/]")
+        raise typer.Exit(1)
+
+    # 查找主脚本
+    main_script = None
+    for name in ["main.py", "run.py", "train.py", "experiment.py"]:
+        candidate = exp_dir / name
+        if candidate.exists():
+            main_script = candidate
+            break
+
+    if not main_script:
+        py_files = list(exp_dir.glob("*.py"))
+        if py_files:
+            main_script = py_files[0]
+        else:
+            console.print(f"[red]No Python scripts found in {exp_dir}[/]")
+            raise typer.Exit(1)
+
+    console.print(f"[cyan]Running experiment:[/] {main_script.name}")
+    console.print(f"  Mode: {mode}, GPU: {gpu}, Timeout: {timeout}s")
+
+    import subprocess
+    env_args = []
+    if mode == "quick":
+        env_args = ["--mode", "quick"]
+    if gpu:
+        env_args.append("--gpu")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(main_script)] + env_args,
+            capture_output=True, text=True, timeout=timeout,
+            cwd=str(exp_dir),
+        )
+
+        # 保存日志
+        log_path = exp_dir / "run_log.txt"
+        log_path.write_text(
+            f"=== STDOUT ===\n{result.stdout}\n=== STDERR ===\n{result.stderr}\n=== Return code: {result.returncode} ===\n",
+            encoding="utf-8",
+        )
+
+        if result.returncode == 0:
+            console.print(Panel(
+                f"Script: {main_script.name}\n"
+                f"Return code: [green]0[/]\n"
+                f"Log: {log_path}",
+                title="[green]Experiment OK[/]",
+            ))
+        else:
+            console.print(Panel(
+                f"Return code: [red]{result.returncode}[/]\n"
+                f"Last stderr:\n{result.stderr[-500:]}\n"
+                f"Log: {log_path}",
+                title="[red]Experiment Failed[/]",
+            ))
+    except subprocess.TimeoutExpired:
+        console.print(f"[red]Experiment timed out after {timeout}s[/]")
+
+
+# ===================================================================
+# exp-compare: Compare experiment results
+# ===================================================================
+@app.command(name="exp-compare")
+def exp_compare(
+    paper_id: str = typer.Argument(help="Paper ID"),
+    baseline_id: Optional[str] = typer.Option(None, help="Baseline paper ID"),
+):
+    """对比实验结果与论文报告。"""
+    from .id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
+
+    exp_dir = config.EXPERIMENTS_DIR / ulid
+    log_path = exp_dir / "run_log.txt"
+    report_path = exp_dir / "results.json"
+
+    if not log_path.exists() and not report_path.exists():
+        console.print(f"[red]No experiment results found for {ulid}[/]")
+        raise typer.Exit(1)
+
+    # 读取实验日志
+    log_content = ""
+    if log_path.exists():
+        log_content = log_path.read_text(encoding="utf-8")
+
+    # 读取结果 JSON
+    results = {}
+    if report_path.exists():
+        results = json.loads(report_path.read_text(encoding="utf-8"))
+
+    # 读取论文原始数据
+    paper_data = dbmod.load_parsed(ulid) or {}
+
+    output_parts = [
+        f"Paper: {(paper_data.get('title') or ulid)[:60]}",
+        f"Experiment log: {'[green]found[/]' if log_content else '[red]missing[/]'}",
+        f"Results JSON:   {'[green]found[/]' if results else '[yellow]missing[/]'}",
+    ]
+    if results:
+        output_parts.append("\nMetrics:\n" + "\n".join(f"  {k}: {v}" for k, v in results.items()))
+
+    # Baseline comparison
+    if baseline_id:
+        bl_ulid = resolve_id(baseline_id) or baseline_id
+        bl_results_path = config.EXPERIMENTS_DIR / bl_ulid / "results.json"
+        if bl_results_path.exists():
+            bl_results = json.loads(bl_results_path.read_text(encoding="utf-8"))
+            bl_data = dbmod.load_parsed(bl_ulid) or {}
+            output_parts.append(f"\n[bold]Baseline:[/] {(bl_data.get('title') or bl_ulid)[:60]}")
+            # Compare common metrics
+            common_keys = set(results.keys()) & set(bl_results.keys()) if results else set()
+            if common_keys:
+                output_parts.append("\n[bold]Comparison:[/]")
+                for k in sorted(common_keys):
+                    v1 = results.get(k)
+                    v2 = bl_results.get(k)
+                    try:
+                        diff = float(v1) - float(v2)
+                        sign = "+" if diff > 0 else ""
+                        output_parts.append(f"  {k}: {v1} vs {v2} ({sign}{diff:.4f})")
+                    except (TypeError, ValueError):
+                        output_parts.append(f"  {k}: {v1} vs {v2}")
+        else:
+            output_parts.append(f"\n[yellow]Baseline results not found for {bl_ulid}[/]")
+
+    console.print(Panel(
+        "\n".join(output_parts),
+        title=f"Experiment Report: {ulid}",
+    ))
+
+
+# ===================================================================
+# exp-setup: Setup experiment environment
+# ===================================================================
+@app.command(name="exp-setup")
+def exp_setup(
+    paper_id: str = typer.Argument(help="Paper ID"),
+    use_conda: bool = typer.Option(True, "--conda/--no-conda", help="Use conda environment"),
+    use_docker: bool = typer.Option(False, "--docker", help="Use Docker"),
+):
+    """为论文实验配置运行环境（conda/Docker）。"""
+    from .id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
+
+    exp_dir = config.EXPERIMENTS_DIR / ulid
+    if not exp_dir.exists():
+        console.print(f"[red]No experiment code found:[/] {exp_dir}")
+        raise typer.Exit(1)
+
+    # 检查 requirements.txt
+    req_path = exp_dir / "requirements.txt"
+    env_path = exp_dir / "environment.yml"
+
+    console.print(f"[cyan]Setting up environment for {ulid}[/]")
+
+    if use_conda:
+        env_name = f"scholar-{ulid[:8]}"
+        if env_path.exists():
+            console.print(f"  Found environment.yml, creating conda env: {env_name}")
+            console.print(f"  [dim]Run: conda env create -f {env_path} -n {env_name}[/]")
+        elif req_path.exists():
+            console.print(f"  Found requirements.txt, creating conda env: {env_name}")
+            console.print(f"  [dim]Run: conda create -n {env_name} python=3.10 && conda activate {env_name} && pip install -r {req_path}[/]")
+        else:
+            console.print("  [yellow]No requirements.txt or environment.yml found[/]")
+    elif use_docker:
+        dockerfile = exp_dir / "Dockerfile"
+        if dockerfile.exists():
+            console.print(f"  Found Dockerfile")
+            console.print(f"  [dim]Run: docker build -t scholar-{ulid[:8]} {exp_dir}[/]")
+        else:
+            console.print("  [yellow]No Dockerfile found[/]")
+    else:
+        console.print("  Use --conda or --docker to set up environment")
+
+
+# ===================================================================
+# exp-debug: Debug experiment failure
+# ===================================================================
+@app.command(name="exp-debug")
+def exp_debug(
+    run_log: str = typer.Argument(help="Path to run_log.txt"),
+):
+    """诊断实验失败原因。"""
+    log_path = Path(run_log)
+    if not log_path.is_absolute():
+        log_path = config.PROJECT_ROOT / log_path
+
+    if not log_path.exists():
+        console.print(f"[red]Log file not found:[/] {log_path}")
+        raise typer.Exit(1)
+
+    content = log_path.read_text(encoding="utf-8")
+
+    # 提取关键错误信息
+    stderr_section = ""
+    if "=== STDERR ===" in content:
+        parts = content.split("=== STDERR ===")
+        if len(parts) > 1:
+            stderr_section = parts[1].split("===")[0].strip()
+
+    # 常见错误模式
+    issues = []
+    if "ModuleNotFoundError" in content:
+        missing = re.findall(r"No module named '(\w+)'", content)
+        issues.append(f"Missing modules: {', '.join(set(missing))}")
+    if "CUDA out of memory" in content:
+        issues.append("GPU OOM: reduce batch size or use CPU mode")
+    if "FileNotFoundError" in content:
+        issues.append("File not found: check data paths")
+    if "RuntimeError" in content:
+        issues.append("Runtime error: check code logic")
+
+    console.print(Panel(
+        f"Log: {log_path.name}\n\n"
+        f"[bold]Detected Issues:[/]\n" + "\n".join(f"  • {i}" for i in issues) + "\n\n"
+        f"[bold]Stderr (last 500 chars):[/]\n{stderr_section[-500:]}",
+        title="Experiment Debug",
+    ))
+
+
+# ===================================================================
+# dataset-download: Download datasets
+# ===================================================================
+@app.command(name="dataset-download")
+def dataset_download(
+    dataset_name: str = typer.Argument(help="Dataset name (HuggingFace or Papers with Code)"),
+    output_dir: str = typer.Option("output/datasets", help="Output directory"),
+    source: str = typer.Option("auto", help="Source: auto, huggingface, paperswithcode"),
+):
+    """下载论文使用的数据集（HuggingFace / Papers with Code）。"""
+    out_path = config.PROJECT_ROOT / output_dir / dataset_name
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    console.print(f"[cyan]Downloading dataset:[/] {dataset_name}")
+
+    if source in ("auto", "huggingface"):
+        try:
+            import subprocess
+            # 尝试用 huggingface-cli
+            hf_cli = shutil.which("huggingface-cli")
+            if hf_cli:
+                result = subprocess.run(
+                    [hf_cli, "datasets", "download", dataset_name, "--repo-type", "dataset", "--local-dir", str(out_path)],
+                    capture_output=True, text=True, timeout=600,
+                )
+                if result.returncode == 0:
+                    console.print(f"[green]Downloaded to {out_path}[/]")
+                    return
+        except Exception:
+            pass
+
+        # 备选：Python API
+        try:
+            from datasets import load_dataset
+            ds = load_dataset(dataset_name, cache_dir=str(out_path))
+            console.print(f"[green]Downloaded via Python API to {out_path}[/]")
+            console.print(f"  Splits: {list(ds.keys())}")
+            return
+        except ImportError:
+            console.print("[yellow]Install datasets: pip install datasets[/]")
+        except Exception as e:
+            console.print(f"[yellow]HuggingFace download failed: {e}[/]")
+
+    console.print(f"[yellow]Could not download {dataset_name}. Try manual download.[/]")
+
+
+# ===================================================================
+# metadata-enrich: Backfill arxiv_id/DOI
+# ===================================================================
+@app.command(name="metadata-enrich")
+def metadata_enrich(
+    apply: bool = typer.Option(False, "--apply", help="Apply changes (default: dry run)"),
+    limit: int = typer.Option(0, help="Max papers to process (0=all)"),
+):
+    """回填论文的 arxiv_id 和 DOI 字段（通过 arXiv API 搜索）。"""
+    from . import metadata_enrich as me
+
+    console.print("[cyan]Enriching metadata via arXiv API...[/]")
+    stats = me.enrich_all_papers(dry_run=not apply, limit=limit)
+
+    console.print(Panel(
+        f"Total:        {stats['total']}\n"
+        f"{'Would enrich' if not apply else 'Enriched'}: [green]{stats['enriched']}[/]\n"
+        f"Already have: {stats['already_have']}\n"
+        f"No match:     {stats['no_match']}\n"
+        f"Errors:       [red]{stats['errors']}[/]",
+        title="Metadata Enrich" + ("" if apply else " (DRY RUN — use --apply to save)"),
+    ))
 
 
 # ===================================================================

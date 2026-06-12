@@ -1,4 +1,5 @@
 # Scholar Studio - Python Dependencies
+# Core (required)
 typer>=0.9.0
 rich>=13.0
 psycopg2-binary>=2.9
@@ -6,3 +7,7 @@ neo4j>=5.0
 python-dotenv>=1.0
 PyMuPDF>=1.23
 mcp>=1.0
+
+# Optional (graceful fallback if missing)
+# ulid>=1.1              # ULID generation (fallback: base64 timestamp IDs)
+# datasets>=2.14         # HuggingFace dataset download (fallback: manual)

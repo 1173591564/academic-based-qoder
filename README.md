@@ -1,6 +1,6 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、22 个学术 skills（18 原子 + 4 组合 workflow）和 Lean4 形式化验证。
+基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、14 个学术 skills（8 原子 + 6 工作流）和 Lean4 形式化验证。
 
 > **核心理念**：把 440 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills 自动化完成调研→精读→对比→写作的全流程。
 
@@ -109,7 +109,7 @@ Bootstrap 按顺序执行 **9 步**，全程约 **40 分钟**：
 ### Step 6: 在 Qoder 中打开
 
 1. 用 Qoder 打开项目目录
-2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（29 个工具）
+2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（41 个工具）
 3. 在对话框中直接开始使用
 
 ### Step 7: 验证一切正常
@@ -154,62 +154,63 @@ python -m scholar stats
 
 ```
 你：调研 Transformer 的注意力机制演进
-你：精读 01KT6MTBBH03MN0Z6PK902XKC2
-你：写 Attention 方向的 Related Work
+你：精读 2401.04088                  ← 支持 arXiv ID / DOI / ULID / 关键词
+你：帮我写一篇 Attention 方向的论文
+你：复现 LoRA 论文的实验
+你：分析 RLHF 和 DPO 的研究空白
+你：入门 State Space Model
+你：推荐接下来该读什么
+你：维护知识库
 ```
 
 ### 一键开始（Deeplinks）
 
 点击链接直接唤起 Qoder 并开始任务：
 
-| 任务 | 说明 |
-|------|------|
-| [调研 Transformer](qoder://aicoding.aicoding-deeplink/chat?text=%E8%B0%83%E7%A0%94+Transformer+%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E7%9A%84%E5%8F%91%E5%B1%95%E5%8E%86%E7%A8%8B%EF%BC%8C%E6%8C%89%E6%97%B6%E9%97%B4%E7%BA%BF%E6%95%B4%E7%90%86%E5%85%B3%E9%94%AE%E8%AE%BA%E6%96%87&mode=agent) | 按时间线整理注意力机制关键论文 |
-| [精读 Attention Is All You Need](qoder://aicoding.aicoding-deeplink/chat?text=%E7%B2%BE%E8%AF%BB%E8%AE%BA%E6%96%87+01KT6MTBBH03MN0Z6PK902XKC2+%28Attention+Is+All+You+Need%29%EF%BC%8C%E8%BE%93%E5%87%BA%E7%BB%93%E6%9E%84%E5%8C%96%E5%88%86%E6%9E%90&mode=agent) | 结构化分析经典论文 |
-| [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 分析 RLHF/DPO 的研究缺口 |
-| [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 建立知识图谱和学习路径 |
+| 工作流 | 一键入口 | 说明 |
+|--------|----------|------|
+| 文献调研 | [调研 Transformer](qoder://aicoding.aicoding-deeplink/chat?text=%E8%B0%83%E7%A0%94+Transformer+%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E7%9A%84%E5%8F%91%E5%B1%95%E5%8E%86%E7%A8%8B%EF%BC%8C%E6%8C%89%E6%97%B6%E9%97%B4%E7%BA%BF%E6%95%B4%E7%90%86%E5%85%B3%E9%94%AE%E8%AE%BA%E6%96%87&mode=agent) | RAG + 图谱 + 时间线 → 调研报告 |
+| 深度分析 | [精读 Attention Is All You Need](qoder://aicoding.aicoding-deeplink/chat?text=%E7%B2%BE%E8%AF%BB%E8%AE%BA%E6%96%87+01KT6MTBBH03MN0Z6PK902XKC2+%28Attention+Is+All+You+Need%29%EF%BC%8C%E8%BE%93%E5%87%BA%E7%BB%93%E6%9E%84%E5%8C%96%E5%88%86%E6%9E%90&mode=agent) | 精读 + 质量评估 + 公式推导 + 实验代码 |
+| 学术写作 | [写 Attention 方向的论文](qoder://aicoding.aicoding-deeplink/chat?text=%E5%B8%AE%E6%88%91%E5%86%99%E4%B8%80%E7%AF%87+Attention+Mechanism+%E6%96%B9%E5%90%91%E7%9A%84%E8%AE%BA%E6%96%87&mode=agent) | 调研 → 撰写 → LaTeX 编译 → 审稿 |
+| 实验复现 | [复现 LoRA 论文](qoder://aicoding.aicoding-deeplink/chat?text=%E5%A4%8D%E7%8E%B0+LoRA+%E8%AE%BA%E6%96%87%E7%9A%84%E5%AE%9E%E9%AA%8C%EF%BC%8C%E7%94%9F%E6%88%90%E4%BB%A3%E7%A0%81%E5%B9%B6%E8%BF%90%E8%A1%8C&mode=agent) | 环境配置 → 代码生成 → 运行 → 结果对比 |
+| 研究空白 | [RLHF 研究空白](qoder://aicoding.aicoding-deeplink/chat?text=%E5%88%86%E6%9E%90+RLHF+%E5%92%8C+DPO+%E6%96%B9%E5%90%91%E7%9A%84%E7%A0%94%E7%A9%B6%E7%A9%BA%E7%99%BD%E5%92%8C%E6%9C%AA%E6%9D%A5%E6%96%B9%E5%90%91&mode=agent) | 跨论文局限性分析 → 研究缺口报告 |
+| 领域入门 | [入门 State Space Model](qoder://aicoding.aicoding-deeplink/chat?text=%E5%85%A5%E9%97%A8+State+Space+Model%EF%BC%8C%E5%BB%BA%E7%AB%8B%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%92%8C%E5%AD%A6%E4%B9%A0%E8%B7%AF%E5%BE%84&mode=agent) | 构建知识地图 + 学习路径 |
+| 论文推荐 | [推荐接下来该读什么](qoder://aicoding.aicoding-deeplink/chat?text=%E6%A0%B9%E6%8D%AE%E6%88%91%E7%9A%84%E7%9F%A5%E8%AF%86%E5%BA%93%EF%BC%8C%E6%8E%A8%E8%8D%90%E6%8E%A5%E4%B8%8B%E6%9D%A5%E8%AF%A5%E8%AF%BB%E5%93%AA%E4%BA%9B%E8%AE%BA%E6%96%87&mode=agent) | 基于引用网络 + 阅读缺口推荐 |
+| 知识库维护 | [维护知识库](qoder://aicoding.aicoding-deeplink/chat?text=%E6%A3%80%E6%9F%A5%E7%9F%A5%E8%AF%86%E5%BA%93%E5%81%A5%E5%BA%B7%E7%8A%B6%E6%80%81%E5%B9%B6%E6%B8%85%E7%90%86%E6%95%B0%E6%8D%AE&mode=agent) | 健康检查 + 数据清理 + 自动更新 |
 
 ---
 
-## 22 个学术 Skills
+## 14 个学术 Skills
 
 在 Qoder 对话中直接使用，或输入 `/skill-name` 触发：
 
-### 原子 Skills（18 个）
+### 原子 Skills（8 个）
 
 | 类别 | Skill | 用法示例 |
 |------|-------|--------|
-| **研究与阅读** | `research-survey` | "调研 Diffusion Model 的发展历程" |
-| | `deep-read` | "精读这篇论文" + 指定 ULID |
-| | `paper-compare` | "对比 BERT 和 GPT" |
-| | `paper-recommendation` | "推荐接下来该读什么" |
-| | `cold-start` | "入门 State Space Model" |
-| **分析与写作** | `related-work` | "写 Transformer 的 Related Work" |
-| | `citation-network` | "分析 NLP 领域的引用网络" |
-| | `research-gap` | "找 RLHF 方向的研究空白" |
-| | `concept-evolution` | "追踪 CNN → Transformer 的概念演化" |
-| **数学与验证** | `formula-derivation` | "推导 VAE 的 ELBO" |
-| | `math-verification` | "用 Lean4 验证这个定理" |
-| | `experiment-code` | "复现 LoRA 的实验代码" |
-| **质量与评审** | `quality-check` | "检查这篇论文的质量" |
-| | `review-report` | "写一篇审稿报告" |
-| **管理与维护** | `paper-ingestion` | "导入新论文" |
-| | `bibtex-management` | "导出 BibTeX" |
-| | `kb-maintenance` | "知识库健康检查" |
-| | `reading-progress` | "查看阅读进度" |
+| **论文管理** | `paper-ingestion` | "导入新论文" |
+| **数学验证** | `math-verification` | "用 Lean4 验证这个定理" |
+| **论文推荐** | `paper-recommendation` | "推荐接下来该读什么" |
+| **引用分析** | `citation-network` | "分析 NLP 领域的引用网络" |
+| **研究缺口** | `research-gap` | "找 RLHF 方向的研究空白" |
+| **审稿报告** | `review-report` | "写一篇审稿报告" |
+| **入门引导** | `cold-start` | "入门 State Space Model" |
+| **实验代码** | `experiment-code` | "复现 LoRA 的实验代码" |
 
 每个 skill 末尾都有 **Next Steps** 引导，执行完后自动建议下一步操作。
 
-### 组合 Workflow（4 个）
+### 工作流（6 个）
 
 串联多个原子 skill，自动传递数据，一键完成完整研究流程：
 
 | Workflow | 链路 | 用法示例 |
 |----------|------|--------|
-| `full-research` | survey → deep-read → compare → related-work | "全面调研 Transformer" |
-| `gap-analysis-flow` | citation-network → concept-evolution → research-gap → recommend | "找 RLHF 的研究空白" |
-| `paper-analysis-flow` | deep-read → quality-check → formula-derivation → experiment-code | "深度分析 Attention Is All You Need" |
-| `writing-flow` | survey → compare → related-work → bibtex → review | "帮我写论文的 Related Work" |
+| `research-survey` | RAG + 图谱 + 分类 + 时间线 | "调研 Diffusion Model 的发展历程" |
+| `paper-deep-dive` | 精读 + 质量 + 推导 + 代码 | "深度分析 Attention Is All You Need" |
+| `writing-pipeline` | 调研 → 撰写 → 编译 → 审稿 | "帮我写一篇论文" |
+| `reproduce-paper` | 环境 → 代码 → 运行 → 对比 | "复现这篇论文的实验" |
+| `idea-to-paper` | 调研 → 写作 → 复现 → 成文 | "我有一个想法" |
+| `kb-management` | 健康检查 + 自动更新 + 入库 | "维护知识库" |
 
 ---
 
@@ -226,7 +227,7 @@ python -m scholar stats
 │       │              │                               │
 │       ▼              ▼                               │
 │  ┌────────────────────────────────┐                 │
-│  │   Scholar MCP Server (29 工具)  │                 │
+│  │   Scholar MCP Server (41 工具)  │                 │
 │  │   (Qoder ↔ CLI 桥接层)          │                 │
 │  └────────────┬───────────────────┘                 │
 └───────────────│─────────────────────────────────────┘
@@ -302,7 +303,7 @@ python -m scholar arxiv-search "query"      # 搜索 arXiv
 ```
 .qoder/
   rules/           Agent 规则（identity, pipelines, tools, academic）
-  skills/          22 个学术 skills（18 原子 + 4 workflow）
+  skills/          14 个学术 skills（8 原子 + 6 工作流）
   commands/        4 个快捷指令（stats, find, paper, health）
   hooks/           2 个自动化钩子（任务通知 + 危险拦截）
   settings.json    Hooks 配置
@@ -317,8 +318,8 @@ output/
   experiments/     实验代码复现
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
-scholar/           Python CLI 工具集（17+ 命令）
-scholar_mcp/       MCP Server（29 tools，Qoder 桥接层）
+scholar/           Python CLI 工具集（35 命令）
+scholar_mcp/       MCP Server（41 工具，Qoder 桥接层）
 infra/             Docker 编排（PostgreSQL + Neo4j）
   docker-compose.yml
   init.sql         PostgreSQL 建表脚本（papers, sections, formulas, citations, chunks）
@@ -423,6 +424,36 @@ cd LEAN && lake build
 | `/find` | 全文 + 语义混合搜索论文 |
 | `/paper` | 查看单篇论文详情 + 引用关系 |
 | `/health` | 知识库健康检查 + 修复建议 |
+
+---
+
+## Qoder Plugin
+
+本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 14 个 Skills + 4 个 Commands + MCP Server。
+
+### 构建 Plugin
+
+```bash
+python build_plugin.py
+```
+
+产出在 `plugin/` 目录：
+
+```
+plugin/
+  .qoder-plugin/plugin.json   ← 插件元数据
+  skills/                     ← 14 个 Skills
+  commands/                   ← 4 个快捷指令
+  .mcp.json                   ← MCP Server 配置
+```
+
+### 安装使用
+
+1. 在 Qoder Quest 中安装此 Plugin
+2. 克隆主仓库并执行 `pip install -r requirements.txt` + `python -m scholar bootstrap`
+3. 启动数据库后，所有 14 个 Skills 即可使用
+
+> **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
 
 ---
 
