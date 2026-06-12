@@ -60,7 +60,7 @@ python -m scholar arxiv-search "<相关子方向>" --max 20
 选取 3-5 篇最重要的论文，先检查预生成笔记：
 - `output/notes/<ULID>.md` — 已提取的摘要、贡献、公式
 - `output/notes/<ULID>-quality.json` — 7维度质量评分
-如果笔记已存在，直接基于笔记分析；否则执行 deep-read 流程：
+如果笔记已存在，直接基于笔记分析；否则执行 paper-deep-dive 流程：
 - 如果是综述论文，重点关注分类体系和研究脉络
 - 如果是开创性论文，重点关注问题定义和核心方法
 - 如果是最新论文，重点关注当前前沿和开放问题
@@ -140,7 +140,7 @@ python -m scholar graph-stats
 冷启动完成后，自然的后续动作：
 
 - **`/research-survey`** — 对知识地图中的核心方向做深入调研
-- **`/deep-read`** — 按学习路径精读必读论文
+- **`/paper-deep-dive`** — 按学习路径精读必读论文
 - **`/citation-network`** — 分析该领域的引用网络，发现经典论文
 
 > 传递数据：知识地图中的「必读论文列表」和「概念依赖图」可直接指导后续阅读顺序。

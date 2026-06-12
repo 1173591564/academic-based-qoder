@@ -1,6 +1,6 @@
 # Scholar Studio Plugin
 
-> **本插件是"大脑"，还需要安装"身体"。** Plugin 提供 22 个 Skills + 4 个 Commands + MCP 配置，但实际执行依赖主仓库的 Python 后端和数据库。
+> **本插件是"大脑"，还需要安装"身体"。** Plugin 提供 14 个 Skills + 4 个 Commands + MCP 配置，但实际执行依赖主仓库的 Python 后端和数据库。
 
 ## 架构说明
 
@@ -51,36 +51,28 @@ python -m scholar bootstrap
 
 | 类型 | 数量 | 说明 |
 |------|------|------|
-| Skills | 22 | 18 原子 + 4 组合 Workflow |
+| Skills | 14 | 8 原子 + 6 工作流 |
 | Commands | 4 | stats / find / paper / health |
 | Rules | 1 | Agent 角色定义 |
 | Hooks | 2 | 任务完成通知 + 危险命令拦截 |
-| MCP Server | 1 | Scholar MCP（29 工具） |
+| MCP Server | 1 | Scholar MCP（41 工具） |
 
 ## Skills 列表
 
-### 原子 Skills
-- `/research-survey` — 全面文献调研
-- `/deep-read` — 单篇深度阅读
-- `/paper-compare` — 多篇对比
-- `/paper-recommendation` — 论文推荐
-- `/cold-start` — 陌生领域入门
-- `/related-work` — 写 Related Work
+### 原子 Skills（8 个）
+- `/paper-ingestion` — 扫描、解析并导入论文
+- `/math-verification` — Lean4 数学验证
+- `/paper-recommendation` — 基于引用网络的论文推荐
 - `/citation-network` — 引用网络分析
-- `/research-gap` — 研究空白发现
-- `/concept-evolution` — 概念演化追踪
-- `/formula-derivation` — 公式推导
-- `/math-verification` — Lean4 验证
-- `/experiment-code` — 实验代码生成
-- `/quality-check` — 质量评分
-- `/review-report` — 审稿报告
-- `/paper-ingestion` — 论文导入
-- `/bibtex-management` — BibTeX 管理
-- `/kb-maintenance` — 知识库维护
-- `/reading-progress` — 阅读进度
+- `/research-gap` — 跨论文研究空白发现
+- `/review-report` — 结构化同行评审报告
+- `/cold-start` — 陌生领域知识地图与学习路径
+- `/experiment-code` — 根据论文生成实验代码
 
-### 组合 Workflow
-- `/full-research` — 调研 → 精读 → 对比 → Related Work
-- `/gap-analysis-flow` — 引用网络 → 概念演化 → 研究缺口 → 推荐
-- `/paper-analysis-flow` — 精读 → 评分 → 推导 → 代码
-- `/writing-flow` — 调研 → 对比 → 写作 → BibTeX → 审稿
+### 工作流（6 个）
+- `/research-survey` — 全面文献调研
+- `/paper-deep-dive` — 单篇深度分析（精读+质量+推导+代码）
+- `/writing-pipeline` — 端到端学术写作（调研→撰写→编译→审稿）
+- `/reproduce-paper` — 端到端实验复现（环境→代码→运行→对比）
+- `/idea-to-paper` — 从研究点子到完整论文
+- `/kb-management` — 知识库维护与自动更新

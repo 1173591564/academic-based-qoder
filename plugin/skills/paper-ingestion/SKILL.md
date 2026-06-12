@@ -78,7 +78,7 @@ python -m scholar info <ULID>
 论文导入完成后，自然的后续动作：
 
 - **`/research-survey`** — 新论文入库后，重新调研可能发现新关联
-- **`/reading-progress`** — 更新阅读进度，标记新导入的论文
-- **`/quality-check`** — 对新导入的论文做质量评分
+- **`/kb-management`** — 更新知识库状态，确保新论文完成全流程处理
+- `python -m scholar quality-score <ULID>` — 对新导入的论文做质量评分
 
 > 传递数据：新论文的 ULID 和解析结果已自动进入知识库，后续 skill 可直接使用。

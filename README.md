@@ -1,6 +1,6 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、22 个学术 skills（18 原子 + 4 组合 workflow）和 Lean4 形式化验证。
+基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、14 个学术 skills（8 原子 + 6 工作流）和 Lean4 形式化验证。
 
 > **核心理念**：把 440 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills 自动化完成调研→精读→对比→写作的全流程。
 
@@ -171,45 +171,37 @@ python -m scholar stats
 
 ---
 
-## 22 个学术 Skills
+## 14 个学术 Skills
 
 在 Qoder 对话中直接使用，或输入 `/skill-name` 触发：
 
-### 原子 Skills（18 个）
+### 原子 Skills（8 个）
 
 | 类别 | Skill | 用法示例 |
 |------|-------|--------|
-| **研究与阅读** | `research-survey` | "调研 Diffusion Model 的发展历程" |
-| | `deep-read` | "精读这篇论文" + 指定 ULID |
-| | `paper-compare` | "对比 BERT 和 GPT" |
-| | `paper-recommendation` | "推荐接下来该读什么" |
-| | `cold-start` | "入门 State Space Model" |
-| **分析与写作** | `related-work` | "写 Transformer 的 Related Work" |
-| | `citation-network` | "分析 NLP 领域的引用网络" |
-| | `research-gap` | "找 RLHF 方向的研究空白" |
-| | `concept-evolution` | "追踪 CNN → Transformer 的概念演化" |
-| **数学与验证** | `formula-derivation` | "推导 VAE 的 ELBO" |
-| | `math-verification` | "用 Lean4 验证这个定理" |
-| | `experiment-code` | "复现 LoRA 的实验代码" |
-| **质量与评审** | `quality-check` | "检查这篇论文的质量" |
-| | `review-report` | "写一篇审稿报告" |
-| **管理与维护** | `paper-ingestion` | "导入新论文" |
-| | `bibtex-management` | "导出 BibTeX" |
-| | `kb-maintenance` | "知识库健康检查" |
-| | `reading-progress` | "查看阅读进度" |
+| **论文管理** | `paper-ingestion` | "导入新论文" |
+| **数学验证** | `math-verification` | "用 Lean4 验证这个定理" |
+| **论文推荐** | `paper-recommendation` | "推荐接下来该读什么" |
+| **引用分析** | `citation-network` | "分析 NLP 领域的引用网络" |
+| **研究缺口** | `research-gap` | "找 RLHF 方向的研究空白" |
+| **审稿报告** | `review-report` | "写一篇审稿报告" |
+| **入门引导** | `cold-start` | "入门 State Space Model" |
+| **实验代码** | `experiment-code` | "复现 LoRA 的实验代码" |
 
 每个 skill 末尾都有 **Next Steps** 引导，执行完后自动建议下一步操作。
 
-### 组合 Workflow（4 个）
+### 工作流（6 个）
 
 串联多个原子 skill，自动传递数据，一键完成完整研究流程：
 
 | Workflow | 链路 | 用法示例 |
 |----------|------|--------|
-| `full-research` | survey → deep-read → compare → related-work | "全面调研 Transformer" |
-| `gap-analysis-flow` | citation-network → concept-evolution → research-gap → recommend | "找 RLHF 的研究空白" |
-| `paper-analysis-flow` | deep-read → quality-check → formula-derivation → experiment-code | "深度分析 Attention Is All You Need" |
-| `writing-flow` | survey → compare → related-work → bibtex → review | "帮我写论文的 Related Work" |
+| `research-survey` | RAG + 图谱 + 分类 + 时间线 | "调研 Diffusion Model 的发展历程" |
+| `paper-deep-dive` | 精读 + 质量 + 推导 + 代码 | "深度分析 Attention Is All You Need" |
+| `writing-pipeline` | 调研 → 撰写 → 编译 → 审稿 | "帮我写一篇论文" |
+| `reproduce-paper` | 环境 → 代码 → 运行 → 对比 | "复现这篇论文的实验" |
+| `idea-to-paper` | 调研 → 写作 → 复现 → 成文 | "我有一个想法" |
+| `kb-management` | 健康检查 + 自动更新 + 入库 | "维护知识库" |
 
 ---
 
@@ -226,7 +218,7 @@ python -m scholar stats
 │       │              │                               │
 │       ▼              ▼                               │
 │  ┌────────────────────────────────┐                 │
-│  │   Scholar MCP Server (29 工具)  │                 │
+│  │   Scholar MCP Server (41 工具)  │                 │
 │  │   (Qoder ↔ CLI 桥接层)          │                 │
 │  └────────────┬───────────────────┘                 │
 └───────────────│─────────────────────────────────────┘
@@ -302,7 +294,7 @@ python -m scholar arxiv-search "query"      # 搜索 arXiv
 ```
 .qoder/
   rules/           Agent 规则（identity, pipelines, tools, academic）
-  skills/          22 个学术 skills（18 原子 + 4 workflow）
+  skills/          14 个学术 skills（8 原子 + 6 工作流）
   commands/        4 个快捷指令（stats, find, paper, health）
   hooks/           2 个自动化钩子（任务通知 + 危险拦截）
   settings.json    Hooks 配置
@@ -317,8 +309,8 @@ output/
   experiments/     实验代码复现
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
-scholar/           Python CLI 工具集（17+ 命令）
-scholar_mcp/       MCP Server（29 tools，Qoder 桥接层）
+scholar/           Python CLI 工具集（35 命令）
+scholar_mcp/       MCP Server（41 工具，Qoder 桥接层）
 infra/             Docker 编排（PostgreSQL + Neo4j）
   docker-compose.yml
   init.sql         PostgreSQL 建表脚本（papers, sections, formulas, citations, chunks）
@@ -428,7 +420,7 @@ cd LEAN && lake build
 
 ## Qoder Plugin
 
-本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 22 个 Skills + 4 个 Commands + MCP Server。
+本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 14 个 Skills + 4 个 Commands + MCP Server。
 
 ### 构建 Plugin
 
@@ -441,7 +433,7 @@ python build_plugin.py
 ```
 plugin/
   .qoder-plugin/plugin.json   ← 插件元数据
-  skills/                     ← 22 个 Skills
+  skills/                     ← 14 个 Skills
   commands/                   ← 4 个快捷指令
   .mcp.json                   ← MCP Server 配置
 ```
@@ -450,7 +442,7 @@ plugin/
 
 1. 在 Qoder Quest 中安装此 Plugin
 2. 克隆主仓库并执行 `pip install -r requirements.txt` + `python -m scholar bootstrap`
-3. 启动数据库后，所有 22 个 Skills 即可使用
+3. 启动数据库后，所有 14 个 Skills 即可使用
 
 > **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
 

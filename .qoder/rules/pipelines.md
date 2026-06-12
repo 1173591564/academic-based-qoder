@@ -1,46 +1,40 @@
 ---
 alwaysApply: true
-description: 22 academic pipeline routing (18 skills + 4 workflows) — matches user intent to skill
+description: 6 academic workflow routing — matches user intent to workflow skill
 ---
-# Academic Pipelines
+# Academic Workflows
 
-When the user expresses one of these intents, invoke the matching skill via its slash command (e.g., `/research-survey`):
+When the user expresses one of these intents, invoke the matching workflow via its slash command (e.g., `/research-survey`):
 
-| # | Pipeline | Trigger Keywords | Skill |
+| # | Workflow | Trigger Keywords | Skill |
 |---|----------|-----------------|-------|
-| 1 | Paper Ingestion | ingest, parse, import, scan | `paper-ingestion` |
-| 2 | Math Verification | verify formula, formalize, prove theorem | `math-verification` |
-| 3 | Smart Survey | survey XX, research XX, 调研, 综述 | `research-survey` |
-| 4 | Deep Reading | analyze paper, deep read, 精读, 分析 | `deep-read` |
-| 5 | Paper Comparison | compare papers, diff XX and YY, 对比 | `paper-compare` |
-| 6 | Paper Recommendation | recommend papers, what to read next | `paper-recommendation` |
-| 7 | Related Work | write related work, literature review, 相关工作 | `related-work` |
-| 8 | Citation Network | citation relations, field map, bridge papers | `citation-network` |
-| 9 | Research Gap | find gaps, research void, future work | `research-gap` |
-| 10 | Formula Derivation | derive formula, expand derivation | `formula-derivation` |
-| 11 | Quality Check | check quality, is it reliable | `quality-check` |
-| 12 | KB Maintenance | maintain, cleanup, health check | `kb-maintenance` |
-| 13 | Reading Progress | reading progress, what have I read | `reading-progress` |
-| 14 | Review Report | review, peer review, referee, 审稿 | `review-report` |
-| 15 | Experiment Code | reproduce experiment, generate code | `experiment-code` |
-| 16 | BibTeX Management | export bibtex, manage references | `bibtex-management` |
-| 17 | Concept Evolution | concept evolution, tech replacement, 概念演化 | `concept-evolution` |
-| 18 | Cold Start | get started with XX, new field, 入门 | `cold-start` |
-| 19 | Full Research | 全面调研, full research, 系统研究 | `full-research` |
-| 20 | Gap Analysis | gap analysis, 找空白, 研究机会 | `gap-analysis-flow` |
-| 21 | Deep Analysis | 深度分析, analyze in depth, 彻底搞懂 | `paper-analysis-flow` |
-| 22 | Writing Flow | 写论文, writing flow, 从调研到写作 | `writing-flow` |
+| 1 | 研究调研 | survey XX, research XX, 调研, 综述 | `research-survey` |
+| 2 | 论文深度分析 | 精读, 深度分析, analyze paper, 彻底搞懂 | `paper-deep-dive` |
+| 3 | 学术写作 | 写论文, writing, 学术写作 | `writing-pipeline` |
+| 4 | 实验复现 | 复现, reproduce, 运行实验 | `reproduce-paper` |
+| 5 | 点子落地 | 我有一个想法, idea to paper, 从想法到论文 | `idea-to-paper` |
+| 6 | 知识库维护 | 维护, cleanup, kb-update, 健康检查 | `kb-management` |
 
-### Composite Workflows (#19-22)
-Workflow skills **chain multiple atomic skills** in sequence, passing data between stages. When a workflow is triggered, execute each stage in order, pausing between stages to show progress.
+## Retained Atomic Skills
 
-Skills are in `.qoder/skills/<name>/SKILL.md`. Execute via slash command or read the SKILL.md for step-by-step instructions.
+These atomic skills are kept for direct use (not wrapped in workflows):
+
+| Skill | Trigger |
+|-------|---------|
+| `paper-ingestion` | ingest, parse, import, scan |
+| `math-verification` | verify formula, formalize, prove theorem |
+| `paper-recommendation` | recommend papers, what to read next |
+| `citation-network` | citation relations, field map, bridge papers |
+| `research-gap` | find gaps, research void, future work |
+| `review-report` | review, peer review, referee, 审稿 |
+| `cold-start` | get started with XX, new field, 入门 |
+| `experiment-code` | reproduce experiment, generate code, 复现实验, 写实验脚本 |
 
 ## Default Behavior
 
-When the user's intent doesn't clearly match any pipeline above:
+When the user's intent doesn't clearly match any workflow above:
 
-- **Mentions a paper, topic, or research direction** → default to `research-survey` (broad) or `deep-read` (specific paper)
+- **Mentions a paper, topic, or research direction** → default to `research-survey` (broad) or `paper-deep-dive` (specific paper)
 - **Mentions "project", "code", "develop", "fix", "debug"** → enter Infrastructure Mode (see `identity.md`)
 - **Asks a factual question about AI/papers** → first run `python -m scholar search "<keyword>"` to find data, then answer with citations
 - **Completely ambiguous** → run `python -m scholar stats` to understand KB state, then ask the user what they want to do

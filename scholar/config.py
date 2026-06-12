@@ -31,9 +31,11 @@ NOTES_DIR = OUTPUT_DIR / "notes"
 DRAFTS_DIR = OUTPUT_DIR / "drafts"
 BIB_DIR = OUTPUT_DIR / "bib"
 EXPERIMENTS_DIR = OUTPUT_DIR / "experiments"
+DATASETS_DIR = OUTPUT_DIR / "datasets"
+PDFS_DIR = OUTPUT_DIR / "pdfs"
 
 # Ensure output directories exist (parents=True for fresh-clone safety)
-for d in [PARSED_DIR, NOTES_DIR, DRAFTS_DIR, BIB_DIR, EXPERIMENTS_DIR]:
+for d in [PARSED_DIR, NOTES_DIR, DRAFTS_DIR, BIB_DIR, EXPERIMENTS_DIR, DATASETS_DIR, PDFS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索

@@ -89,8 +89,7 @@ python -m scholar list-papers
 
 推荐完成后，自然的后续动作：
 
-- **`/deep-read`** — 对推荐的 Top 论文逐一精读
-- **`/reading-progress`** — 更新阅读进度，标记已读/未读
+- **`/paper-deep-dive`** — 对推荐的 Top 论文逐一精读
 - **`/cold-start`** — 如果推荐涉及陌生领域，先用冷启动建立知识地图
 
-> 传递数据：推荐列表中的论文 ULID 和推荐理由可直接传给 deep-read。
+> 传递数据：推荐列表中的论文 ULID 和推荐理由可直接传给 `/paper-deep-dive`。

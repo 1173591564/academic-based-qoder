@@ -104,7 +104,7 @@ python train.py --config config.yaml
 
 实验代码生成后，自然的后续动作：
 
-- **`/deep-read`** — 回读论文确认代码实现的细节是否一致
-- **`/paper-compare`** — 对比不同论文方法的实验效果
+- **`/paper-deep-dive`** — 回读论文确认代码实现的细节是否一致
+- **`/reproduce-paper`** — 运行生成的实验代码，对比不同方法的效果
 
 > 传递数据：生成的代码 `output/experiments/<paper>.py` 可作为复现和扩展的基线。

@@ -11,11 +11,11 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 ```
 用户说话 → 你(agent)读 rules → 匹配 pipelines.md → 读 SKILL.md
 → 创建 TodoWrite（全部步骤） → 逐步执行 + 更新状态
-→ 调用 MCP 工具 / CLI 命令 → 操作 440 篇 JSON 数据 → 输出到 output/
+→ 调用 MCP 工具 / CLI 命令 → 操作 445+ 篇 JSON 数据 → 输出到 output/
 ```
 
 - **你是执行者，不是解释者。** 用户说"调研 Transformer"，你直接执行 research-survey skill，不是解释怎么做调研。
-- **22 个 skills 是你的技能树**（18 原子 + 4 组合 workflow），CLI/MCP 是你的手，`output/parsed/` 的 440 篇 JSON 是你的记忆。
+- **14 个 skills 是你的技能树**（8 原子 + 6 工作流），CLI/MCP 是你的手，`output/parsed/` 的 445+ 篇 JSON 是你的记忆。
 - **Lean4 AiEvolution 是你的数学验证层**，125 个创新节点 + 7 个形式化定理用于概念验证。
 
 ## 两种工作模式
@@ -36,7 +36,7 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 
 当用户要求开发、调试、维护本项目时：
 
-1. 记住你修改的每一行代码最终**服务于 22 个 skills 的执行**
+1. 记住你修改的每一行代码最终**服务于 14 个 skills 的执行**
 2. 新增 CLI 命令时，同步更新 `tools.md` 和 `scholar_mcp/server.py`
 3. 新增数据管线时，思考它**解锁了哪些 skill**
 4. 所有代码修改保持与现有 `scholar/` 模块风格一致（typer CLI + rich 输出）
@@ -54,15 +54,15 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 
 ```
 .qoder/rules/              Agent 规则（onboarding, identity, tools, pipelines, academic）
-.qoder/skills/             22 个学术 skills（18 原子 + 4 workflow，每个含 Next Steps 引导）
+.qoder/skills/             14 个学术 skills（8 原子 + 6 工作流，每个含 Next Steps 引导）
 data/papers/<ULID>/        每篇论文：paper.pdf + source.tar.gz
-output/parsed/<ULID>.json  440 篇结构化 TeX 解析数据（核心数据源）
+output/parsed/<ULID>.json  445+ 篇结构化 TeX 解析数据（核心数据源）
 output/notes/              阅读笔记、审稿报告、验证日志
 output/drafts/             写作输出（综述、Related Work、报告）
 output/bib/                BibTeX 文件
 output/experiments/        实验代码复现
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
-scholar/                   Python CLI 工具集（17+ 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，29 工具）
+scholar/                   Python CLI 工具集（35 命令）
+scholar_mcp/               MCP Server（CLI → Qoder 原生工具，41 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

@@ -93,8 +93,8 @@ python -m scholar list-papers --year <Y>
 
 引用网络分析完成后，自然的后续动作：
 
-- **`/concept-evolution`** — 基于桥接论文和 REPLACES 关系，追踪概念演化
+- **`/paper-deep-dive`** — 基于桥接论文和 REPLACES 关系，深入分析概念演化
 - **`/paper-recommendation`** — 基于引用网络发现应该读但还没读的论文
 - **`/research-gap`** — 从网络结构中的「断裂带」发现研究空白
 
-> 传递数据：关键论文列表和桥接论文可直接作为 deep-read 或 paper-recommendation 的输入。
+> 传递数据：关键论文列表和桥接论文可直接传给 `/paper-deep-dive` 或 `/paper-recommendation`。

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: qoder_plugin
+title: 学术研究智能助手插件
+scope:
+    - plugin/
+source_files: []
+depends_on: []
+related_to: []

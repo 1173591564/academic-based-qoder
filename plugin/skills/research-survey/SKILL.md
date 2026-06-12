@@ -83,9 +83,8 @@ python -m scholar graph-query <概念ID>
 
 调研完成后，自然的后续动作：
 
-- **`/deep-read`** — 对调研中发现的 Top 5 关键论文逐一精读，产出结构化笔记
+- **`/paper-deep-dive`** — 对调研中发现的 Top 5 关键论文逐一精读，产出结构化笔记
 - **`/citation-network`** — 分析这些论文的引用网络，发现桥接论文和隐藏关系
 - **`/research-gap`** — 基于调研结果，识别该方向的研究空白和未来方向
-- **`/concept-evolution`** — 追踪核心概念的演化链（如 RNN → LSTM → Transformer）
 
 > 传递数据：调研报告中的「关键论文详析」和「参考文献」列表可直接作为后续 skill 的输入。

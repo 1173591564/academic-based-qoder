@@ -27,7 +27,7 @@ python -m scholar info <ULID>
 
 ### Step 3: 方法论审查
 - **假设合理性**：核心假设是否有理论或实验支撑？
-- **数学正确性**：公式推导是否有错误？（如需要可执行 formula-derivation 流程）
+- **数学正确性**：公式推导是否有错误？（如需要可执行 paper-deep-dive 流程的 Step 4 公式推导）
 - **方法对比**：与 baseline 方法的对比是否公平？
 - **消融实验**：是否验证了各组件的独立贡献？
 
@@ -108,8 +108,8 @@ Accept / Weak Accept / Borderline / Weak Reject / Reject
 
 审稿报告完成后，自然的后续动作：
 
-- **`/quality-check`** — 如果审稿中发现问题，用质量评分做量化记录
-- **`/deep-read`** — 对审稿中引用的对比论文做精读，补充审稿论据
-- **`/bibtex-management`** — 导出审稿涉及的所有引用
+- `python -m scholar quality-score <ULID>` — 如果审稿中发现问题，用质量评分做量化记录
+- **`/paper-deep-dive`** — 对审稿中引用的对比论文做精读，补充审稿论据
+- `python -m scholar export-bib` — 导出审稿涉及的所有引用
 
 > 传递数据：审稿报告中的「主要问题」和「改进建议」可用于指导后续论文修改或对比分析。
