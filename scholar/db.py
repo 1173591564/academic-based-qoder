@@ -83,10 +83,12 @@ class Database:
                 """
                 INSERT INTO papers (
                     id, title, authors, year, venue, abstract,
+                    arxiv_id, doi,
                     has_tex, parsed_ok, parsed_path,
                     section_count, formula_count, citation_count
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s,
+                    %s, %s,
                     %s, %s, %s, %s, %s, %s
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -95,6 +97,8 @@ class Database:
                     year = EXCLUDED.year,
                     venue = EXCLUDED.venue,
                     abstract = EXCLUDED.abstract,
+                    arxiv_id = COALESCE(EXCLUDED.arxiv_id, papers.arxiv_id),
+                    doi = COALESCE(EXCLUDED.doi, papers.doi),
                     has_tex = EXCLUDED.has_tex,
                     parsed_ok = EXCLUDED.parsed_ok,
                     parsed_path = EXCLUDED.parsed_path,
@@ -110,6 +114,8 @@ class Database:
                     data.get("year"),
                     data.get("venue"),
                     data.get("abstract"),
+                    data.get("arxiv_id"),
+                    data.get("doi"),
                     data.get("has_tex", True),
                     data.get("parsed_ok", True),
                     data.get("parsed_path"),

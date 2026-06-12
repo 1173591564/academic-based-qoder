@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 mcp = FastMCP(
     "Scholar Studio",
-    instructions="Academic research toolkit with 440+ AI papers, citation graph, and Lean4 verification.",
+    instructions="Academic research toolkit with 445+ AI papers, citation graph, Lean4 verification, Hybrid ID, kb-update, and execution layer.",
 )
 
 
@@ -45,13 +45,13 @@ def scholar_scan() -> str:
 
 
 @mcp.tool()
-def scholar_parse(ulid: str) -> str:
+def scholar_parse(paper_id: str) -> str:
     """Parse a single paper's TeX source into structured JSON.
 
     Args:
-        ulid: The paper's ULID identifier (e.g., 01KT6MT...)
+        paper_id: Paper ID (ULID/arXiv/DOI/slug, e.g., 01KT6MT...)
     """
-    return _run_scholar("parse", ulid)
+    return _run_scholar("parse", paper_id)
 
 
 @mcp.tool()
@@ -61,13 +61,13 @@ def scholar_parse_all() -> str:
 
 
 @mcp.tool()
-def scholar_info(ulid: str) -> str:
+def scholar_info(paper_id: str) -> str:
     """Show detailed information about a parsed paper.
 
     Args:
-        ulid: The paper's ULID identifier
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    return _run_scholar("info", ulid)
+    return _run_scholar("info", paper_id)
 
 
 @mcp.tool()
@@ -143,15 +143,15 @@ def scholar_graph_query(concept: str) -> str:
 
 
 @mcp.tool()
-def scholar_cite_network(ulid: str | None = None) -> str:
-    """Analyze citation network. Without ULID: global stats. With ULID: per-paper analysis.
+def scholar_cite_network(paper_id: str | None = None) -> str:
+    """Analyze citation network. Without paper_id: global stats. With paper_id: per-paper analysis.
 
     Args:
-        ulid: Optional paper ULID for per-paper forward/backward citation analysis
+        paper_id: Optional paper ID (ULID/arXiv/DOI/slug) for per-paper forward/backward citation analysis
     """
     args = ["cite-network"]
-    if ulid:
-        args.append(ulid)
+    if paper_id:
+        args.append(paper_id)
     return _run_scholar(*args)
 
 
@@ -229,49 +229,49 @@ def scholar_cite_resolve(apply: bool = False) -> str:
 # ─── Batch Preprocessing ─────────────────────────────────────────
 
 @mcp.tool()
-def scholar_auto_notes(ulid: str | None = None, force: bool = False) -> str:
-    """Generate structured reading notes. Without ULID: batch mode for all papers.
+def scholar_auto_notes(paper_id: str | None = None, force: bool = False) -> str:
+    """Generate structured reading notes. Without paper_id: batch mode for all papers.
 
     Args:
-        ulid: Optional paper ULID for single paper. Omit for batch.
+        paper_id: Optional paper ID (ULID/arXiv/DOI/slug) for single paper. Omit for batch.
         force: If True, overwrite existing notes.
     """
     args = ["auto-notes"]
-    if ulid:
-        args.append(ulid)
+    if paper_id:
+        args.append(paper_id)
     if force:
         args.append("--force")
     return _run_scholar(*args, timeout=300)
 
 
 @mcp.tool()
-def scholar_quality_score(ulid: str | None = None, all_papers: bool = False) -> str:
+def scholar_quality_score(paper_id: str | None = None, all_papers: bool = False) -> str:
     """Score paper quality across 7 dimensions (metadata/structure/citations/reproducibility/problem/innovation/experiments).
 
     Args:
-        ulid: Optional paper ULID for single paper scoring.
+        paper_id: Optional paper ID (ULID/arXiv/DOI/slug) for single paper scoring.
         all_papers: If True, score all papers.
     """
     args = ["quality-score"]
-    if ulid:
-        args.append(ulid)
+    if paper_id:
+        args.append(paper_id)
     elif all_papers:
         args.append("--all")
     return _run_scholar(*args, timeout=300)
 
 
 @mcp.tool()
-def scholar_classify(ulid: str | None = None, all_papers: bool = False, list_tags: bool = False) -> str:
+def scholar_classify(paper_id: str | None = None, all_papers: bool = False, list_tags: bool = False) -> str:
     """Classify papers into domain/sub-direction/method tags.
 
     Args:
-        ulid: Optional paper ULID for single paper.
+        paper_id: Optional paper ID (ULID/arXiv/DOI/slug) for single paper.
         all_papers: If True, classify all papers.
         list_tags: If True, list all tags in corpus.
     """
     args = ["classify"]
-    if ulid:
-        args.append(ulid)
+    if paper_id:
+        args.append(paper_id)
     elif all_papers:
         args.append("--all")
     elif list_tags:
@@ -290,13 +290,13 @@ def scholar_bootstrap() -> str:
 
 
 @mcp.tool()
-def scholar_ingest(ulid: str) -> str:
+def scholar_ingest(paper_id: str) -> str:
     """Ingest a single new paper: parse -> auto-notes -> quality-score -> classify.
 
     Args:
-        ulid: The paper's ULID identifier
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    return _run_scholar("ingest", ulid, timeout=120)
+    return _run_scholar("ingest", paper_id, timeout=120)
 
 
 @mcp.tool()
@@ -325,43 +325,49 @@ def scholar_landscape(topic: str) -> str:
 
 
 @mcp.tool()
-def read_auto_note(ulid: str) -> str:
+def read_auto_note(paper_id: str) -> str:
     """Read the auto-generated reading note for a paper.
 
     Args:
-        ulid: The paper's ULID identifier
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
+    from scholar.id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
     path = PROJECT_ROOT / "output" / "notes" / f"{ulid}.md"
     if not path.exists():
-        return f"Note for {ulid} not found. Run: python -m scholar auto-notes {ulid}"
+        return f"Note for {paper_id} not found. Run: python -m scholar auto-notes {paper_id}"
     return path.read_text(encoding="utf-8")
 
 
 @mcp.tool()
-def read_quality_score(ulid: str) -> str:
+def read_quality_score(paper_id: str) -> str:
     """Read the quality score JSON for a paper (7 dimensions, A-F grade).
 
     Args:
-        ulid: The paper's ULID identifier
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
+    from scholar.id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
     path = PROJECT_ROOT / "output" / "notes" / f"{ulid}-quality.json"
     if not path.exists():
-        return f"Quality score for {ulid} not found. Run: python -m scholar quality-score {ulid}"
+        return f"Quality score for {paper_id} not found. Run: python -m scholar quality-score {paper_id}"
     return path.read_text(encoding="utf-8")
 
 
 # ─── File Access ────────────────────────────────────────────────
 
 @mcp.tool()
-def read_parsed_paper(ulid: str) -> str:
+def read_parsed_paper(paper_id: str) -> str:
     """Read the full parsed JSON data for a paper (title, authors, sections, formulas, citations).
 
     Args:
-        ulid: The paper's ULID identifier
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
+    from scholar.id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
     path = PROJECT_ROOT / "output" / "parsed" / f"{ulid}.json"
     if not path.exists():
-        return f"Paper {ulid} not found or not yet parsed."
+        return f"Paper {paper_id} not found or not yet parsed."
     return path.read_text(encoding="utf-8")
 
 
@@ -370,12 +376,192 @@ def read_skill(skill_name: str) -> str:
     """Read a skill's SKILL.md for step-by-step workflow instructions.
 
     Args:
-        skill_name: Skill name (e.g., 'deep-read', 'research-survey', 'cold-start')
+        skill_name: Skill name (e.g., 'paper-deep-dive', 'research-survey', 'cold-start')
     """
     path = PROJECT_ROOT / ".qoder" / "skills" / skill_name / "SKILL.md"
     if not path.exists():
         return f"Skill '{skill_name}' not found. Available: {', '.join(p.name for p in (PROJECT_ROOT / '.qoder' / 'skills').iterdir() if p.is_dir())}"
     return path.read_text(encoding="utf-8")
+
+
+# ─── KB Update ────────────────────────────────────────────────
+
+@mcp.tool()
+def scholar_arxiv_download(query: str, max_results: int = 10) -> str:
+    """Download paper TeX sources from arXiv to local knowledge base.
+
+    Args:
+        query: arXiv search query
+        max_results: Maximum papers to download (default: 10)
+    """
+    return _run_scholar("arxiv-download", query, "--max", str(max_results), timeout=600)
+
+
+@mcp.tool()
+def scholar_batch_ingest(ulids: str = "") -> str:
+    """Batch ingest papers: parse -> metadata enrich -> graph update -> notes -> quality -> classify.
+
+    Args:
+        ulids: Comma-separated ULIDs to ingest (empty = all unparsed)
+    """
+    args = ["batch-ingest"]
+    if ulids:
+        args.extend(["--ulids", ulids])
+    return _run_scholar(*args, timeout=600)
+
+
+@mcp.tool()
+def scholar_kb_update(query: str = "", max_results: int = 10) -> str:
+    """One-command knowledge base update: search arXiv -> download -> batch ingest.
+
+    Args:
+        query: arXiv search query (empty = process local unparsed papers only)
+        max_results: Maximum papers to download (default: 10)
+    """
+    args = ["kb-update", "--max", str(max_results)]
+    if query:
+        args.extend(["--query", query])
+    return _run_scholar(*args, timeout=600)
+
+
+@mcp.tool()
+def scholar_metadata_enrich(apply: bool = False, limit: int = 0) -> str:
+    """Backfill arxiv_id and DOI for existing papers via arXiv API search.
+
+    Args:
+        apply: If True, write changes. If False, dry-run preview.
+        limit: Max papers to process (0=all)
+    """
+    args = ["metadata-enrich"]
+    if apply:
+        args.append("--apply")
+    if limit > 0:
+        args.extend(["--limit", str(limit)])
+    return _run_scholar(*args, timeout=600)
+
+
+# ─── Execution Layer ──────────────────────────────────────────
+
+@mcp.tool()
+def scholar_compile_paper(tex_file: str, auto_fix: bool = True) -> str:
+    """Compile a LaTeX paper to PDF with auto-fix for common errors.
+
+    Args:
+        tex_file: Path to .tex file (relative to project root)
+        auto_fix: If True, auto-fix common LaTeX errors (up to 3 retries)
+    """
+    args = ["compile-paper", tex_file]
+    if not auto_fix:
+        args.append("--no-auto-fix")
+    return _run_scholar(*args, timeout=300)
+
+
+@mcp.tool()
+def scholar_exp_run(paper_id: str, mode: str = "quick", gpu: bool = False) -> str:
+    """Run experiment code for a paper and collect metrics.
+
+    Args:
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
+        mode: 'quick' (CPU + synthetic data) or 'full'
+        gpu: If True, use GPU
+    """
+    args = ["exp-run", paper_id, "--mode", mode]
+    if gpu:
+        args.append("--gpu")
+    return _run_scholar(*args, timeout=3600)
+
+
+@mcp.tool()
+def scholar_exp_compare(paper_id: str, baseline_id: str = "") -> str:
+    """Compare experiment results with paper-reported metrics.
+
+    Args:
+        paper_id: Paper ID
+        baseline_id: Optional baseline paper ID for comparison
+    """
+    args = ["exp-compare", paper_id]
+    if baseline_id:
+        args.extend(["--baseline-id", baseline_id])
+    return _run_scholar(*args, timeout=120)
+
+
+@mcp.tool()
+def scholar_exp_setup(paper_id: str, use_docker: bool = False) -> str:
+    """Set up experiment environment (conda or Docker) for a paper.
+
+    Args:
+        paper_id: Paper ID
+        use_docker: If True, use Docker instead of conda
+    """
+    args = ["exp-setup", paper_id]
+    if use_docker:
+        args.append("--docker")
+    return _run_scholar(*args, timeout=120)
+
+
+@mcp.tool()
+def scholar_exp_debug(run_log: str) -> str:
+    """Diagnose experiment failure from run log.
+
+    Args:
+        run_log: Path to run_log.txt file
+    """
+    return _run_scholar("exp-debug", run_log, timeout=60)
+
+
+@mcp.tool()
+def scholar_dataset_download(dataset_name: str, source: str = "auto") -> str:
+    """Download a dataset used by a paper (HuggingFace / Papers with Code).
+
+    Args:
+        dataset_name: Dataset name or identifier
+        source: Source: auto, huggingface, paperswithcode
+    """
+    return _run_scholar("dataset-download", dataset_name, "--source", source, timeout=600)
+
+
+@mcp.tool()
+def scholar_read_experiment_report(paper_id: str) -> str:
+    """Read the experiment run log and results for a paper.
+
+    Args:
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
+    """
+    from scholar.id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
+    exp_dir = PROJECT_ROOT / "output" / "experiments" / ulid
+    log_path = exp_dir / "run_log.txt"
+    results_path = exp_dir / "results.json"
+
+    output = ""
+    if log_path.exists():
+        output += "=== Run Log ===\n" + log_path.read_text(encoding="utf-8")
+    if results_path.exists():
+        output += "\n=== Results ===\n" + results_path.read_text(encoding="utf-8")
+    if not output:
+        return f"No experiment results found for {paper_id}"
+    return output
+
+
+@mcp.tool()
+def scholar_read_compile_log(paper_id: str) -> str:
+    """Read the LaTeX compilation log for a paper's draft.
+
+    Args:
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
+    """
+    from scholar.id_resolver import resolve_id
+    ulid = resolve_id(paper_id) or paper_id
+    # Check common compile output locations
+    for subdir in ["pdfs", "drafts"]:
+        log_path = PROJECT_ROOT / "output" / subdir / f"{ulid}.log"
+        if log_path.exists():
+            return log_path.read_text(encoding="utf-8")
+    # Also check experiments dir
+    log_path = PROJECT_ROOT / "output" / "experiments" / ulid / "compile.log"
+    if log_path.exists():
+        return log_path.read_text(encoding="utf-8")
+    return f"No compile log found for {paper_id}"
 
 
 def main():

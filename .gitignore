@@ -32,6 +32,9 @@ output/
 pg_hba_new.conf
 _run_*.py
 
+# Plugin build artifacts
+scholar-studio-*.zip
+
 # Environment
 .env
 .env.local

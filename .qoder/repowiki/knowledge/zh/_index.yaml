@@ -1,0 +1,52 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: dev
+exported_at: "2026-06-12T04:33:57Z"
+modules:
+    infrastructure:
+        dir_name: 学术文献基础设施与数据持久化
+        title: 学术文献基础设施与数据持久化
+        scope:
+            - infra/
+            - docs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lean_project:
+        dir_name: AI演化形式化验证系统
+        title: AI演化形式化验证系统
+        scope:
+            - LEAN/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    qoder_plugin:
+        dir_name: 学术研究智能助手插件
+        title: 学术研究智能助手插件
+        scope:
+            - plugin/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    scholar_cli:
+        dir_name: 学术文献解析与知识图谱构建工具
+        title: 学术文献解析与知识图谱构建工具
+        scope:
+            - scholar/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    scholar_mcp:
+        dir_name: 学术文献 MCP 服务封装
+        title: 学术文献 MCP 服务封装
+        scope:
+            - scholar_mcp/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
