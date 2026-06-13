@@ -51,14 +51,14 @@ structure Paper where
 
 /-- A citation relation between two papers. -/
 structure Citation where
-  from : String           -- citing paper id
-  to   : String           -- cited paper id
+  source : String           -- citing paper id
+  target : String           -- cited paper id
   deriving Repr, DecidableEq
 
-/-- A replacement relation: innovation `from` is superseded by innovation `to`. -/
+/-- A replacement relation: innovation `source` is superseded by innovation `target`. -/
 structure Replacement where
-  from : String           -- old innovation id
-  to   : String           -- new innovation id
+  source : String           -- old innovation id
+  target : String           -- new innovation id
   deriving Repr, DecidableEq
 
 end AiEvolution
