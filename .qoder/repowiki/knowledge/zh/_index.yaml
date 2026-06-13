@@ -2,8 +2,78 @@
 schema_version: 1
 locale: zh-CN
 branch: dev
-exported_at: "2026-06-12T04:33:57Z"
+exported_at: "2026-06-12T05:18:31Z"
 modules:
+    "":
+        dir_name: AI演化形式化验证与学术研究自动化平台
+        title: AI演化形式化验证与学术研究自动化平台
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions:
+        dir_name: 决策记录
+        title: 决策记录
+        scope: []
+        source_files: []
+        children:
+            - decisions/35a8f1797f14_b292239e1728
+            - decisions/bc51cd30ec34_57c360c5064a
+            - decisions/35a8f1797f14_601a0d320596
+            - decisions/bc51cd30ec34_8e849345642a
+            - decisions/bc51cd30ec34_7c2a811a9981
+            - decisions/35a8f1797f14_e53592c83df1
+        depends_on: []
+        related_to: []
+    decisions/35a8f1797f14_601a0d320596:
+        dir_name: 采用 Conda 而非 Docker 作为实验执行环境
+        title: 采用 Conda 而非 Docker 作为实验执行环境
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/35a8f1797f14_b292239e1728:
+        dir_name: 采用基于内存文件扫描的 Hybrid ID 解析机制
+        title: 采用基于内存文件扫描的 Hybrid ID 解析机制
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/35a8f1797f14_e53592c83df1:
+        dir_name: 将 Skills 体系重构为 6 个高层工作流
+        title: 将 Skills 体系重构为 6 个高层工作流
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/bc51cd30ec34_7c2a811a9981:
+        dir_name: 采用混合ID解析系统（Hybrid ID）
+        title: 采用混合ID解析系统（Hybrid ID）
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/bc51cd30ec34_8e849345642a:
+        dir_name: 重构Skills体系为6个核心工作流
+        title: 重构Skills体系为6个核心工作流
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    decisions/bc51cd30ec34_57c360c5064a:
+        dir_name: 采用Conda而非Docker管理实验环境
+        title: 采用Conda而非Docker管理实验环境
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
     infrastructure:
         dir_name: 学术文献基础设施与数据持久化
         title: 学术文献基础设施与数据持久化
@@ -13,7 +83,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_cli
     lean_project:
         dir_name: AI演化形式化验证系统
         title: AI演化形式化验证系统
@@ -22,7 +93,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_cli
     qoder_plugin:
         dir_name: 学术研究智能助手插件
         title: 学术研究智能助手插件
@@ -31,16 +103,20 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_mcp
     scholar_cli:
-        dir_name: 学术文献解析与知识图谱构建工具
-        title: 学术文献解析与知识图谱构建工具
+        dir_name: 学术文献自动化处理与知识图谱构建系统
+        title: 学术文献自动化处理与知识图谱构建系统
         scope:
             - scholar/
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_mcp
+            - path: infrastructure
+            - path: lean_project
     scholar_mcp:
         dir_name: 学术文献 MCP 服务封装
         title: 学术文献 MCP 服务封装
@@ -49,4 +125,6 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_cli
+            - path: qoder_plugin
