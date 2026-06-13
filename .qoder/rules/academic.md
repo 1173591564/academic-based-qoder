@@ -20,6 +20,16 @@ alwaysApply: false
 6. **Lean4 integration**: When verifying formulas, reference formal definitions in `LEAN/AiEvolution/`.
 7. **Output convention**: All generated artifacts (notes, reports, code, BibTeX) go into `output/` directory.
 
+## Iterative Writing Protocol
+
+When writing any file in `output/drafts/` or `output/notes/`:
+
+1. **Check existing artifacts first**: Before generating any draft, scan for intermediate files (`*-outline.md`, `*-review.md`, existing sections in the target file). If an outline exists, follow it. Never overwrite existing content without reviewing it first.
+2. **Cite-then-write**: After writing each section, verify all cited paper_ids exist in the knowledge base before moving to the next section.
+3. **Quality gate is mandatory**: After completing a draft, generate a `-review.md` with `[PASS]`/`[REVISE]`/`[MISSING]` markers. Never skip this step.
+4. **Bounded revision**: Max 2 revision rounds based on review feedback. After that, finalize. No infinite loops.
+5. **Resume awareness**: If a previous session's outline or partial draft exists, continue from where it left off rather than starting over.
+
 ## Writing Style
 
 - Use formal academic English or Chinese (match user's language)

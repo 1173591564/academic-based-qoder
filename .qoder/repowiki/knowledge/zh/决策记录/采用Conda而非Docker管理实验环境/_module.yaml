@@ -1,0 +1,7 @@
+schema_version: 1
+module_path: decisions/bc51cd30ec34_57c360c5064a
+title: 采用Conda而非Docker管理实验环境
+scope: []
+source_files: []
+depends_on: []
+related_to: []
