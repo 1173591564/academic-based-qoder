@@ -8,20 +8,40 @@ param()
 # 安全包装：任何异常都不阻断 Stop 事件
 try {
     # 1. 从 stdin 读取 JSON 上下文
+    #    Stop 事件 stdin 字段: session_id, cwd, hook_event_name,
+    #    transcript_path, stop_hook_active, last_assistant_message
     $input_json = [Console]::In.ReadToEnd()
     if (-not $input_json) { exit 0 }
     $ctx = $input_json | ConvertFrom-Json -ErrorAction Stop
 
-    # 2. 提取用户消息（兼容多种字段名）
+    # 2. 提取用户消息
     $user_text = ""
-    if ($ctx.last_user_message) {
-        $user_text = $ctx.last_user_message
-    } elseif ($ctx.user_messages) {
-        $user_text = ($ctx.user_messages -join " | ")
-    } elseif ($ctx.transcript) {
-        # 从 transcript 中提取 user 角色的消息
-        $user_msgs = $ctx.transcript | Where-Object { $_.role -eq "user" } | ForEach-Object { $_.content }
-        $user_text = ($user_msgs -join " | ")
+
+    # 优先从 transcript_path 读取 JSONL 提取 user 消息
+    if ($ctx.transcript_path -and (Test-Path $ctx.transcript_path)) {
+        try {
+            $lines = [System.IO.File]::ReadAllLines($ctx.transcript_path, [System.Text.Encoding]::UTF8)
+            $user_msgs = @()
+            foreach ($line in $lines) {
+                if (-not $line.Trim()) { continue }
+                try {
+                    $msg = $line | ConvertFrom-Json
+                    if ($msg.role -eq "user" -or $msg.type -eq "user") {
+                        $content = if ($msg.content) { $msg.content }
+                                   elseif ($msg.message) { $msg.message }
+                                   elseif ($msg.text) { $msg.text }
+                                   else { "" }
+                        if ($content) { $user_msgs += $content }
+                    }
+                } catch { }
+            }
+            $user_text = ($user_msgs -join " | ")
+        } catch { }
+    }
+
+    # 兜底：使用 last_assistant_message 作为交互记录
+    if ((-not $user_text -or $user_text.Trim() -eq "") -and $ctx.last_assistant_message) {
+        $user_text = "[agent-response] $($ctx.last_assistant_message)"
     }
 
     if (-not $user_text -or $user_text.Trim() -eq "") { exit 0 }
