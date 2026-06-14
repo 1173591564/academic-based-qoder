@@ -14,6 +14,9 @@ try {
     if (-not $input_json) { exit 0 }
     $ctx = $input_json | ConvertFrom-Json -ErrorAction Stop
 
+    # 官方要求: Stop hook 必须检查 stop_hook_active，为 true 时直接 exit 0 防止死循环
+    if ($ctx.stop_hook_active -eq $true) { exit 0 }
+
     # 2. 提取用户消息
     $user_text = ""
 

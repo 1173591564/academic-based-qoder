@@ -1,6 +1,6 @@
 ---
-description: 自适应研究循环：方向管理 → 自动搜索 → 全流程入库
-trigger: 研究循环, 论文追踪, research loop, research sync, 新论文, /sync
+name: adaptive-research
+description: "自适应研究循环：方向管理 → 自动搜索 → 全流程入库"
 ---
 
 # Adaptive Research Loop
