@@ -53,13 +53,14 @@ try {
     # 5. 确保目录存在并追加写入
     # .qoder/hooks/ → .qoder/ → project root = 2 levels
     # plugin/hooks/ → plugin/ → project root = 2 levels
+    # 注意: PS 5.1 Join-Path 不支持多参数，用字符串格式化代替
     $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    $logDir = Join-Path $projectRoot "output" "logs"
+    $logDir = "{0}\output\logs" -f $projectRoot
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     }
 
-    $logFile = Join-Path $logDir "week-$weekId.jsonl"
+    $logFile = "{0}\week-{1}.jsonl" -f $logDir, $weekId
     # UTF-8 无 BOM 追加
     [System.IO.File]::AppendAllText($logFile, "$entry`n", [System.Text.UTF8Encoding]::new($false))
 }
