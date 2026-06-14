@@ -443,16 +443,19 @@ def scholar_metadata_enrich(apply: bool = False, limit: int = 0) -> str:
 # ─── Execution Layer ──────────────────────────────────────────
 
 @mcp.tool()
-def scholar_compile_paper(tex_file: str, auto_fix: bool = True) -> str:
-    """Compile a LaTeX paper to PDF with auto-fix for common errors.
+def scholar_compile_paper(tex_file: str, report: bool = False, engine: str = "") -> str:
+    """Compile a LaTeX paper to PDF with structured error reporting (FATAL/WARN/INFO).
 
     Args:
         tex_file: Path to .tex file (relative to project root)
-        auto_fix: If True, auto-fix common LaTeX errors (up to 3 retries)
+        report: If True, only parse existing log without compiling
+        engine: LaTeX engine override (e.g. 'xelatex'), defaults to config LATEX_CMD
     """
     args = ["compile-paper", tex_file]
-    if not auto_fix:
-        args.append("--no-auto-fix")
+    if report:
+        args.append("--report")
+    if engine:
+        args.extend(["--engine", engine])
     return _run_scholar(*args, timeout=300)
 
 

@@ -84,7 +84,7 @@ python -m scholar kb-update --query "<topic>" --max 10  # One-command: search→
 
 ### Execution Layer (LaTeX compile + experiments + datasets)
 ```bash
-python -m scholar compile-paper <file.tex> [--auto-fix]  # Compile LaTeX to PDF
+python -m scholar compile-paper <file.tex> [--report] [--engine xelatex]  # Compile LaTeX with structured error report (FATAL/WARN/INFO)
 python -m scholar exp-run <paper_id> [--mode quick] [--gpu]  # Run experiment code
 python -m scholar exp-compare <paper_id>  # Compare results with paper metrics
 python -m scholar exp-setup <paper_id> [--conda|--docker]  # Set up experiment environment

@@ -1722,16 +1722,100 @@ def kb_update(
 
 
 # ===================================================================
-# compile-paper: LaTeX compilation
+# compile-paper: LaTeX compilation with structured error reporting
 # ===================================================================
+def _parse_latex_log(log_path, tex_stem: str) -> dict:
+    """Parse a LaTeX .log file and categorize errors into FATAL/WARN/INFO."""
+    import re
+    result = {"fatal": [], "warn": [], "info": [], "overfull": 0, "underfull": 0,
+              "pages": 0, "pdf_generated": False}
+
+    if not log_path.exists():
+        result["fatal"].append({"msg": "Log file not found", "file": "", "line": ""})
+        return result
+
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    lines = text.split("\n")
+
+    # Join all text for line-wrapped pattern matching (LaTeX wraps long paths)
+    full_text = "\n".join(lines)
+
+    # Check if PDF was generated (handle wrapped lines)
+    result["pdf_generated"] = "Output written" in full_text
+
+    # Extract page count (may span two lines)
+    m = re.search(r"Output written on .+?\((\d+) pages?", full_text, re.DOTALL)
+    if m:
+        result["pages"] = int(m.group(1))
+
+    # Parse errors and warnings
+    i = 0
+    while i < len(lines):
+        l = lines[i]
+
+        # FATAL: LaTeX errors (lines starting with !)
+        if l.startswith("!"):
+            msg = l[2:].strip() if len(l) > 2 else "Unknown error"
+            # Try to find file/line context in next few lines
+            ctx_file, ctx_line = "", ""
+            for j in range(i + 1, min(i + 5, len(lines))):
+                m = re.search(r"l\.(\d+)", lines[j])
+                if m:
+                    ctx_line = m.group(1)
+                    break
+            # Try to identify the source .tex file
+            for j in range(max(0, i - 10), i):
+                m = re.search(r"\((\S+\.tex)", lines[j])
+                if m:
+                    ctx_file = m.group(1)
+            result["fatal"].append({"msg": msg, "file": ctx_file, "line": ctx_line})
+
+        # WARN: Overfull/Underfull
+        elif "Overfull \\hbox" in l or "Overfull \\vbox" in l:
+            result["overfull"] += 1
+            m = re.search(r"\(([\d.]+)pt too wide\)", l)
+            pt = m.group(1) if m else "?"
+            ctx_line = ""
+            m2 = re.search(r"at lines? (\d+[-–]\d+|\d+)", l)
+            if m2:
+                ctx_line = m2.group(1)
+            result["warn"].append({"msg": f"Overfull ({pt}pt)", "file": "", "line": ctx_line})
+
+        elif "Underfull \\hbox" in l or "Underfull \\vbox" in l:
+            result["underfull"] += 1
+
+        # WARN: Undefined citations/references
+        elif "Citation" in l and "undefined" in l:
+            m = re.search(r"Citation `(.+?)\s*'", l)
+            key = m.group(1).strip() if m else "?"
+            # Filter out LaTeX/xelatex internal artifacts from cascading errors
+            if not key.startswith("\\") and "^^" not in key:
+                result["warn"].append({"msg": f"Undefined citation: {key}", "file": "", "line": ""})
+
+        elif "Reference" in l and "undefined" in l:
+            m = re.search(r"Reference `(.+?)\s*'", l)
+            key = m.group(1).strip() if m else "?"
+            if not key.startswith("\\") and "^^" not in key:
+                result["warn"].append({"msg": f"Undefined reference: {key}", "file": "", "line": ""})
+
+        # INFO: Font/encoding warnings
+        elif "LaTeX Warning:" in l and "undefined" not in l:
+            result["info"].append({"msg": l.strip()[:120], "file": "", "line": ""})
+
+        i += 1
+
+    return result
+
+
 @app.command(name="compile-paper")
 def compile_paper(
     tex_file: str = typer.Argument(help="Path to .tex file"),
     output_dir: str = typer.Option("output/pdfs", help="Output directory for PDF"),
-    auto_fix: bool = typer.Option(True, "--auto-fix/--no-auto-fix", help="Auto-fix common LaTeX errors"),
     max_retries: int = typer.Option(3, help="Max compilation retries"),
+    report: bool = typer.Option(False, "--report", help="Only parse existing log, don't compile"),
+    engine: str = typer.Option("", "--engine", help="LaTeX engine override (pdflatex/xelatex)"),
 ):
-    """编译 LaTeX 论文为 PDF，自动修复常见错误。"""
+    """Compile LaTeX to PDF with structured error reporting (FATAL/WARN/INFO)."""
     import subprocess
     import shutil
 
@@ -1743,30 +1827,56 @@ def compile_paper(
     out_path = config.PROJECT_ROOT / output_dir
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # 检测 pdflatex
-    latex_cmd = shutil.which(config.LATEX_CMD)
-    if not latex_cmd:
-        console.print(f"[red]{config.LATEX_CMD} not found.[/] Install MiKTeX or TeX Live.")
+    # Determine LaTeX engine
+    latex_cmd = engine or config.LATEX_CMD
+    latex_bin = shutil.which(latex_cmd)
+
+    # --report mode: only parse existing log
+    if report:
+        log_path = out_path / (tex_path.stem + ".log")
+        if not log_path.exists():
+            console.print(f"[red]Log not found:[/] {log_path}")
+            raise typer.Exit(1)
+        rpt = _parse_latex_log(log_path, tex_path.stem)
+        _print_compile_report(rpt, tex_path.name)
+        return
+
+    if not latex_bin:
+        console.print(f"[red]{latex_cmd} not found.[/] Install MiKTeX or TeX Live.")
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Compiling:[/] {tex_path.name}")
+    console.print(f"[cyan]Compiling:[/] {tex_path.name} [{latex_cmd}]")
 
-    errors = []
+    last_report = None
     success = False
     for attempt in range(1, max_retries + 1):
         try:
+            # First pass
             result = subprocess.run(
-                [latex_cmd, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
-                capture_output=True, text=True, timeout=120,
+                [latex_bin, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
+                capture_output=True, encoding="utf-8", errors="replace", timeout=120,
                 cwd=str(tex_path.parent),
             )
 
-            # 检查 PDF 是否生成
+            # Check PDF
             pdf_name = tex_path.stem + ".pdf"
             pdf_path = out_path / pdf_name
+
+            # Second pass (for cross-references)
             if pdf_path.exists():
+                subprocess.run(
+                    [latex_bin, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
+                    capture_output=True, encoding="utf-8", errors="replace", timeout=120,
+                    cwd=str(tex_path.parent),
+                )
+
+            # Parse log after final pass
+            log_path = out_path / (tex_path.stem + ".log")
+            last_report = _parse_latex_log(log_path, tex_path.stem)
+
+            if last_report["pdf_generated"]:
                 success = True
-                # 运行 bibtex + 二次编译
+                # Run bibtex if .bib exists
                 bib_path = tex_path.parent / (tex_path.stem + ".bib")
                 if bib_path.exists():
                     bibtex_cmd = shutil.which("bibtex")
@@ -1777,40 +1887,91 @@ def compile_paper(
                             capture_output=True, timeout=30,
                             cwd=str(tex_path.parent),
                         )
-                        # 二次编译
+                        # Third pass after bibtex
                         subprocess.run(
-                            [latex_cmd, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
-                            capture_output=True, text=True, timeout=120,
+                            [latex_bin, "-interaction=nonstopmode", f"-output-directory={out_path}", str(tex_path)],
+                            capture_output=True, encoding="utf-8", errors="replace", timeout=120,
                             cwd=str(tex_path.parent),
                         )
+                        log_path = out_path / (tex_path.stem + ".log")
+                        last_report = _parse_latex_log(log_path, tex_path.stem)
                 break
             else:
-                # 解析错误
-                log_text = result.stdout
-                error_lines = [l for l in log_text.split("\n") if l.startswith("!")]
-                errors.extend(error_lines[:5])
-                if not auto_fix or attempt >= max_retries:
+                # FATAL: PDF not generated
+                if attempt >= max_retries:
                     break
-                console.print(f"  [yellow]Attempt {attempt} failed, retrying...[/]")
+                console.print(f"  [yellow]Attempt {attempt}/{max_retries} failed "
+                              f"({len(last_report['fatal'])} FATAL), retrying...[/]")
+
         except subprocess.TimeoutExpired:
-            errors.append("Compilation timed out")
+            if last_report is None:
+                last_report = {"fatal": [{"msg": "Compilation timed out", "file": "", "line": ""}],
+                               "warn": [], "info": [], "overfull": 0, "underfull": 0,
+                               "pages": 0, "pdf_generated": False}
             break
         except Exception as e:
-            errors.append(str(e))
+            if last_report is None:
+                last_report = {"fatal": [{"msg": str(e), "file": "", "line": ""}],
+                               "warn": [], "info": [], "overfull": 0, "underfull": 0,
+                               "pages": 0, "pdf_generated": False}
             break
 
-    if success:
-        console.print(Panel(
-            f"PDF: [green]{pdf_path}[/]\n"
-            f"Attempts: {attempt}",
-            title="[green]Compilation OK[/]",
-        ))
+    if last_report is None:
+        last_report = {"fatal": [{"msg": "Unknown failure", "file": "", "line": ""}],
+                       "warn": [], "info": [], "overfull": 0, "underfull": 0,
+                       "pages": 0, "pdf_generated": False}
+
+    _print_compile_report(last_report, tex_path.name, attempt)
+
+
+def _print_compile_report(rpt: dict, tex_name: str, attempt: int = 0):
+    """Print structured compile report using rich."""
+    n_fatal = len(rpt["fatal"])
+    n_warn = len(rpt["warn"])
+    n_info = len(rpt["info"])
+
+    if rpt["pdf_generated"]:
+        # PDF was generated — success, even if there are recoverable errors
+        if n_fatal == 0 and n_warn == 0:
+            status = "[green]OK[/]"
+        elif n_fatal == 0:
+            status = "[yellow]OK (warnings)[/]"
+        else:
+            status = "[yellow]OK (with errors)[/]"
+
+        parts = [f"Pages: [bold]{rpt['pages']}[/]"]
+        if n_fatal:
+            parts.append(f"Errors: [yellow]{n_fatal}[/] (non-blocking, PDF generated)")
+            for e in rpt["fatal"][:5]:
+                loc = f" (line {e['line']})" if e["line"] else ""
+                parts.append(f"  [yellow]- {e['msg']}{loc}[/]")
+            if n_fatal > 5:
+                parts.append(f"  [dim]... and {n_fatal - 5} more[/]")
+        parts.append(f"Overfull: {rpt['overfull']}  Underfull: {rpt['underfull']}")
+        if n_warn:
+            parts.append(f"Warnings: [yellow]{n_warn}[/]")
+            for w in rpt["warn"][:5]:
+                loc = f" (line {w['line']})" if w["line"] else ""
+                parts.append(f"  [dim]- {w['msg']}{loc}[/]")
+            if n_warn > 5:
+                parts.append(f"  [dim]... and {n_warn - 5} more[/]")
+        console.print(Panel("\n".join(parts), title=f"[green]Compiled:[/] {tex_name}  {status}"))
     else:
-        console.print(Panel(
-            f"Failed after {attempt} attempts\n"
-            f"Errors:\n" + "\n".join(errors[:10]),
-            title="[red]Compilation Failed[/]",
-        ))
+        parts = [f"[red bold]FATAL: {n_fatal}[/]  [yellow]WARN: {n_warn}[/]  INFO: {n_info}"]
+        if n_fatal:
+            parts.append("\n[red]Fatal errors:[/]")
+            for e in rpt["fatal"][:5]:
+                loc = f" ({e['file']}:{e['line']})" if e["file"] else ""
+                parts.append(f"  [red]- {e['msg']}{loc}[/]")
+            if n_fatal > 5:
+                parts.append(f"  ... and {n_fatal - 5} more")
+        if n_warn:
+            parts.append(f"\n[yellow]Warnings: {n_warn}[/] (Overfull: {rpt['overfull']}, Underfull: {rpt['underfull']})")
+            for w in rpt["warn"][:5]:
+                loc = f" (line {w['line']})" if w["line"] else ""
+                parts.append(f"  [dim]- {w['msg']}{loc}[/]")
+        console.print(Panel("\n".join(parts), title=f"[red]Compilation Failed:[/] {tex_name}"))
+
 
 
 # ===================================================================
