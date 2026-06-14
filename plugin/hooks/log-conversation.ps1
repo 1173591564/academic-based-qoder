@@ -61,55 +61,68 @@ try {
         $sid8 = $ctx.session_id.Substring(0, [Math]::Min(8, $ctx.session_id.Length))
         $cacheBase = "{0}\.qoder\cache\projects" -f $env:USERPROFILE
         $projName = Split-Path -Leaf $ctx.cwd
-        # 按最后修改时间倒序，选最近使用的项目目录（避免命中历史陈旧 hash 目录）
+        # 遍历所有匹配的项目目录，找到含有 transcript 的那个
         $projDirs = Get-ChildItem $cacheBase -Directory -Filter "$projName-*" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending
         if ($projDirs -and $projDirs.Count -gt 0) {
-            $candidate = "{0}\conversation-history\{1}\{1}.jsonl" -f $projDirs[0].FullName, $sid8
-            Diag ("candidate: {0}" -f $candidate)
-            if (Test-Path $candidate) {
-                $transcriptPath = $candidate
-                Diag "transcript found via self-build"
-            } else {
-                Diag "transcript NOT found via self-build"
+            foreach ($pd in $projDirs) {
+                $candidate = "{0}\conversation-history\{1}\{1}.jsonl" -f $pd.FullName, $sid8
+                Diag ("candidate: {0}" -f $candidate)
+                if (Test-Path $candidate) {
+                    $transcriptPath = $candidate
+                    Diag "transcript found via self-build"
+                    break
+                }
             }
+            if (-not $transcriptPath) { Diag "transcript NOT found in any project dir" }
         } else {
             Diag ("no project dir matching: {0}-*" -f $projName)
         }
     }
 
-    # Extract last user message
+    # Extract last user message (with retry for race condition)
     $user_text = ""
     if ($transcriptPath) {
-        try {
-            $lines = [System.IO.File]::ReadAllLines($transcriptPath, [System.Text.Encoding]::UTF8)
-            Diag ("transcript lines: {0}" -f $lines.Count)
-            $user_msgs = @()
-            $parseErrors = 0
-            foreach ($line in $lines) {
-                if (-not $line.Trim()) { continue }
-                try {
-                    $msg = $line | ConvertFrom-Json
-                    if ($msg.role -ne "user") { continue }
-                    $texts = @()
-                    if ($msg.message -and $msg.message.content) {
-                        foreach ($part in $msg.message.content) {
-                            if ($part.type -eq "text" -and $part.text) {
-                                $texts += $part.text
+        $maxRetries = 3
+        for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+            try {
+                $lines = [System.IO.File]::ReadAllLines($transcriptPath, [System.Text.Encoding]::UTF8)
+                Diag ("attempt {0}: transcript lines={1}" -f $attempt, $lines.Count)
+                $user_msgs = @()
+                $parseErrors = 0
+                foreach ($line in $lines) {
+                    if (-not $line.Trim()) { continue }
+                    try {
+                        $msg = $line | ConvertFrom-Json
+                        if ($msg.role -ne "user") { continue }
+                        $texts = @()
+                        if ($msg.message -and $msg.message.content) {
+                            foreach ($part in $msg.message.content) {
+                                if ($part.type -eq "text" -and $part.text) {
+                                    $texts += $part.text
+                                }
                             }
                         }
+                        $combined = ($texts -join " ").Trim()
+                        if ($combined) { $user_msgs += $combined }
+                    } catch { $parseErrors++ }
+                }
+                Diag ("user_msgs={0}, parse_errors={1}" -f $user_msgs.Count, $parseErrors)
+                if ($user_msgs.Count -gt 0) {
+                    $user_text = $user_msgs[-1]
+                    Diag ("last user_text len={0}" -f $user_text.Length)
+                    break  # 找到了就跳出重试
+                } else {
+                    # transcript 可能还没写完，等待后重试
+                    if ($attempt -lt $maxRetries) {
+                        Diag ("no user msgs yet, retrying in 800ms...")
+                        Start-Sleep -Milliseconds 800
                     }
-                    $combined = ($texts -join " ").Trim()
-                    if ($combined) { $user_msgs += $combined }
-                } catch { $parseErrors++ }
+                }
+            } catch {
+                Diag ("transcript read error (attempt {0}): {1}" -f $attempt, $_.Exception.Message)
+                if ($attempt -lt $maxRetries) { Start-Sleep -Milliseconds 800 }
             }
-            Diag ("user_msgs={0}, parse_errors={1}" -f $user_msgs.Count, $parseErrors)
-            if ($user_msgs.Count -gt 0) {
-                $user_text = $user_msgs[-1]
-                Diag ("last user_text len={0}" -f $user_text.Length)
-            }
-        } catch {
-            Diag ("transcript read error: {0}" -f $_.Exception.Message)
         }
     } else {
         Diag "no transcript path available"
