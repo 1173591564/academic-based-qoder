@@ -180,23 +180,34 @@ def arxiv_download(
             except Exception:
                 result["pdf_downloaded"] = False
 
-        # 保存初始元数据 JSON
+        # 5. 保存初始元数据 JSON
+        #    若写入失败必须清理 paper_dir，否则会遗留孤儿目录，
+        #    下次 arxiv_download 会重下同一篇论文产生新 ULID，原目录孤立。
         meta = {
             "paper_id": paper_ulid,
             "title": title,
             "authors": entry["authors"],
             "year": entry.get("year"),
             "arxiv_id": arxiv_id,
-            "abstract": entry["abstract"],
+            "abstract": entry.get("abstract", ""),
             "venue": "",
         }
         meta_path = paper_dir / "meta.json"
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            # meta 写失败，清理下载产物
+            result["status"] = f"meta_failed: {e}"
+            try:
+                shutil.rmtree(paper_dir, ignore_errors=True)
+            except Exception:
+                pass
+            continue
 
         results.append(result)
         existing_ids.add(arxiv_id)
 
-        # Rate limit
+        # Rate limit (仅在成功路径执行)
         time.sleep(3)
 
     return results
@@ -223,8 +234,10 @@ def batch_ingest(
     from .id_resolver import get_resolver
 
     # 确定要处理的论文列表
-    if ulids:
-        paper_ids = ulids
+    # 重要: ulids=[] (明确传入空) 与 ulids=None (未传) 语义不同!
+    # 传入空列表 = 显式表示「本次无需处理任何论文」，应直接返回 0 stats
+    if ulids is not None:
+        paper_ids = list(ulids)
     else:
         # 找出所有有 source 但未 parse 的论文
         parsed_ids = set(dbmod.list_parsed())

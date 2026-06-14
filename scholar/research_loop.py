@@ -55,13 +55,15 @@ def add_interest(keywords: str, category: str = "general", max_results: int = 10
     # 去重：如果同 category 已存在，合并 keywords
     for item in data["interests"]:
         if item["category"].lower() == category.lower():
-            existing_kw = {k.strip().lower() for k in item["keywords"].split(",")}
-            new_kw = {k.strip() for k in keywords.split(",")}
-            merged = item["keywords"] + ", " + ", ".join(
-                k for k in new_kw if k.lower() not in existing_kw
-            )
-            item["keywords"] = merged
-            item["max_results"] = max(item["max_results"], max_results)
+            # 规范化 keywords 为 list，去重，保持原始大小写
+            existing_kw_lower = {k.strip().lower() for k in item["keywords"].split(",") if k.strip()}
+            new_kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+            added = [k for k in new_kw_list if k.lower() not in existing_kw_lower]
+            if added:
+                # 重建完整 keyword 列表，保持干净的分隔
+                all_kw = [k.strip() for k in item["keywords"].split(",") if k.strip()] + added
+                item["keywords"] = ", ".join(all_kw)
+            item["max_results"] = max(item.get("max_results", 10), max_results)
             save_interests(data)
             return data
     # 新条目
@@ -77,14 +79,20 @@ def add_interest(keywords: str, category: str = "general", max_results: int = 10
     return data
 
 
-def remove_interest(category: str) -> dict:
-    """按 category 删除兴趣条目。"""
+def remove_interest(category: str) -> tuple[dict, bool]:
+    """按 category 删除兴趣条目。
+
+    返回: (data, removed) — removed=True 表示真有匹配项被删除
+    """
     data = load_interests()
+    original_count = len(data["interests"])
     data["interests"] = [
         i for i in data["interests"] if i["category"].lower() != category.lower()
     ]
-    save_interests(data)
-    return data
+    removed = len(data["interests"]) < original_count
+    if removed:
+        save_interests(data)
+    return data, removed
 
 
 # ===================================================================

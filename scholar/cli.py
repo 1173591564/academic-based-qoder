@@ -2321,8 +2321,11 @@ def interests(
         console.print(f"[green]✓[/green] 已添加方向 [bold]{category}[/bold]: {keywords}")
 
     elif action == "remove":
-        data = rl.remove_interest(category)
-        console.print(f"[green]✓[/green] 已删除方向 [bold]{category}[/bold]")
+        _, removed = rl.remove_interest(category)
+        if removed:
+            console.print(f"[green]✓[/green] 已删除方向 [bold]{category}[/bold]")
+        else:
+            console.print(f"[yellow]⚠[/yellow] 未找到方向 [bold]{category}[/bold]（跳过）")
 
     elif action == "logs":
         path, entries = rl.get_unanalyzed_logs()
@@ -2342,16 +2345,21 @@ def interests(
         if not week:
             console.print("[red]请提供 --week 2026-W24[/]")
             return
-        # 直接读取用户指定周的日志条数
+        # 拒绝标记不存在的周（避免后续 hook 延迟写入的日志被永久忽略）
         week_file = config.LOGS_DIR / f"week-{week}.jsonl"
-        entry_count = 0
-        if week_file.exists():
-            entry_count = sum(
-                1 for line in week_file.read_text(encoding="utf-8").strip().splitlines()
-                if line.strip()
-            )
+        if not week_file.exists():
+            console.print(f"[red]✗[/red] 周日志文件不存在: {week_file}")
+            console.print("    请先通过对话产生日志后再标记")
+            return
+        entry_count = sum(
+            1 for line in week_file.read_text(encoding="utf-8").strip().splitlines()
+            if line.strip()
+        )
+        if entry_count == 0:
+            console.print(f"[red]✗[/red] {week} 日志为空，拒绝标记")
+            return
         rl.mark_week_analyzed(week, interests_found, entry_count)
-        console.print(f"[green]\u2713[/green] 已标记 {week} 为已完成分析 ({entry_count} entries)")
+        console.print(f"[green]✓[/green] 已标记 {week} 为已完成分析 ({entry_count} entries)")
 
     else:
         console.print(f"[red]未知 action: {action}。可用: list, add, remove, logs, mark-analyzed[/]")

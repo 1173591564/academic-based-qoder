@@ -61,7 +61,9 @@ try {
         $sid8 = $ctx.session_id.Substring(0, [Math]::Min(8, $ctx.session_id.Length))
         $cacheBase = "{0}\.qoder\cache\projects" -f $env:USERPROFILE
         $projName = Split-Path -Leaf $ctx.cwd
-        $projDirs = Get-ChildItem $cacheBase -Directory -Filter "$projName-*" -ErrorAction SilentlyContinue
+        # 按最后修改时间倒序，选最近使用的项目目录（避免命中历史陈旧 hash 目录）
+        $projDirs = Get-ChildItem $cacheBase -Directory -Filter "$projName-*" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending
         if ($projDirs -and $projDirs.Count -gt 0) {
             $candidate = "{0}\conversation-history\{1}\{1}.jsonl" -f $projDirs[0].FullName, $sid8
             Diag ("candidate: {0}" -f $candidate)
