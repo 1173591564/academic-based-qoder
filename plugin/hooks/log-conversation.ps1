@@ -5,103 +5,121 @@
 
 param()
 
-# 安全包装：任何异常都不阻断 Stop 事件
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$logDir = "{0}\output\logs" -f $projectRoot
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+
+# 1. 读取 stdin
+$raw = [Console]::In.ReadToEnd()
+if (-not $raw) { exit 0 }
+
+# 2. 解析 JSON
+# 优先用 System.Text.Json（.NET，更宽松，能处理未转义反斜杠）
+# 失败兜底用 PowerShell 的 ConvertFrom-Json
+$ctx = $null
 try {
-    # 1. 从 stdin 读取 JSON 上下文
-    #    Stop 事件 stdin 字段: session_id, cwd, hook_event_name,
-    #    transcript_path, stop_hook_active, last_assistant_message
-    $input_json = [Console]::In.ReadToEnd()
-    if (-not $input_json) { exit 0 }
-    $ctx = $input_json | ConvertFrom-Json -ErrorAction Stop
+    Add-Type -AssemblyName System.Text.Json -ErrorAction SilentlyContinue
+    $jsonDoc = [System.Text.Json.JsonDocument]::Parse($raw)
+    $root = $jsonDoc.RootElement
 
-    # 官方要求: Stop hook 必须检查 stop_hook_active，为 true 时直接 exit 0 防止死循环
-    if ($ctx.stop_hook_active -eq $true) { exit 0 }
+    # 构造 PSObject
+    $ctx = New-Object PSObject
+    foreach ($prop in $root.EnumerateObject()) {
+        $val = $prop.Value
+        # JsonElement 转简单类型
+        if ($val.ValueKind -eq "String") { $val = $val.GetString() }
+        elseif ($val.ValueKind -eq "Number") { $val = [double]$val.GetRawText() }
+        elseif ($val.ValueKind -eq "True") { $val = $true }
+        elseif ($val.ValueKind -eq "False") { $val = $false }
+        elseif ($val.ValueKind -eq "Null") { $val = $null }
+        $ctx | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $val -Force
+    }
+    $jsonDoc.Dispose()
+} catch {
+    # 兜底：PowerShell ConvertFrom-Json
+    try { $ctx = $raw | ConvertFrom-Json } catch { exit 0 }
+}
+if (-not $ctx) { exit 0 }
 
-    # 2. 提取用户消息
-    $user_text = ""
+# 官方要求: Stop hook 必须检查 stop_hook_active
+if ($ctx.stop_hook_active -eq $true) { exit 0 }
 
-    # 优先从 transcript_path 读取 JSONL 提取 user 消息
-    # 实际格式: {"role":"user","message":{"content":[{"type":"text","text":"..."}]}}
-    if ($ctx.transcript_path -and (Test-Path $ctx.transcript_path)) {
-        try {
-            $lines = [System.IO.File]::ReadAllLines($ctx.transcript_path, [System.Text.Encoding]::UTF8)
-            $user_msgs = @()
-            foreach ($line in $lines) {
-                if (-not $line.Trim()) { continue }
-                try {
-                    $msg = $line | ConvertFrom-Json
-                    if ($msg.role -ne "user") { continue }
-                    # 从 message.content[].text 提取文本
-                    $texts = @()
-                    if ($msg.message -and $msg.message.content) {
-                        foreach ($part in $msg.message.content) {
-                            if ($part.type -eq "text" -and $part.text) {
-                                $texts += $part.text
-                            }
+# 3. 提取用户消息
+$user_text = ""
+
+# 优先从 transcript_path 读取 JSONL
+if ($ctx.transcript_path -and (Test-Path $ctx.transcript_path)) {
+    try {
+        $lines = [System.IO.File]::ReadAllLines($ctx.transcript_path, [System.Text.Encoding]::UTF8)
+        $user_msgs = @()
+        foreach ($line in $lines) {
+            if (-not $line.Trim()) { continue }
+            try {
+                $msg = $line | ConvertFrom-Json
+                if ($msg.role -ne "user") { continue }
+                $texts = @()
+                if ($msg.message -and $msg.message.content) {
+                    foreach ($part in $msg.message.content) {
+                        if ($part.type -eq "text" -and $part.text) {
+                            $texts += $part.text
                         }
                     }
-                    # 兜底：直接取 message 字段
-                    if ($texts.Count -eq 0 -and $msg.message -is [string]) {
-                        $texts += $msg.message
-                    }
-                    $combined = ($texts -join " ").Trim()
-                    if ($combined) { $user_msgs += $combined }
-                } catch { }
-            }
-            # 只取最后一条用户消息（避免日志过长）
-            if ($user_msgs.Count -gt 0) {
-                $user_text = $user_msgs[-1]
-            }
-        } catch { }
-    }
-
-    # 兜底：使用 last_assistant_message 作为交互记录
-    if ((-not $user_text -or $user_text.Trim() -eq "") -and $ctx.last_assistant_message) {
-        $user_text = "[agent-response] $($ctx.last_assistant_message)"
-    }
-
-    if (-not $user_text -or $user_text.Trim() -eq "") { exit 0 }
-    if ($user_text.Length -gt 500) { $user_text = $user_text.Substring(0, 500) }
-    # 清理控制字符（PowerShell 5.1 ConvertTo-Json 不转义控制字符）
-    $user_text = $user_text -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', ' '
-    $user_text = $user_text.Replace('\', '\\').Replace('"', '\"')
-
-    # 3. 计算当前 ISO 周编号（修正 ISO 年份边界）
-    $now = Get-Date
-    $weekNum = [System.Globalization.CultureInfo]::InvariantCulture.Calendar.GetWeekOfYear(
-        $now, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [System.DayOfWeek]::Monday
-    )
-    # ISO 年份修正：12 月底可能属于下一年 W01，1 月初可能属于上一年 W52/53
-    $isoYear = $now.Year
-    if ($weekNum -gt 50 -and $now.Month -eq 1) { $isoYear-- }
-    elseif ($weekNum -eq 1 -and $now.Month -eq 12) { $isoYear++ }
-    $weekId = "{0}-W{1:D2}" -f $isoYear, $weekNum
-    $ts = $now.ToString("yyyy-MM-ddTHH:mm:ss")
-
-    # 4. 构建日志条目 JSON
-    $entry = @{
-        ts      = $ts
-        week    = $weekId
-        session = if ($ctx.session_id) { $ctx.session_id } else { "unknown" }
-        text    = $user_text
-    } | ConvertTo-Json -Compress
-
-    # 5. 确保目录存在并追加写入
-    # .qoder/hooks/ → .qoder/ → project root = 2 levels
-    # plugin/hooks/ → plugin/ → project root = 2 levels
-    # 注意: PS 5.1 Join-Path 不支持多参数，用字符串格式化代替
-    $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    $logDir = "{0}\output\logs" -f $projectRoot
-    if (-not (Test-Path $logDir)) {
-        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    }
-
-    $logFile = "{0}\week-{1}.jsonl" -f $logDir, $weekId
-    # UTF-8 无 BOM 追加
-    [System.IO.File]::AppendAllText($logFile, "$entry`n", [System.Text.UTF8Encoding]::new($false))
+                }
+                $combined = ($texts -join " ").Trim()
+                if ($combined) { $user_msgs += $combined }
+            } catch { }
+        }
+        if ($user_msgs.Count -gt 0) {
+            $user_text = $user_msgs[-1]
+        }
+    } catch { }
 }
-catch {
-    # 静默失败，不影响 Stop 事件
+
+# 兜底
+if ((-not $user_text -or $user_text.Trim() -eq "") -and $ctx.last_assistant_message) {
+    $user_text = "[agent-response] $($ctx.last_assistant_message)"
 }
+
+if (-not $user_text -or $user_text.Trim() -eq "") { exit 0 }
+
+# 4. 关键：剥离所有 Qoder 注入的 <...> 标签，只保留 <user_query>...</user_query>
+$realUserText = ""
+if ($user_text -match '(?s)<user_query>(.*?)</user_query>') {
+    $realUserText = $Matches[1].Trim()
+}
+if (-not $realUserText) {
+    $realUserText = ($user_text -replace '<[^>]+>', ' ').Trim()
+    $realUserText = ($realUserText -replace '\s+', ' ').Trim()
+}
+if (-not $realUserText) { exit 0 }
+
+# 5. 截断 + 清理
+if ($realUserText.Length -gt 500) { $realUserText = $realUserText.Substring(0, 500) }
+$realUserText = $realUserText -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', ' '
+$realUserText = $realUserText.Replace('\', '\\').Replace('"', '\"')
+
+# 6. 计算 ISO 周
+$now = Get-Date
+$weekNum = [System.Globalization.CultureInfo]::InvariantCulture.Calendar.GetWeekOfYear(
+    $now, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [System.DayOfWeek]::Monday
+)
+$isoYear = $now.Year
+if ($weekNum -gt 50 -and $now.Month -eq 1) { $isoYear-- }
+elseif ($weekNum -eq 1 -and $now.Month -eq 12) { $isoYear++ }
+$weekId = "{0}-W{1:D2}" -f $isoYear, $weekNum
+$ts = $now.ToString("yyyy-MM-ddTHH:mm:ss")
+
+# 7. 写入日志
+$entry = @{
+    ts      = $ts
+    week    = $weekId
+    session = if ($ctx.session_id) { $ctx.session_id } else { "unknown" }
+    text    = $realUserText
+} | ConvertTo-Json -Compress
+
+$logFile = "{0}\week-{1}.jsonl" -f $logDir, $weekId
+[System.IO.File]::AppendAllText($logFile, "$entry`n", [System.Text.UTF8Encoding]::new($false))
 
 exit 0
