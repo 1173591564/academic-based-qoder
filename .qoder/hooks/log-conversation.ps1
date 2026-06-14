@@ -18,6 +18,7 @@ try {
     $user_text = ""
 
     # 优先从 transcript_path 读取 JSONL 提取 user 消息
+    # 实际格式: {"role":"user","message":{"content":[{"type":"text","text":"..."}]}}
     if ($ctx.transcript_path -and (Test-Path $ctx.transcript_path)) {
         try {
             $lines = [System.IO.File]::ReadAllLines($ctx.transcript_path, [System.Text.Encoding]::UTF8)
@@ -26,16 +27,28 @@ try {
                 if (-not $line.Trim()) { continue }
                 try {
                     $msg = $line | ConvertFrom-Json
-                    if ($msg.role -eq "user" -or $msg.type -eq "user") {
-                        $content = if ($msg.content) { $msg.content }
-                                   elseif ($msg.message) { $msg.message }
-                                   elseif ($msg.text) { $msg.text }
-                                   else { "" }
-                        if ($content) { $user_msgs += $content }
+                    if ($msg.role -ne "user") { continue }
+                    # 从 message.content[].text 提取文本
+                    $texts = @()
+                    if ($msg.message -and $msg.message.content) {
+                        foreach ($part in $msg.message.content) {
+                            if ($part.type -eq "text" -and $part.text) {
+                                $texts += $part.text
+                            }
+                        }
                     }
+                    # 兜底：直接取 message 字段
+                    if ($texts.Count -eq 0 -and $msg.message -is [string]) {
+                        $texts += $msg.message
+                    }
+                    $combined = ($texts -join " ").Trim()
+                    if ($combined) { $user_msgs += $combined }
                 } catch { }
             }
-            $user_text = ($user_msgs -join " | ")
+            # 只取最后一条用户消息（避免日志过长）
+            if ($user_msgs.Count -gt 0) {
+                $user_text = $user_msgs[-1]
+            }
         } catch { }
     }
 
