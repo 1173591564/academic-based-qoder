@@ -2284,6 +2284,116 @@ def metadata_enrich(
 
 
 # ===================================================================
+# Research Loop
+# ===================================================================
+
+@app.command()
+def interests(
+    action: str = typer.Argument("list", help="Action: list, add, remove, logs, mark-analyzed"),
+    keywords: str = typer.Option("", "--keywords", help="Comma-separated keywords (for add)"),
+    category: str = typer.Option("general", "--category", help="Interest category"),
+    max_results: int = typer.Option(10, "--max", help="Max results per search (for add)"),
+    week: str = typer.Option("", "--week", help="Week ID like 2026-W24 (for mark-analyzed)"),
+    interests_found: int = typer.Option(0, "--found", help="Number of interests found (for mark-analyzed)"),
+):
+    """管理研究方向 + 对话日志分析进度。"""
+    from . import research_loop as rl
+
+    if action == "list":
+        data = rl.load_interests()
+        if not data["interests"]:
+            console.print("[yellow]兴趣画像为空，请用 interests add --keywords \"...\" --category \"...\" 添加[/]")
+            return
+        rows = []
+        for i, item in enumerate(data["interests"], 1):
+            rows.append(
+                f"{i}. [bold]{item['category']}[/bold]\n"
+                f"   Keywords: {item['keywords']}\n"
+                f"   Searches: {item.get('search_count', 0)} | Last: {item.get('last_searched', 'never')}"
+            )
+        console.print(Panel("\n".join(rows), title=f"Research Interests ({len(data['interests'])} directions)"))
+
+    elif action == "add":
+        if not keywords:
+            console.print("[red]请提供 --keywords \"...\"[/]")
+            return
+        data = rl.add_interest(keywords, category, max_results)
+        console.print(f"[green]✓[/green] 已添加方向 [bold]{category}[/bold]: {keywords}")
+
+    elif action == "remove":
+        data = rl.remove_interest(category)
+        console.print(f"[green]✓[/green] 已删除方向 [bold]{category}[/bold]")
+
+    elif action == "logs":
+        path, entries = rl.get_unanalyzed_logs()
+        if not entries:
+            console.print("[yellow]没有未分析的对话日志[/]")
+            return
+        week_id = path.stem.replace("week-", "")
+        console.print(Panel(
+            f"Week: [bold]{week_id}[/bold]\n"
+            f"Entries: {len(entries)}\n\n"
+            + "\n".join(f"  [{e.get('ts', '?')}] {e.get('text', '')[:100]}" for e in entries[:20])
+            + (f"\n  ... and {len(entries) - 20} more" if len(entries) > 20 else ""),
+            title="Unanalyzed Logs",
+        ))
+
+    elif action == "mark-analyzed":
+        if not week:
+            console.print("[red]请提供 --week 2026-W24[/]")
+            return
+        # 直接读取用户指定周的日志条数
+        week_file = config.LOGS_DIR / f"week-{week}.jsonl"
+        entry_count = 0
+        if week_file.exists():
+            entry_count = sum(
+                1 for line in week_file.read_text(encoding="utf-8").strip().splitlines()
+                if line.strip()
+            )
+        rl.mark_week_analyzed(week, interests_found, entry_count)
+        console.print(f"[green]\u2713[/green] 已标记 {week} 为已完成分析 ({entry_count} entries)")
+
+    else:
+        console.print(f"[red]未知 action: {action}。可用: list, add, remove, logs, mark-analyzed[/]")
+
+
+@app.command(name="research-sync")
+def research_sync(
+    category: str = typer.Option("", "--category", help="Sync specific direction (empty = all)"),
+    max_results: int = typer.Option(10, "--max", help="Max papers per direction"),
+):
+    """根据研究方向搜索 arXiv 并全流程入库。"""
+    from . import research_loop as rl
+
+    console.print("[cyan]开始研究同步...[/]")
+
+    if category:
+        result = rl.sync_direction(category, max_results=max_results)
+        console.print(Panel(
+            f"Direction: [bold]{result['category']}[/bold]\n"
+            f"Downloaded: {result['downloaded']}\n"
+            f"Ingested:   {result['ingested']}\n"
+            f"Errors:     [red]{len(result['errors'])}[/]",
+            title="Research Sync Result",
+        ))
+        for p in result.get("papers", []):
+            console.print(f"  • {p.get('title', '?')[:60]} ({p.get('year', '?')}) → {p.get('ulid', '?')[:8]}")
+    else:
+        result = rl.sync_all_directions(max_results=max_results)
+        if "message" in result:
+            console.print(f"[yellow]{result['message']}[/]")
+            return
+        console.print(Panel(
+            f"Directions: {result['total_categories']}\n"
+            f"Total papers: {result['total_papers']}",
+            title="Research Sync — All Directions",
+        ))
+        for r in result["results"]:
+            status = "[green]✓[/green]" if not r["errors"] else "[red]✗[/red]"
+            console.print(f"  {status} {r['category']}: {r['downloaded']} downloaded, {r['ingested']} ingested")
+
+
+# ===================================================================
 # Entry point
 # ===================================================================
 def main():

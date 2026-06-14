@@ -1,0 +1,70 @@
+# Scholar Studio - 对话日志采集（硬约束）
+# Hook event: Stop
+# 每次 Agent 响应结束时，自动记录用户消息到周日志文件
+# 按周轮转: output/logs/week-YYYY-WNN.jsonl
+
+param()
+
+# 安全包装：任何异常都不阻断 Stop 事件
+try {
+    # 1. 从 stdin 读取 JSON 上下文
+    $input_json = [Console]::In.ReadToEnd()
+    if (-not $input_json) { exit 0 }
+    $ctx = $input_json | ConvertFrom-Json -ErrorAction Stop
+
+    # 2. 提取用户消息（兼容多种字段名）
+    $user_text = ""
+    if ($ctx.last_user_message) {
+        $user_text = $ctx.last_user_message
+    } elseif ($ctx.user_messages) {
+        $user_text = ($ctx.user_messages -join " | ")
+    } elseif ($ctx.transcript) {
+        # 从 transcript 中提取 user 角色的消息
+        $user_msgs = $ctx.transcript | Where-Object { $_.role -eq "user" } | ForEach-Object { $_.content }
+        $user_text = ($user_msgs -join " | ")
+    }
+
+    if (-not $user_text -or $user_text.Trim() -eq "") { exit 0 }
+    if ($user_text.Length -gt 500) { $user_text = $user_text.Substring(0, 500) }
+    # 清理控制字符（PowerShell 5.1 ConvertTo-Json 不转义控制字符）
+    $user_text = $user_text -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', ' '
+    $user_text = $user_text.Replace('\', '\\').Replace('"', '\"')
+
+    # 3. 计算当前 ISO 周编号（修正 ISO 年份边界）
+    $now = Get-Date
+    $weekNum = [System.Globalization.CultureInfo]::InvariantCulture.Calendar.GetWeekOfYear(
+        $now, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [System.DayOfWeek]::Monday
+    )
+    # ISO 年份修正：12 月底可能属于下一年 W01，1 月初可能属于上一年 W52/53
+    $isoYear = $now.Year
+    if ($weekNum -gt 50 -and $now.Month -eq 1) { $isoYear-- }
+    elseif ($weekNum -eq 1 -and $now.Month -eq 12) { $isoYear++ }
+    $weekId = "{0}-W{1:D2}" -f $isoYear, $weekNum
+    $ts = $now.ToString("yyyy-MM-ddTHH:mm:ss")
+
+    # 4. 构建日志条目 JSON
+    $entry = @{
+        ts      = $ts
+        week    = $weekId
+        session = if ($ctx.session_id) { $ctx.session_id } else { "unknown" }
+        text    = $user_text
+    } | ConvertTo-Json -Compress
+
+    # 5. 确保目录存在并追加写入
+    # .qoder/hooks/ → .qoder/ → project root = 2 levels
+    # plugin/hooks/ → plugin/ → project root = 2 levels
+    $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    $logDir = Join-Path $projectRoot "output" "logs"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+
+    $logFile = Join-Path $logDir "week-$weekId.jsonl"
+    # UTF-8 无 BOM 追加
+    [System.IO.File]::AppendAllText($logFile, "$entry`n", [System.Text.UTF8Encoding]::new($false))
+}
+catch {
+    # 静默失败，不影响 Stop 事件
+}
+
+exit 0

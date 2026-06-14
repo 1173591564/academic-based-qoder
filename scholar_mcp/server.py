@@ -440,6 +440,48 @@ def scholar_metadata_enrich(apply: bool = False, limit: int = 0) -> str:
     return _run_scholar(*args, timeout=600)
 
 
+# ─── Research Loop ──────────────────────────────────────────────
+
+@mcp.tool()
+def scholar_interests(action: str = "list", keywords: str = "", category: str = "general", max_results: int = 10, week: str = "", interests_found: int = 0) -> str:
+    """Manage research directions and analyze conversation logs.
+
+    Args:
+        action: list, add, remove, logs (get unanalyzed week log), mark-analyzed
+        keywords: Comma-separated keywords (for add)
+        category: Interest category name
+        max_results: Max results per search (for add, default 10)
+        week: Week ID like 2026-W24 (for mark-analyzed)
+        interests_found: Number of interests found (for mark-analyzed)
+    """
+    args = ["interests", action]
+    if keywords:
+        args.extend(["--keywords", keywords])
+    if category != "general":
+        args.extend(["--category", category])
+    if action == "add":
+        args.extend(["--max", str(max_results)])
+    if week:
+        args.extend(["--week", week])
+    if action == "mark-analyzed":
+        args.extend(["--found", str(interests_found)])
+    return _run_scholar(*args, timeout=30)
+
+
+@mcp.tool()
+def scholar_research_sync(category: str = "", max_results: int = 10) -> str:
+    """Search arXiv for a research direction and run full ingest pipeline.
+
+    Args:
+        category: Specific direction to sync (empty = all directions)
+        max_results: Max papers per direction
+    """
+    args = ["research-sync", "--max", str(max_results)]
+    if category:
+        args.extend(["--category", category])
+    return _run_scholar(*args, timeout=600)
+
+
 # ─── Execution Layer ──────────────────────────────────────────
 
 @mcp.tool()

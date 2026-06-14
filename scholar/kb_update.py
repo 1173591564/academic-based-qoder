@@ -6,6 +6,7 @@ Scholar Studio — Knowledge Base Update
 """
 import json
 import re
+import shutil
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -161,6 +162,11 @@ def arxiv_download(
         except Exception as e:
             result["status"] = f"source_failed: {e}"
             results.append(result)
+            # 清理空目录，避免失败下载留下无用 ULID 目录
+            try:
+                shutil.rmtree(paper_dir, ignore_errors=True)
+            except Exception:
+                pass
             continue
 
         # 4. 可选下载 PDF
