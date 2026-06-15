@@ -256,6 +256,9 @@ class TeXParser:
                 "tex_file_count": len(tex_files),
                 "main_tex_file": main_file.name,
             }
+            # 内建规则：有 arxiv_id 但 venue 未检测到 → 自动设为 "arXiv"
+            if result["arxiv_id"] and not result["venue"]:
+                result["venue"] = "arXiv"
             return result
 
     def parse_directory(self, dir_path: Path, paper_id: str) -> dict:
@@ -276,7 +279,7 @@ class TeXParser:
             if k not in macros:
                 macros[k] = v
 
-        return {
+        result = {
             "paper_id": paper_id,
             "title": self._extract_title(raw_main, macros),
             "authors": self._extract_authors(raw_main, macros),
@@ -290,6 +293,9 @@ class TeXParser:
             "tex_file_count": len(tex_files),
             "main_tex_file": main_file.name,
         }
+        if result["arxiv_id"] and not result["venue"]:
+            result["venue"] = "arXiv"
+        return result
 
     # ---------------------------------------------------------------
     # Extraction helpers

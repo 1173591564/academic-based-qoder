@@ -67,20 +67,31 @@ def _extract_year(entry) -> Optional[int]:
     return None
 
 
-def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
-    """用标题在 arXiv 搜索，返回最佳匹配的 arxiv_id、doi 和 year。
+def _extract_authors(entry) -> list[str]:
+    """从 arXiv API entry 提取作者列表。"""
+    authors = []
+    for author_elem in entry.findall("atom:author", ARXIV_NS):
+        name_elem = author_elem.find("atom:name", ARXIV_NS)
+        if name_elem is not None and name_elem.text:
+            authors.append(name_elem.text.strip())
+    return authors
+
+
+def fetch_arxiv_metadata(title: str, max_results: int = 3) -> Optional[dict]:
+    """用标题在 arXiv 搜索，一次性提取全部元数据。
+
+    替代分散的 author-fix / year-fix / metadata-enrich 三次调用。
 
     Args:
         title: 论文标题
         max_results: arXiv API 返回的最大结果数
 
     Returns:
-        dict with keys: arxiv_id, doi, year, matched_title
+        dict with keys: arxiv_id, doi, year, authors, venue, matched_title, score
         or None if no good match
     """
     try:
         query_title = title[:200]
-        # 避免在单词中间截断
         if len(title) > 200:
             query_title = query_title.rsplit(" ", 1)[0]
         xml_data = config.arxiv_request(f"ti:{query_title}", max_results=max_results)
@@ -103,26 +114,79 @@ def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
         if score > best_score:
             best_score = score
             arxiv_id = _extract_arxiv_id(entry)
-            doi = _extract_doi(entry)
             if arxiv_id:
-                year = _extract_year(entry)
                 best_match = {
                     "arxiv_id": arxiv_id,
-                    "doi": doi,
-                    "year": year,
+                    "doi": _extract_doi(entry),
+                    "year": _extract_year(entry),
+                    "authors": _extract_authors(entry),
+                    "venue": "arXiv",
                     "matched_title": entry_title,
                     "score": score,
                 }
 
-    # 要求相似度 > 0.6 才算匹配成功（短标题放宽到 0.5）
     threshold = 0.5 if len(set(title.split())) <= 4 else 0.6
     if best_match and best_match["score"] > threshold:
         return best_match
     return None
 
 
+def apply_arxiv_metadata(
+    data: dict,
+    meta: dict,
+    overwrite: bool = False,
+) -> dict:
+    """将 arXiv 元数据合并到论文数据中（仅填充缺失字段）。
+
+    Args:
+        data: 论文 JSON 数据（原地修改）
+        meta: fetch_arxiv_metadata 返回的元数据
+        overwrite: 若为 True 则覆盖已有字段
+
+    Returns:
+        dict 记录哪些字段被填充了: {filled: ["arxiv_id", "year", ...]}
+    """
+    filled = []
+    for key in ("arxiv_id", "doi", "year", "venue"):
+        if meta.get(key) and (overwrite or not data.get(key)):
+            data[key] = meta[key]
+            filled.append(key)
+    if meta.get("authors") and (overwrite or not data.get("authors")):
+        data["authors"] = meta["authors"]
+        filled.append("authors")
+    return {"filled": filled}
+
+
+def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
+    """用标题在 arXiv 搜索，返回最佳匹配的 arxiv_id、doi 和 year。
+
+    .. deprecated:: 使用 fetch_arxiv_metadata() 替代（一次提取全部字段）。
+    保留此函数仅为向后兼容。
+
+    Args:
+        title: 论文标题
+        max_results: arXiv API 返回的最大结果数
+
+    Returns:
+        dict with keys: arxiv_id, doi, year, matched_title
+        or None if no good match
+    """
+    meta = fetch_arxiv_metadata(title, max_results=max_results)
+    if not meta:
+        return None
+    return {
+        "arxiv_id": meta["arxiv_id"],
+        "doi": meta.get("doi"),
+        "year": meta.get("year"),
+        "matched_title": meta.get("matched_title", ""),
+        "score": meta.get("score", 0.0),
+    }
+
+
 def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict]:
-    """为单篇论文回填 arxiv_id、doi、year、venue。
+    """为单篇论文回填 arxiv_id、doi、year、venue、authors。
+
+    使用 fetch_arxiv_metadata() 一次查询提取全部元数据。
 
     Args:
         json_path: parsed JSON 文件路径
@@ -146,18 +210,20 @@ def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict
     if not title:
         return {"paper_id": paper_id, "status": "no_title"}
 
-    result = search_arxiv_for_paper(title)
-    if not result:
+    meta = fetch_arxiv_metadata(title)
+    if not meta:
         return {"paper_id": paper_id, "status": "no_match"}
 
+    result = {
+        "paper_id": paper_id,
+        "arxiv_id": meta["arxiv_id"],
+        "doi": meta.get("doi"),
+        "year": meta.get("year"),
+        "status": "enriched" if not dry_run else "would_enrich",
+    }
+
     if not dry_run:
-        data["arxiv_id"] = result["arxiv_id"]
-        if result.get("doi"):
-            data["doi"] = result["doi"]
-        if result.get("year") and not data.get("year"):
-            data["year"] = result["year"]
-        if not data.get("venue"):
-            data["venue"] = "arXiv"
+        apply_arxiv_metadata(data, meta)
         json_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -171,13 +237,7 @@ def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict
         except Exception:
             pass
 
-    return {
-        "paper_id": paper_id,
-        "arxiv_id": result["arxiv_id"],
-        "doi": result.get("doi"),
-        "year": result.get("year"),
-        "status": "enriched" if not dry_run else "would_enrich",
-    }
+    return result
 
 
 def enrich_all_papers(

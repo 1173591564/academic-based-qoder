@@ -222,12 +222,10 @@ def batch_ingest(
 
     流程（7步）:
     1. parse（解析 TeX → JSON）
-    2. author-fix（arXiv API 补作者）
-    3. year-fix（arXiv API 补年份）
-    4. metadata-enrich（arxiv_id + DOI 回填）
-    5. graph-update（Neo4j 引用 + 概念图）
-    6. rag-index（向量索引更新）
-    7. auto-notes + quality-score + classify
+    2. arXiv 元数据补全（单次 API 查询 → authors/year/arxiv_id/doi/venue）
+    3. graph-update（Neo4j 引用 + 概念图）
+    4. rag-index（向量索引更新）
+    5. auto-notes + quality-score + classify
     """
     from .tex_parser import parse_paper
     from . import metadata_enrich as me
@@ -280,28 +278,33 @@ def batch_ingest(
                 stats["errors"].append({"paper_id": paper_id, "step": "parse", "error": str(e)})
                 continue
 
-        # Step 2-3: Author/year fix (best-effort)
+            # Step 2: Unified arXiv metadata fetch (1 API call → all fields)
             json_path = config.PARSED_DIR / f"{paper_id}.json"
             try:
                 paper_data = json.loads(json_path.read_text(encoding="utf-8"))
-                if not paper_data.get("authors"):
-                    from . import year_fix as yf
-                    new_authors = yf.fetch_arxiv_authors(paper_data.get("title", ""))
-                    if new_authors:
-                        paper_data["authors"] = new_authors
-                        json_path.write_text(
-                            json.dumps(paper_data, ensure_ascii=False, indent=2),
-                            encoding="utf-8",
-                        )
-                        time.sleep(3)
-            except Exception:
-                pass
-
-            # Step 4: Metadata enrich
-            try:
-                result = me.enrich_single_paper(json_path, dry_run=False)
-                if result and result.get("status") in ("enriched", "already_have"):
-                    stats["enriched"] += 1
+                title = paper_data.get("title", "")
+                needs_enrich = (
+                    not paper_data.get("arxiv_id")
+                    or not paper_data.get("authors")
+                    or not paper_data.get("year")
+                    or not paper_data.get("venue")
+                )
+                if needs_enrich and title:
+                    meta = me.fetch_arxiv_metadata(title)
+                    if meta:
+                        me.apply_arxiv_metadata(paper_data, meta)
+                    # 兜底：arXiv 无匹配时，有 title 就设 "Preprint"
+                    if not paper_data.get("venue") and title:
+                        paper_data["venue"] = "Preprint"
+                    json_path.write_text(
+                        json.dumps(paper_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    if database.available:
+                        database.upsert_paper(paper_data)
+                    if meta:
+                        stats["enriched"] += 1
+                    time.sleep(3)
             except Exception:
                 pass
 
@@ -371,26 +374,30 @@ def batch_ingest(
 
             json_path = config.PARSED_DIR / f"{paper_id}.json"
 
-            # Steps 2-4: Metadata best-effort (same as above)
+            # Steps 2-4: Metadata best-effort (1 API call → all fields)
             try:
                 paper_data = json.loads(json_path.read_text(encoding="utf-8"))
-                if not paper_data.get("authors"):
-                    from . import year_fix as yf
-                    new_authors = yf.fetch_arxiv_authors(paper_data.get("title", ""))
-                    if new_authors:
-                        paper_data["authors"] = new_authors
-                        json_path.write_text(
-                            json.dumps(paper_data, ensure_ascii=False, indent=2),
-                            encoding="utf-8",
-                        )
-                        time.sleep(3)
-            except Exception:
-                pass
-
-            try:
-                result = me.enrich_single_paper(json_path, dry_run=False)
-                if result and result.get("status") in ("enriched", "already_have"):
-                    stats["enriched"] += 1
+                title = paper_data.get("title", "")
+                needs_enrich = (
+                    not paper_data.get("arxiv_id")
+                    or not paper_data.get("authors")
+                    or not paper_data.get("year")
+                    or not paper_data.get("venue")
+                )
+                if needs_enrich and title:
+                    meta = me.fetch_arxiv_metadata(title)
+                    if meta:
+                        me.apply_arxiv_metadata(paper_data, meta)
+                    # 兜底：arXiv 无匹配时，有 title 就设 "Preprint"
+                    if not paper_data.get("venue") and title:
+                        paper_data["venue"] = "Preprint"
+                    json_path.write_text(
+                        json.dumps(paper_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    if meta:
+                        stats["enriched"] += 1
+                    time.sleep(3)
             except Exception:
                 pass
 
