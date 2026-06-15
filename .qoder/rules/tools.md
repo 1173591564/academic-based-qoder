@@ -44,7 +44,8 @@ python -m scholar export-bib              # Export BibTeX
 ```bash
 python -m scholar year-fix [--apply]      # Fill missing years (Lean4 cross-ref + arXiv API)
 python -m scholar author-fix [--apply]    # Fill missing authors (arXiv API)
-python -m scholar metadata-enrich [--apply]  # Backfill arxiv_id/DOI via arXiv API
+python -m scholar venue-fix [--apply]     # Fill missing venue (arxiv_id → 'arXiv', title → 'Preprint')
+python -m scholar metadata-enrich [--apply]  # Backfill arxiv_id/DOI/year/venue via arXiv API
 ```
 
 ### Graph & Network (requires Neo4j: cd infra && docker compose up -d neo4j)
