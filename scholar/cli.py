@@ -2368,7 +2368,7 @@ def interests(
 @app.command(name="research-sync")
 def research_sync(
     category: str = typer.Option("", "--category", help="Sync specific direction (empty = all)"),
-    max_results: int = typer.Option(10, "--max", help="Max papers per direction"),
+    max_results: int = typer.Option(10, "--max", help="Max papers per keyword"),
 ):
     """根据研究方向搜索 arXiv 并全流程入库。"""
     from . import research_loop as rl
