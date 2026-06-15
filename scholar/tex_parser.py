@@ -70,6 +70,11 @@ class TeXParser:
         r"arxiv(?:\.org/abs/)?[:/]?\s*(\d{2})(0[1-9]|1[0-2])\.\d{4,5}",
         re.I
     )
+    # Full arXiv ID extraction: captures YYMM.NNNNN
+    RE_ARXIV_ID_FULL = re.compile(
+        r"arxiv(?:\.org/abs/)?[:/]?\s*(\d{4}\.\d{4,5})(?:v\d+)?",
+        re.I
+    )
     RE_ABSTRACT = re.compile(
         r"\\begin\{abstract\}(.*?)\\end\{abstract\}", re.DOTALL
     )
@@ -243,6 +248,7 @@ class TeXParser:
                 "authors": self._extract_authors(raw_main, macros),
                 "year": self._extract_year(raw_main, all_content),
                 "venue": self._detect_venue(raw_main, all_content),
+                "arxiv_id": self._extract_arxiv_id(raw_main, all_content),
                 "abstract": self._extract_abstract(all_content, macros),
                 "sections": self._extract_sections(all_content, macros),
                 "formulas": self._extract_formulas(all_content),
@@ -276,6 +282,7 @@ class TeXParser:
             "authors": self._extract_authors(raw_main, macros),
             "year": self._extract_year(raw_main, all_content),
             "venue": self._detect_venue(raw_main, all_content),
+            "arxiv_id": self._extract_arxiv_id(raw_main, all_content),
             "abstract": self._extract_abstract(all_content, macros),
             "sections": self._extract_sections(all_content, macros),
             "formulas": self._extract_formulas(all_content),
@@ -1134,6 +1141,15 @@ class TeXParser:
             for pattern, venue in self.VENUE_PATTERNS:
                 if pattern.search(ref):
                     return venue
+        return None
+
+    def _extract_arxiv_id(self, main_content: str, full_content: str) -> Optional[str]:
+        """Extract arXiv ID from TeX content (e.g., arXiv:2401.12345v2 → 2401.12345)."""
+        # Search header first (most likely location), then full content
+        for text in (main_content[:5000], full_content):
+            m = self.RE_ARXIV_ID_FULL.search(text)
+            if m:
+                return m.group(1)
         return None
 
     def _extract_abstract(self, content: str, macros: dict = None) -> Optional[str]:

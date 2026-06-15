@@ -214,6 +214,19 @@ def scholar_author_fix(apply: bool = False) -> str:
 
 
 @mcp.tool()
+def scholar_venue_fix(apply: bool = False) -> str:
+    """Fill missing venue fields using heuristics (arxiv_id → 'arXiv', title-only → 'Preprint').
+
+    Args:
+        apply: If True, write changes. If False, dry-run preview.
+    """
+    args = ["venue-fix"]
+    if apply:
+        args.append("--apply")
+    return _run_scholar(*args)
+
+
+@mcp.tool()
 def scholar_cite_resolve(apply: bool = False) -> str:
     """Resolve citation references: internal matching + arXiv API + Neo4j external nodes.
 

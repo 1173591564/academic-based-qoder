@@ -57,15 +57,25 @@ def _title_similarity(title1: str, title2: str) -> float:
     return len(intersection) / len(union)
 
 
+def _extract_year(entry) -> Optional[int]:
+    """从 arXiv API entry 提取发表年份。"""
+    pub = entry.find("atom:published", ARXIV_NS)
+    if pub is not None and pub.text:
+        m = re.match(r"(\d{4})", pub.text.strip())
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
-    """用标题在 arXiv 搜索，返回最佳匹配的 arxiv_id 和 doi。
+    """用标题在 arXiv 搜索，返回最佳匹配的 arxiv_id、doi 和 year。
 
     Args:
         title: 论文标题
         max_results: arXiv API 返回的最大结果数
 
     Returns:
-        dict with keys: arxiv_id, doi, matched_title
+        dict with keys: arxiv_id, doi, year, matched_title
         or None if no good match
     """
     try:
@@ -95,9 +105,11 @@ def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
             arxiv_id = _extract_arxiv_id(entry)
             doi = _extract_doi(entry)
             if arxiv_id:
+                year = _extract_year(entry)
                 best_match = {
                     "arxiv_id": arxiv_id,
                     "doi": doi,
+                    "year": year,
                     "matched_title": entry_title,
                     "score": score,
                 }
@@ -110,14 +122,14 @@ def search_arxiv_for_paper(title: str, max_results: int = 3) -> Optional[dict]:
 
 
 def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict]:
-    """为单篇论文回填 arxiv_id 和 doi。
+    """为单篇论文回填 arxiv_id、doi、year、venue。
 
     Args:
         json_path: parsed JSON 文件路径
         dry_run: 若为 True 则不写入
 
     Returns:
-        dict with keys: paper_id, arxiv_id, doi, status
+        dict with keys: paper_id, arxiv_id, doi, year, venue, status
     """
     try:
         data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -140,8 +152,12 @@ def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict
 
     if not dry_run:
         data["arxiv_id"] = result["arxiv_id"]
-        if result["doi"]:
+        if result.get("doi"):
             data["doi"] = result["doi"]
+        if result.get("year") and not data.get("year"):
+            data["year"] = result["year"]
+        if not data.get("venue"):
+            data["venue"] = "arXiv"
         json_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -159,6 +175,7 @@ def enrich_single_paper(json_path: Path, dry_run: bool = False) -> Optional[dict
         "paper_id": paper_id,
         "arxiv_id": result["arxiv_id"],
         "doi": result.get("doi"),
+        "year": result.get("year"),
         "status": "enriched" if not dry_run else "would_enrich",
     }
 
@@ -188,17 +205,35 @@ def enrich_all_papers(
         "already_have": 0,
         "no_match": 0,
         "no_title": 0,
+        "venue_filled": 0,
+        "year_filled": 0,
         "errors": 0,
         "results": [],
     }
 
     for i, json_path in enumerate(json_files):
+        # Pre-check: fill venue for papers that already have arxiv_id but no venue
+        try:
+            pre_data = json.loads(json_path.read_text(encoding="utf-8"))
+            if pre_data.get("arxiv_id") and not pre_data.get("venue"):
+                if not dry_run:
+                    pre_data["venue"] = "arXiv"
+                    json_path.write_text(
+                        json.dumps(pre_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                stats["venue_filled"] += 1
+        except Exception:
+            pass
+
         result = enrich_single_paper(json_path, dry_run=dry_run)
         status = "error"  # 默认值
         if result:
             status = result.get("status", "error")
             if status in ("enriched", "would_enrich"):
                 stats["enriched"] += 1
+                if result.get("year"):
+                    stats["year_filled"] += 1
             elif status == "already_have":
                 stats["already_have"] += 1
             elif status == "no_match":

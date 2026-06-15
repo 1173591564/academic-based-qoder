@@ -912,8 +912,8 @@ def year_fix(
 
     # Phase 2: arXiv API fallback for remaining papers
     if stats['still_missing'] > 0:
-        console.print(f"\n[cyan]Querying arXiv API for {min(stats['still_missing'], 50)} remaining papers...[/]")
-        arxiv_result = yf.complete_years_arxiv(dry_run=not apply, limit=min(stats['still_missing'], 50))
+        console.print(f"\n[cyan]Querying arXiv API for {stats['still_missing']} remaining papers...[/]")
+        arxiv_result = yf.complete_years_arxiv(dry_run=not apply, limit=stats['still_missing'])
         console.print(
             f"  Queried: {arxiv_result['queried']}, "
             f"{'Would fill' if not apply else 'Filled'}: {arxiv_result['filled']}"
@@ -2278,8 +2278,61 @@ def metadata_enrich(
         f"{'Would enrich' if not apply else 'Enriched'}: [green]{stats['enriched']}[/]\n"
         f"Already have: {stats['already_have']}\n"
         f"No match:     {stats['no_match']}\n"
+        f"Venue filled: [green]{stats.get('venue_filled', 0)}[/]\n"
+        f"Year filled:  [green]{stats.get('year_filled', 0)}[/]\n"
         f"Errors:       [red]{stats['errors']}[/]",
         title="Metadata Enrich" + ("" if apply else " (DRY RUN — use --apply to save)"),
+    ))
+
+
+# ===================================================================
+# venue-fix: Fill missing venue fields
+# ===================================================================
+@app.command(name="venue-fix")
+def venue_fix(
+    apply: bool = typer.Option(False, "--apply", help="Apply changes (default: dry run)"),
+):
+    """Fill missing venue fields using heuristics (arxiv_id → 'arXiv', title-only → 'Preprint')."""
+    parsed_dir = config.PARSED_DIR
+    fixed_arxiv = 0
+    fixed_preprint = 0
+    skipped = 0
+
+    for json_file in sorted(parsed_dir.glob("*.json")):
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+        except Exception:
+            skipped += 1
+            continue
+
+        if data.get("venue"):
+            continue
+
+        venue = None
+        if data.get("arxiv_id"):
+            venue = "arXiv"
+            fixed_arxiv += 1
+        elif data.get("title"):
+            venue = "Preprint"
+            fixed_preprint += 1
+        else:
+            skipped += 1
+            continue
+
+        if not dry_run:
+            data["venue"] = venue
+            json_file.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+    total_fixed = fixed_arxiv + fixed_preprint
+    console.print(Panel(
+        f"{'Would fix' if not apply else 'Fixed'}:   [green]{total_fixed}[/]\n"
+        f"  arXiv:     {fixed_arxiv}\n"
+        f"  Preprint:  {fixed_preprint}\n"
+        f"Skipped:    {skipped} (no title, no arxiv_id)",
+        title="Venue Fix" + ("" if apply else " (DRY RUN — use --apply to save)"),
     ))
 
 
