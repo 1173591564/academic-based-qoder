@@ -67,8 +67,11 @@ output/notes/              阅读笔记、审稿报告、验证日志
 output/drafts/             写作输出（综述、Related Work、报告）
 output/bib/                BibTeX 文件
 output/experiments/        实验代码复现
+output/digests/            研究同步报告
+output/logs/               对话日志（按周轮转）
+output/research-interests.json  研究方向画像
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
 scholar/                   Python CLI 工具集（35 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，41 工具）
+scholar_mcp/               MCP Server（CLI → Qoder 原生工具，43 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

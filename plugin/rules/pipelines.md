@@ -14,6 +14,7 @@ When the user expresses one of these intents, invoke the matching workflow via i
 | 4 | 实验复现 | 复现, reproduce, 运行实验 | `reproduce-paper` |
 | 5 | 点子落地 | 我有一个想法, idea to paper, 从想法到论文 | `idea-to-paper` |
 | 6 | 知识库维护 | 维护, cleanup, kb-update, 健康检查 | `kb-management` |
+| 7 | 研究循环 | 研究循环, 论文追踪, research loop, 新论文, sync | `adaptive-research` |
 
 ## Retained Atomic Skills
 
