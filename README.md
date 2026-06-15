@@ -1,8 +1,8 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **440 篇 AI 演化方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、14 个学术 skills（8 原子 + 6 工作流）和 Lean4 形式化验证。
+基于 Qoder IDE 的学术研究引擎，管理 **570 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 121 项自动化测试。
 
-> **核心理念**：把 440 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills 自动化完成调研→精读→对比→写作的全流程。
+> **核心理念**：把 570 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills + Hooks 自动化完成调研→精读→对比→写作→追踪的全流程。
 
 ---
 
@@ -94,22 +94,22 @@ Bootstrap 按顺序执行 **9 步**，全程约 **40 分钟**：
 
 | # | 命令 | 产出 | 耗时 |
 |---|------|------|------|
-| 1 | `parse-all` | 440 篇论文的 TeX → JSON | ~5 min |
-| 2 | `year-fix` | 补全缺失年份（交叉引用 Lean4） | ~1 min |
-| 3 | `author-fix` | 补全缺失作者 | ~1 min |
-| 4 | `graph-build` | Neo4j 图谱（25K 节点 + 38K 边） | ~3 min |
+| 1 | `parse-all` | 570 篇论文的 TeX → JSON | ~5 min |
+| 2 | `year-fix` | 补全缺失年份（交叉引用 Lean4 + arXiv API） | ~1 min |
+| 3 | `author-fix` | 补全缺失作者（arXiv API） | ~1 min |
+| 4 | `graph-build` | Neo4j 图谱（论文 + 概念 + Lean4 关系） | ~3 min |
 | 5 | PG sync | PostgreSQL 写入 sections/formulas/citations | ~2 min |
-| 6 | `rag-index` | 向量索引 45K chunks（需 API Key） | ~30 min |
-| 7 | `auto-notes` | 自动生成 439 份阅读笔记 | ~3 min |
-| 8 | `quality-score` | 423 篇论文 7 维度评分 | ~2 min |
-| 9 | `classify` | 417 篇论文领域分类 | ~1 min |
+| 6 | `rag-index` | 向量索引（需 API Key） | ~30 min |
+| 7 | `auto-notes` | 自动生成 556 份阅读笔记 | ~3 min |
+| 8 | `quality-score` | 534 篇论文 7 维度评分 | ~2 min |
+| 9 | `classify` | 555 篇论文领域分类 | ~1 min |
 
 > **断点续传**：如果中途中断，重新运行 `bootstrap` 会自动跳过已完成的步骤。
 
 ### Step 6: 在 Qoder 中打开
 
 1. 用 Qoder 打开项目目录
-2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（41 个工具）
+2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（43 个工具）
 3. 在对话框中直接开始使用
 
 ### Step 7: 验证一切正常
@@ -129,15 +129,20 @@ python -m scholar stats
 期望输出：
 
 ```
-📊 Scholar Studio Knowledge Base
-  Papers:        440 (parsed)
-  Sections:      13,719
-  Formulas:      5,064
-  Citations:     36,477
-  RAG Chunks:    45,405
-  Notes:         439
-  Quality:       423 (A:93 B:262 C:59 D:9)
-  Classified:    417
+╭────────────────────── Knowledge Base Stats ───────────────────────╮
+│ Paper folders:   570                                              │
+│ Parsed:          555                                              │
+│ Total sections:  16344                                            │
+│ Total formulas:  6776                                             │
+│ Total citations: 43397                                            │
+│ Database:        connected                                        │
+│                                                                   │
+│ Metadata Coverage:                                                │
+│   Year:      457/555 (82%)                                        │
+│   Authors:   540/555 (97%)                                        │
+│   Abstract:  534/555 (96%)                                        │
+│   Venue:     475/555 (85%)                                        │
+╰───────────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -161,6 +166,7 @@ python -m scholar stats
 你：入门 State Space Model
 你：推荐接下来该读什么
 你：维护知识库
+你：研究循环                        ← 触发 Adaptive Research Loop
 ```
 
 ### 一键开始（Deeplinks）
@@ -180,7 +186,7 @@ python -m scholar stats
 
 ---
 
-## 14 个学术 Skills
+## 15 个学术 Skills
 
 在 Qoder 对话中直接使用，或输入 `/skill-name` 触发：
 
@@ -199,7 +205,7 @@ python -m scholar stats
 
 每个 skill 末尾都有 **Next Steps** 引导，执行完后自动建议下一步操作。
 
-### 工作流（6 个）
+### 工作流（7 个）
 
 串联多个原子 skill，自动传递数据，一键完成完整研究流程：
 
@@ -211,43 +217,86 @@ python -m scholar stats
 | `reproduce-paper` | 环境 → 代码 → 运行 → 对比 | "复现这篇论文的实验" |
 | `idea-to-paper` | 调研 → 写作 → 复现 → 成文 | "我有一个想法" |
 | `kb-management` | 健康检查 + 自动更新 + 入库 | "维护知识库" |
+| `adaptive-research` | 日志分析 + 方向提取 + 飞书推送 + 自动同步 | "研究循环" |
+
+---
+
+## Adaptive Research Loop
+
+自适应研究闭环是本系统的核心差异化能力——从被动记录到主动发现到自动入库：
+
+```
+日常使用 Qoder 做研究（调研/精读/写作/复现）
+         ↓
+  Stop Hook 自动采集查询 → week-*.jsonl     [log-conversation.ps1]
+         ↓
+  定时任务分析日志提取方向                    [Qoder Work 定时任务]
+         ↓
+  飞书推送新方向待确认                        [Qoder Work 飞书连接器]
+         ↓
+  用户回复确认                               [飞书 IM 内直接回复]
+         ↓
+  sync-direction 自动下载 + 全流程入库        [research-sync CLI]
+         ↓
+  新论文进入知识库，等待下一轮循环
+```
+
+### 研究方向管理
+
+```bash
+python -m scholar interests list                # 查看研究方向
+python -m scholar interests add --keywords "..." --category "..."  # 添加方向
+python -m scholar interests remove --category "..."  # 删除方向
+python -m scholar interests logs                # 查看未分析的对话日志
+python -m scholar research-sync --category "..." --max 10  # 方向级同步
+```
+
+### Qoder Work 定时任务
+
+在 Qoder Work 中配置每周定时任务，自动执行日志分析 → 方向提取 → 飞书推送，实现全链路闭环。
 
 ---
 
 ## 架构概览
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Qoder IDE                         │
-│                                                     │
-│  ┌─────────┐   ┌──────────┐   ┌─────────────────┐ │
-│  │  Rules   │   │ 22 Skills│   │  Hooks/Commands  │ │
-│  │ (always) │   │ (SKILL.md│   │  (自动化/快捷)   │ │
-│  └────┬─────┘   └────┬─────┘   └─────────────────┘ │
-│       │              │                               │
-│       ▼              ▼                               │
-│  ┌────────────────────────────────┐                 │
-│  │   Scholar MCP Server (41 工具)  │                 │
-│  │   (Qoder ↔ CLI 桥接层)          │                 │
-│  └────────────┬───────────────────┘                 │
-└───────────────│─────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      Qoder IDE                            │
+│                                                          │
+│  ┌─────────┐   ┌──────────┐   ┌────────────────────┐   │
+│  │ 7 Rules  │   │15 Skills │   │ 3 Hooks + 6 Cmds   │   │
+│  │ (always) │   │(SKILL.md)│   │  (自动化/快捷)      │   │
+│  └────┬─────┘   └────┬─────┘   └────────────────────┘   │
+│       │              │                                    │
+│       ▼              ▼                                    │
+│  ┌────────────────────────────────┐                      │
+│  │   Scholar MCP Server (43 工具)  │                      │
+│  │   (Qoder ↔ CLI 桥接层)          │                      │
+│  └────────────┬───────────────────┘                      │
+└───────────────│──────────────────────────────────────────┘
                 │  CLI 命令
                 ▼
-┌───────────────────────────────────────────────────────┐
-│              scholar/ Python CLI                       │
-│                                                       │
-│   ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
-│   │ 论文解析  │  │ 图谱构建  │  │ RAG 向量索引      │  │
-│   │ TeX→JSON │  │ Neo4j    │  │ embedding + search│  │
-│   └────┬─────┘  └────┬─────┘  └────────┬─────────┘  │
-└────────│─────────────│─────────────────│─────────────┘
+┌───────────────────────────────────────────────────────────┐
+│              scholar/ Python CLI (35 命令)                 │
+│                                                          │
+│   ┌──────────┐  ┌──────────┐  ┌──────────────────┐      │
+│   │ 论文解析  │  │ 图谱构建  │  │ RAG 向量索引      │      │
+│   │ TeX→JSON │  │ Neo4j    │  │ embedding + search│      │
+│   └────┬─────┘  └────┬─────┘  └────────┬─────────┘      │
+└────────│─────────────│─────────────────│─────────────────┘
          │             │                 │
          ▼             ▼                 ▼
 ┌──────────────┐ ┌───────────┐  ┌─────────────────┐
 │ PostgreSQL   │ │  Neo4j    │  │ data/papers/    │
-│ + pgvector   │ │  概念图谱  │  │ 445 篇论文源文件 │
+│ + pgvector   │ │  概念图谱  │  │ 570 篇论文源文件 │
 │ 端口 5433    │ │  端口 7474 │  │ (PDF + TeX)     │
 └──────────────┘ └───────────┘  └─────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│                  Qoder Work (定时任务)                     │
+│                                                          │
+│   日志分析 → 方向提取 → 飞书推送 → 用户确认 → 自动同步    │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### 数据流
@@ -258,7 +307,9 @@ python -m scholar stats
 PostgreSQL (sections,     Neo4j (papers, concepts,
  formulas, citations)      REPLACES 关系)
     ↓
-RAG 向量索引 (45K chunks, 智谱 embedding-2)
+RAG 向量索引 (智谱 embedding-2, HNSW)
+
+对话日志 → week-*.jsonl → 方向提取 → interests.json → 飞书推送 → 确认 → 自动入库
 ```
 
 ---
@@ -270,14 +321,14 @@ RAG 向量索引 (45K chunks, 智谱 embedding-2)
 python -m scholar stats                     # 知识库统计
 python -m scholar search "attention"        # 全文搜索
 python -m scholar list-papers --year 2024   # 按年份列出
-python -m scholar info <ULID>               # 论文详情
+python -m scholar info <paper_id>           # 论文详情（支持 ULID/arXiv/DOI/slug）
 python -m scholar export-bib                # 导出 BibTeX
 
 # 图谱查询（需 Neo4j 运行）
 python -m scholar graph-stats               # 图谱统计
 python -m scholar graph-query "attention"   # 概念查询
 python -m scholar cite-network              # 全局引用网络
-python -m scholar cite-network <ULID>       # 单篇前后向引用
+python -m scholar cite-network <paper_id>   # 单篇前后向引用
 
 # 语义搜索（需 RAG 索引 + API Key）
 python -m scholar rag-search "query"        # 向量搜索
@@ -288,12 +339,25 @@ python -m scholar auto-notes                # 生成全部阅读笔记
 python -m scholar quality-score --all       # 7 维度评分（A-F）
 python -m scholar classify --all            # 领域/子领域/方法分类
 
+# 研究循环
+python -m scholar interests list            # 查看研究方向
+python -m scholar interests logs            # 查看未分析日志
+python -m scholar research-sync             # 方向级同步
+
+# KB 更新（arXiv 下载 + 全流程入库）
+python -m scholar arxiv-download "<query>" [--max 10] [--pdf]
+python -m scholar batch-ingest [--ulids "id1,id2"]
+python -m scholar kb-update --query "<topic>" --max 10
+
 # 编排
 python -m scholar bootstrap                 # 全量初始化（首次部署）
-python -m scholar ingest <ULID>             # 增量导入单篇
+python -m scholar ingest <paper_id>         # 增量导入单篇
 
 # 外部
 python -m scholar arxiv-search "query"      # 搜索 arXiv
+
+# 测试
+cd test && pytest                           # 运行 121 项自动化测试
 ```
 
 ---
@@ -302,27 +366,41 @@ python -m scholar arxiv-search "query"      # 搜索 arXiv
 
 ```
 .qoder/
-  rules/           Agent 规则（identity, pipelines, tools, academic）
-  skills/          14 个学术 skills（8 原子 + 6 工作流）
-  commands/        4 个快捷指令（stats, find, paper, health）
-  hooks/           2 个自动化钩子（任务通知 + 危险拦截）
+  rules/           7 个 Agent 规则（identity, pipelines, tools, academic, onboarding, memory-policy, interest-capture）
+  skills/          15 个学术 skills（8 原子 + 7 工作流）
+  commands/        6 个快捷指令（stats, find, paper, health, resume, sync）
+  hooks/           3 个自动化钩子（log-conversation + task-done + block-dangerous）
   settings.json    Hooks 配置
   mcp.json         MCP Server 配置
 
-data/papers/       445 篇论文（每篇：paper.pdf + source.tar.gz）
+data/papers/       570 篇论文（每篇：paper.pdf + source.tar.gz）
 output/
-  parsed/          440 篇结构化 JSON（核心数据源）
-  notes/           阅读笔记 + 质量评分 JSON
+  parsed/          555 篇结构化 JSON（核心数据源）
+  notes/           556 份阅读笔记 + 534 份质量评分 JSON
   drafts/          综述、Related Work、报告
   bib/             BibTeX 文件
   experiments/     实验代码复现
+  digests/         研究同步报告
+  logs/            对话日志（按周轮转 week-YYYY-WNN.jsonl）
+  research-interests.json  研究方向画像
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
 scholar/           Python CLI 工具集（35 命令）
-scholar_mcp/       MCP Server（41 工具，Qoder 桥接层）
+scholar_mcp/       MCP Server（43 工具，Qoder 桥接层）
+test/              自动化测试套件（8 个文件，121 项测试）
+  conftest.py      共享 fixtures
+  test_config.py   配置路径与环境变量
+  test_id_resolver.py  Hybrid ID 解析器
+  test_research_loop.py  研究循环逻辑
+  test_kb_update.py  KB 更新流程
+  test_db.py       数据库层操作
+  test_cli.py      CLI 集成测试（smoke + execution + error）
+  test_hooks.py    Hook 脚本逻辑验证
+  test_e2e.py      端到端全流程测试
 infra/             Docker 编排（PostgreSQL + Neo4j）
   docker-compose.yml
   init.sql         PostgreSQL 建表脚本（papers, sections, formulas, citations, chunks）
+plugin/            Qoder Plugin 分发版
 ```
 
 ---
@@ -331,16 +409,119 @@ infra/             Docker 编排（PostgreSQL + Neo4j）
 
 | 数据层 | 数量 |
 |--------|------|
-| 论文 | 440 篇（TeX 源文件解析） |
-| Sections | 13,719 |
-| Formulas | 5,064 |
-| Citations | 36,477 |
-| RAG Chunks | 45,405 |
-| Neo4j Nodes | 25,131 |
-| Neo4j Edges | 38,485 |
-| 阅读笔记 | 439 |
-| 质量评分 | 423（A:93 B:262 C:59 D:9） |
-| 领域分类 | 417 |
+| 论文目录 | 570 |
+| TeX 解析 | 555 篇（97.4%） |
+| Sections | 16,344 |
+| Formulas | 6,776 |
+| Citations | 43,397 |
+| 阅读笔记 | 556 |
+| 质量评分 | 534 |
+| 领域分类 | 555 |
+| 年份覆盖 | 457/555 (82%) |
+| 作者覆盖 | 540/555 (97%) |
+| 摘要覆盖 | 534/555 (96%) |
+
+### 领域分布
+
+| Domain | 论文数 |
+|--------|--------|
+| NLP | 327 |
+| ML | 236 |
+| CV | 95 |
+| Systems | 74 |
+| Safety | 38 |
+| Multimodal | 24 |
+| RL | 22 |
+
+> 论文可属于多个领域（多标签分类）
+
+### Top 会议来源
+
+NeurIPS (129), ICLR (58), ICML (53), CVPR (39), IEEE (36), Science (35), ACL (27), ACM (15), arXiv (15), SIGGRAPH (13)
+
+---
+
+## 自动化测试
+
+121 项测试覆盖从单元到端到端的全链路：
+
+| 测试文件 | 测试数 | 覆盖范围 |
+|----------|--------|----------|
+| `test_config.py` | 10 | 路径解析、环境变量、默认值 |
+| `test_id_resolver.py` | 14 | ULID/arXiv/DOI/slug 解析、模糊匹配、缓存 |
+| `test_research_loop.py` | 16 | 兴趣 CRUD、日志分析、方向同步 |
+| `test_kb_update.py` | 10 | arXiv XML 解析、ULID 生成、批量入库 |
+| `test_db.py` | 11 | JSON 读写、目录操作、DB 连接检测 |
+| `test_cli.py` | 33 | 全部 CLI 命令 smoke test + 执行测试 |
+| `test_hooks.py` | 19 | 标签剥离、ISO 周号、transcript 解析 |
+| `test_e2e.py` | 8 | ingest pipeline + adaptive research loop |
+
+```bash
+# 运行全部测试
+pytest
+
+# 运行单个文件
+pytest test/test_cli.py
+
+# 运行 E2E 测试
+pytest test/test_e2e.py -v
+```
+
+---
+
+## 自动化 Hooks
+
+配置在 `.qoder/settings.json`，Qoder 重启后生效：
+
+| Hook | 事件 | 作用 |
+|------|------|------|
+| `log-conversation.ps1` | Stop | 自动采集对话查询 → 写入 week-*.jsonl（3×800ms 重试 + 全目录搜索） |
+| `task-done.ps1` | Stop | Agent 完成任务后弹出 Windows 桌面通知 |
+| `block-dangerous.ps1` | PreToolUse | 拦截 `DROP TABLE`、`docker rm` 等危险操作 |
+
+## 快捷指令
+
+放在 `.qoder/commands/`，在对话中输入 `/` 即可调用：
+
+| 指令 | 用法 |
+|------|------|
+| `/stats` | 查看知识库状态（论文数、图谱、RAG 覆盖） |
+| `/find` | 全文 + 语义混合搜索论文 |
+| `/paper` | 查看单篇论文详情 + 引用关系 |
+| `/health` | 知识库健康检查 + 修复建议 |
+| `/resume` | 断点恢复：扫描中间产物自动定位未完成任务 |
+| `/sync` | 研究方向同步：搜索 arXiv + 全流程入库 |
+
+---
+
+## Qoder Plugin
+
+本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 15 个 Skills + 6 个 Commands + MCP Server。
+
+### 构建 Plugin
+
+```bash
+python build_plugin.py
+```
+
+产出在 `plugin/` 目录：
+
+```
+plugin/
+  .qoder-plugin/plugin.json   ← 插件元数据
+  skills/                     ← 15 个 Skills
+  commands/                   ← 6 个快捷指令
+  rules/                      ← Agent 规则
+  .mcp.json                   ← MCP Server 配置
+```
+
+### 安装使用
+
+1. 在 Qoder Quest 中安装此 Plugin
+2. 克隆主仓库并执行 `pip install -r requirements.txt` + `python -m scholar bootstrap`
+3. 启动数据库后，所有 15 个 Skills 即可使用
+
+> **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
 
 ---
 
@@ -373,7 +554,8 @@ python -m scholar scan
 python -m scholar parse-all
 
 # 补全缺失年份和作者
-python -m scholar year-fix
+python -m scholar year-fix --apply
+python -m scholar author-fix --apply
 ```
 
 ### 3. 重建数据层
@@ -405,58 +587,6 @@ cd LEAN && lake build
 
 ---
 
-## 自动化 Hooks
-
-配置在 `.qoder/settings.json`，Qoder 重启后生效：
-
-| Hook | 事件 | 作用 |
-|------|------|------|
-| `task-done.ps1` | Stop | Agent 完成任务后弹出 Windows 桌面通知 |
-| `block-dangerous.ps1` | PreToolUse | 拦截 `DROP TABLE`、`docker rm` 等危险操作 |
-
-## 快捷指令
-
-放在 `.qoder/commands/`，在对话中输入 `/` 即可调用：
-
-| 指令 | 用法 |
-|------|------|
-| `/stats` | 查看知识库状态（论文数、图谱、RAG 覆盖） |
-| `/find` | 全文 + 语义混合搜索论文 |
-| `/paper` | 查看单篇论文详情 + 引用关系 |
-| `/health` | 知识库健康检查 + 修复建议 |
-
----
-
-## Qoder Plugin
-
-本项目可封装为 **Qoder Plugin**，在 Quest 模式下安装使用。Plugin 包含全部 14 个 Skills + 4 个 Commands + MCP Server。
-
-### 构建 Plugin
-
-```bash
-python build_plugin.py
-```
-
-产出在 `plugin/` 目录：
-
-```
-plugin/
-  .qoder-plugin/plugin.json   ← 插件元数据
-  skills/                     ← 14 个 Skills
-  commands/                   ← 4 个快捷指令
-  .mcp.json                   ← MCP Server 配置
-```
-
-### 安装使用
-
-1. 在 Qoder Quest 中安装此 Plugin
-2. 克隆主仓库并执行 `pip install -r requirements.txt` + `python -m scholar bootstrap`
-3. 启动数据库后，所有 14 个 Skills 即可使用
-
-> **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
-
----
-
 ## 常见问题
 
 ### Docker 容器启动失败
@@ -483,7 +613,7 @@ postgresql://scholar:scholar2024@localhost:5433/scholar
 ### RAG 搜索无结果
 
 1. 确认 `.env` 中有有效的 `SCHOLAR_EMBEDDING_API_KEY`
-2. 确认 `python -m scholar rag-index` 已成功执行（45K chunks）
+2. 确认 `python -m scholar rag-index` 已成功执行
 3. 没有 API Key 时，`rag-search` 会自动 fallback 到全文搜索
 
 ### Bootstrap 中断恢复
@@ -507,4 +637,15 @@ wsl --list --verbose
 # 如果 Docker Desktop 的 distro 未运行
 wsl --shutdown
 # 然后重新启动 Docker Desktop
+```
+
+### 测试失败
+
+```bash
+# 确保依赖完整
+pip install -r requirements.txt
+
+# 如果 Neo4j/PostgreSQL 未运行，部分测试会跳过（pytest.mark.skipif）
+# 仅运行不依赖数据库的测试
+pytest -k "not db"
 ```
