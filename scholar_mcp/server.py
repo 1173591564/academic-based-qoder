@@ -440,19 +440,64 @@ def scholar_metadata_enrich(apply: bool = False, limit: int = 0) -> str:
     return _run_scholar(*args, timeout=600)
 
 
+# ─── Research Loop ──────────────────────────────────────────────
+
+@mcp.tool()
+def scholar_interests(action: str = "list", keywords: str = "", category: str = "general", max_results: int = 10, week: str = "", interests_found: int = 0) -> str:
+    """Manage research directions and analyze conversation logs.
+
+    Args:
+        action: list, add, remove, logs (get unanalyzed week log), mark-analyzed
+        keywords: Comma-separated keywords (for add)
+        category: Interest category name
+        max_results: Max results per search (for add, default 10)
+        week: Week ID like 2026-W24 (for mark-analyzed)
+        interests_found: Number of interests found (for mark-analyzed)
+    """
+    args = ["interests", action]
+    if keywords:
+        args.extend(["--keywords", keywords])
+    if category != "general":
+        args.extend(["--category", category])
+    if action == "add":
+        args.extend(["--max", str(max_results)])
+    if week:
+        args.extend(["--week", week])
+    if action == "mark-analyzed":
+        args.extend(["--found", str(interests_found)])
+    return _run_scholar(*args, timeout=30)
+
+
+@mcp.tool()
+def scholar_research_sync(category: str = "", max_results: int = 10) -> str:
+    """Search arXiv for a research direction and run full ingest pipeline.
+
+    Args:
+        category: Specific direction to sync (empty = all directions)
+        max_results: Max papers per direction
+    """
+    args = ["research-sync", "--max", str(max_results)]
+    if category:
+        args.extend(["--category", category])
+    return _run_scholar(*args, timeout=600)
+
+
 # ─── Execution Layer ──────────────────────────────────────────
 
 @mcp.tool()
-def scholar_compile_paper(tex_file: str, auto_fix: bool = True) -> str:
-    """Compile a LaTeX paper to PDF with auto-fix for common errors.
+def scholar_compile_paper(tex_file: str, report: bool = False, engine: str = "") -> str:
+    """Compile a LaTeX paper to PDF with structured error reporting (FATAL/WARN/INFO).
 
     Args:
         tex_file: Path to .tex file (relative to project root)
-        auto_fix: If True, auto-fix common LaTeX errors (up to 3 retries)
+        report: If True, only parse existing log without compiling
+        engine: LaTeX engine override (e.g. 'xelatex'), defaults to config LATEX_CMD
     """
     args = ["compile-paper", tex_file]
-    if not auto_fix:
-        args.append("--no-auto-fix")
+    if report:
+        args.append("--report")
+    if engine:
+        args.extend(["--engine", engine])
     return _run_scholar(*args, timeout=300)
 
 

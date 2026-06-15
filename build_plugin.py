@@ -159,7 +159,7 @@ def main():
     print(f"  Commands:  {commands}")
     print(f"  Rules:     {rules}")
     print(f"  Hooks:     {hooks}")
-    print(f"  MCP:       scholar (41 tools)")
+    print(f"  MCP:       scholar (43 tools)")
     print(f"  Output:    {zip_name} ({file_count} files)")
     print("=" * 55)
 

@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: qoder_plugin
+title: Scholar Studio 学术研究插件
+scope:
+    - plugin/
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar_mcp
+    - path: decisions/35a8f1797f14_e53592c83df1

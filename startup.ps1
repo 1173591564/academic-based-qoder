@@ -1,4 +1,4 @@
-# Scholar Studio — 一键启动脚本
+﻿# Scholar Studio — 一键启动脚本
 # Usage: .\startup.ps1
 
 $ErrorActionPreference = "Stop"
@@ -106,7 +106,7 @@ Write-Host "=====================================" -ForegroundColor Cyan
 # 4. Next steps
 Write-Host "`n[4/4] Next steps:" -ForegroundColor Yellow
 $papersCount = 0
-if ($papers) { $papersCount = [int]$papers.Trim() }
+if ($papers) { $papersCount = [int](($papers | Where-Object { $_.Trim() -ne '' } | Select-Object -Last 1).Trim()) }
 if ($papersCount -eq 0) {
     Write-Host "  Knowledge base is empty. Run bootstrap to initialize:" -ForegroundColor Cyan
     Write-Host "    python -m scholar bootstrap      # Full init (~40 min)" -ForegroundColor White

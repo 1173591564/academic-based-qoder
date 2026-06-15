@@ -9,7 +9,7 @@ alwaysApply: true
 **Fallback**: Execute CLI commands via terminal.
 
 ## MCP Server (recommended)
-The scholar MCP server exposes 41 tools. Start it with:
+The scholar MCP server exposes 43 tools. Start it with:
 ```bash
 cd <project-root> && python -m scholar_mcp
 ```
@@ -82,9 +82,19 @@ python -m scholar batch-ingest [--ulids "id1,id2"]  # Batch ingest: parse→enri
 python -m scholar kb-update --query "<topic>" --max 10  # One-command: search→download→ingest
 ```
 
+### Research Loop (方向管理 + 自动同步)
+```bash
+python -m scholar interests list              # 查看研究方向
+python -m scholar interests add --keywords "..." --category "..."  # 添加方向
+python -m scholar interests remove --category "..."  # 删除方向
+python -m scholar interests logs              # 查看未分析的对话日志
+python -m scholar interests mark-analyzed --week YYYY-WNN --found N  # 标记完成
+python -m scholar research-sync [--category "..."] [--max 10]  # 方向级同步：搜索→下载→全流程入库
+```
+
 ### Execution Layer (LaTeX compile + experiments + datasets)
 ```bash
-python -m scholar compile-paper <file.tex> [--auto-fix]  # Compile LaTeX to PDF
+python -m scholar compile-paper <file.tex> [--report] [--engine xelatex]  # Compile LaTeX with structured error report (FATAL/WARN/INFO)
 python -m scholar exp-run <paper_id> [--mode quick] [--gpu]  # Run experiment code
 python -m scholar exp-compare <paper_id>  # Compare results with paper metrics
 python -m scholar exp-setup <paper_id> [--conda|--docker]  # Set up experiment environment
@@ -119,3 +129,6 @@ pdflatex output/drafts/<file>.tex         # Compile LaTeX output
 - Experiment logs: `output/experiments/<ULID>/run_log.txt`
 - Compiled PDFs: `output/pdfs/`
 - Datasets: `output/datasets/<name>/`
+- Sync reports: `output/digests/sync-YYYY-MM-DD.md`
+- Conversation logs: `output/logs/week-YYYY-WNN.jsonl`
+- Research interests: `output/research-interests.json`

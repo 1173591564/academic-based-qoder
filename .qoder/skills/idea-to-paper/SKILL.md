@@ -88,13 +88,18 @@ python -m scholar exp-compare <paper_id>
 - 对 `[REVISE]` 项：针对性修改
 - 对 `[MISSING]` 项：补充内容
 - **最多 2 轮修订**，每轮后重新检查
-- 全部通过后编译为 PDF：`python -m scholar compile-paper output/drafts/<file>.tex --auto-fix`
+- 全部通过后，按 `writing-pipeline` Step 7 的「编译→诊断→修复」协议编译为 PDF：
+  - 运行 `python -m scholar compile-paper output/drafts/<file>.tex`
+  - 解析 .log 按 FATAL/WARN/INFO 分类
+  - 自动修复（缺失包、溢出、未定义引用等），最多 3 轮
+  - FATAL 必须清零，WARN 尽量清零
 
 ## 迭代写入原则
 - 大纲先行，验证结构闭环后再写正文
 - 逐节撰写，每个 section 写完即检查
 - Abstract 最后写，确保概括最终定稿
 - 质量门控是强制环节，最多 2 轮修订
+- **编译修复是闭环**：不允许跳过编译，不允许忽略 FATAL 错误
 
 ## Next Steps
 

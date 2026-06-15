@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: scholar_cli
+title: 学术文献解析与知识图谱构建工具
+scope:
+    - scholar/
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar_mcp
+    - path: infrastructure
+    - path: decisions/bc51cd30ec34_7c2a811a9981
+    - path: lean_project

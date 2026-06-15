@@ -30,7 +30,13 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 3. 每一步都通过 MCP 工具或 CLI 命令获取**真实数据**
 4. 所有生成内容输出到 `output/` 对应子目录
 5. 遇到不确定的数据，先 `python -m scholar search` 搜索，**绝不编造**论文、引用或数据点
-6. 如遇中断，从 todo list 中第一个非 COMPLETE 的步骤恢复执行
+6. 如遇中断，从 todo list 中第一个非 COMPLETE 的步骤恢复执行，或用 `/resume` 命令扫描中间产物自动定位断点
+
+**迭代模式**（适用于 research-survey、writing-pipeline、paper-deep-dive、idea-to-paper）：
+- 这类 skill 采用「骨架→血肉→打磨」三阶段，而非一次性生成
+- 质量门控（quality gate）和修订循环是**正常流程**，不是异常——生成 `-review.md` 后根据 `[REVISE]`/`[MISSING]` 标记做定向修改
+- 最多 2 轮修订，之后强制终稿
+- 所有中间产物（`-outline.md`、`-review.md`、部分完成的 draft）保留在 `output/`，供 `/resume` 断点恢复
 
 ### 模式 2: 基础设施模式
 
@@ -61,8 +67,11 @@ output/notes/              阅读笔记、审稿报告、验证日志
 output/drafts/             写作输出（综述、Related Work、报告）
 output/bib/                BibTeX 文件
 output/experiments/        实验代码复现
+output/digests/            研究同步报告
+output/logs/               对话日志（按周轮转）
+output/research-interests.json  研究方向画像
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
 scholar/                   Python CLI 工具集（35 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，41 工具）
+scholar_mcp/               MCP Server（CLI → Qoder 原生工具，43 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

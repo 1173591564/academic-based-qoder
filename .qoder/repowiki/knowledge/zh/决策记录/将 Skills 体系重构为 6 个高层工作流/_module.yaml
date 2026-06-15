@@ -4,4 +4,5 @@ title: 将 Skills 体系重构为 6 个高层工作流
 scope: []
 source_files: []
 depends_on: []
-related_to: []
+related_to:
+    - path: qoder_plugin
