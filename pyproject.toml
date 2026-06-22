@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scholar-studio"
+version = "0.1.0"
+description = "AI Academic Research Engine — 论文解析、知识图谱、RAG 检索、学术写作全流程"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+readme = "README.md"
+
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0",
+    "psycopg2-binary>=2.9",
+    "neo4j>=5.0",
+    "python-dotenv>=1.0",
+    "PyMuPDF>=1.23",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
+all = ["mcp>=1.0"]
+
+[project.scripts]
+scholar = "scholar.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scholar*", "scholar_mcp*"]
+
+[tool.setuptools.package-data]
+scholar = ["*.json", "*.txt"]

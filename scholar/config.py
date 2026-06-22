@@ -1,24 +1,75 @@
 """
 Scholar Studio — Configuration
 
-Environment variables are loaded from .env (gitignored) via python-dotenv.
-The .env.example file documents all supported variables; copy it to .env and
-fill in real values for your local setup.
+支持两种运行模式：
+- 开发模式：PROJECT_ROOT = 源码目录（python -m scholar）
+- 打包模式：PROJECT_ROOT = ~/.scholar-studio/（scholar.exe）
+
+环境变量可通过 .env 文件或 SCHOLAR_HOME 覆盖。
 """
 import os
+import re
+import sys
 from pathlib import Path
 
+
+# ===================================================================
+# 运行模式检测
+# ===================================================================
+
+def _resolve_scholar_home() -> Path:
+    """确定知识库根目录。
+
+    打包模式（frozen）: ~/.scholar-studio/（可通过 SCHOLAR_HOME 覆盖）
+    开发模式: 源码目录（scholar/ 的父目录）
+    """
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包：使用全局目录
+        return Path(os.getenv("SCHOLAR_HOME",
+                              str(Path.home() / ".scholar-studio")))
+    # 开发模式：源码目录
+    return Path(__file__).resolve().parent.parent
+
+
+SCHOLAR_HOME = _resolve_scholar_home()
+PROJECT_ROOT = SCHOLAR_HOME
+
+# 加载 .env（从 SCHOLAR_HOME 目录）
 try:
     from dotenv import load_dotenv
-    # Search PROJECT_ROOT (resolved below) for .env
-    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    _env_path = SCHOLAR_HOME / ".env"
     load_dotenv(_env_path, override=False)
+    # 开发模式：若 SCHOLAR_HOME 与源码目录不同，也加载源码目录的 .env
+    if not getattr(sys, 'frozen', False):
+        _dev_env = Path(__file__).resolve().parent.parent / ".env"
+        if _dev_env != _env_path and _dev_env.exists():
+            load_dotenv(_dev_env, override=False)
 except ImportError:
-    # python-dotenv not installed; fall back to plain os.environ
     pass
 
-# Project root: parent of scholar/ directory
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Current project name (for per-project output directories)
+PROJECT_NAME = os.getenv("SCHOLAR_PROJECT_NAME", PROJECT_ROOT.name)
+
+
+def sanitize_project_name(raw: str) -> str:
+    """将原始项目名转为文件系统安全的短字符串。"""
+    name = re.sub(r'[^\w\-]', '_', raw.strip())
+    name = re.sub(r'_+', '_', name).strip('_')
+    return name[:50] if name else "default"
+
+
+def project_logs_dir(project_name: str = PROJECT_NAME) -> Path:
+    """返回指定项目的日志目录：output/logs/<project>/"""
+    d = LOGS_DIR / sanitize_project_name(project_name)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def project_drafts_dir(project_name: str = PROJECT_NAME) -> Path:
+    """返回指定项目的草稿目录：output/drafts/<project>/"""
+    d = DRAFTS_DIR / sanitize_project_name(project_name)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 # Data directories
 PAPERS_DIR = PROJECT_ROOT / "data" / "papers"
@@ -40,6 +91,73 @@ INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 # Ensure output directories exist (parents=True for fresh-clone safety)
 for d in [PARSED_DIR, NOTES_DIR, DRAFTS_DIR, BIB_DIR, EXPERIMENTS_DIR, DATASETS_DIR, PDFS_DIR, DIGESTS_DIR, LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+# Running mode flags
+IS_FROZEN = getattr(sys, 'frozen', False)
+
+
+def init_scholar_home() -> dict:
+    """初始化全局知识库目录结构。
+
+    创建 ~/.scholar-studio/ 及所有子目录，生成 .env.example。
+    返回 {"created": [...], "already_exists": bool, "env_example": Path}
+    """
+    created: list[str] = []
+    home = SCHOLAR_HOME
+
+    # 创建目录结构
+    dirs_to_create = [
+        home,
+        home / "data" / "papers",
+        home / "output" / "parsed",
+        home / "output" / "notes",
+        home / "output" / "drafts",
+        home / "output" / "bib",
+        home / "output" / "experiments",
+        home / "output" / "datasets",
+        home / "output" / "pdfs",
+        home / "output" / "digests",
+        home / "output" / "logs",
+        home / "LEAN",
+    ]
+    for d in dirs_to_create:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(str(d))
+
+    # 生成 .env.example
+    env_example = home / ".env.example"
+    if not env_example.exists():
+        env_example.write_text(
+            "# Scholar Studio — Environment Configuration\n"
+            "# Copy to .env and fill in real values\n\n"
+            "# PostgreSQL + pgvector\n"
+            "SCHOLAR_PG_HOST=localhost\n"
+            "SCHOLAR_PG_PORT=5433\n"
+            "SCHOLAR_PG_NAME=scholar\n"
+            "SCHOLAR_PG_USER=scholar\n"
+            "SCHOLAR_PG_PASS=scholar2024\n\n"
+            "# Neo4j\n"
+            "SCHOLAR_NEO4J_URI=bolt://localhost:7687\n"
+            "SCHOLAR_NEO4J_USER=neo4j\n"
+            "SCHOLAR_NEO4J_PASS=scholar2024\n\n"
+            "# RAG Embedding (智谱 API)\n"
+            "SCHOLAR_EMBEDDING_PROVIDER=zhipu\n"
+            "SCHOLAR_EMBEDDING_MODEL=embedding-2\n"
+            "SCHOLAR_EMBEDDING_DIM=1024\n"
+            "SCHOLAR_EMBEDDING_API_KEY=your-api-key-here\n\n"
+            "# LaTeX compiler\n"
+            "SCHOLAR_LATEX_CMD=pdflatex\n",
+            encoding="utf-8",
+        )
+        created.append(str(env_example))
+
+    return {
+        "home": str(home),
+        "created": created,
+        "already_exists": len(created) == 0,
+        "env_example": str(env_example),
+    }
 
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索
 PG_HOST = os.getenv("SCHOLAR_PG_HOST", "localhost")

@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: decisions/bc51cd30ec34_7c2a811a9981
-title: 采用混合ID解析系统（Hybrid ID）
-scope: []
-source_files: []
-depends_on: []
-related_to:
-    - path: scholar_cli

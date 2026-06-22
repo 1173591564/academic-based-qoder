@@ -277,15 +277,23 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
                 │  CLI 命令
                 ▼
 ┌───────────────────────────────────────────────────────────┐
-│              scholar/ Python CLI (35 命令)                 │
+│              scholar/ Python CLI (39 命令)                 │
 │                                                          │
-│   ┌──────────┐  ┌──────────┐  ┌──────────────────┐      │
-│   │ 论文解析  │  │ 图谱构建  │  │ RAG 向量索引      │      │
-│   │ TeX→JSON │  │ Neo4j    │  │ embedding + search│      │
-│   └────┬─────┘  └────┬─────┘  └────────┬─────────┘      │
-└────────│─────────────│─────────────────│─────────────────┘
-         │             │                 │
-         ▼             ▼                 ▼
+│   cli.py (入口) ← _shared.py (app/console/parser)        │
+│       ↓                                                   │
+│   commands/                                               │
+│     core_ops.py      ← init, scan, info, search, stats   │
+│     paper_ops.py     ← parse, parse-all, ingest, bib     │
+│     metadata_ops.py  ← year-fix, author-fix, venue-fix   │
+│     graph_ops.py     ← graph-build, cite-network          │
+│     rag_ops.py       ← rag-index, rag-search              │
+│     batch_ops.py     ← auto-notes, quality, classify      │
+│     research_ops.py  ← interests, survey, landscape        │
+│     execution_ops.py ← compile-paper, exp-*               │
+│     external_ops.py  ← arxiv-search, arxiv-download       │
+└────────┬──────────────┬─────────────────┬────────────────┘
+         │              │                 │
+         ▼              ▼                 ▼
 ┌──────────────┐ ┌───────────┐  ┌─────────────────┐
 │ PostgreSQL   │ │  Neo4j    │  │ data/papers/    │
 │ + pgvector   │ │  概念图谱  │  │ 570 篇论文源文件 │
@@ -312,17 +320,36 @@ RAG 向量索引 (智谱 embedding-2, HNSW)
 对话日志 → week-*.jsonl → 方向提取 → interests.json → 飞书推送 → 确认 → 自动入库
 ```
 
+### 输出目录（按项目隔离）
+
+`output/` 下的草稿和日志按项目名自动分目录：
+
+```
+output/
+  drafts/<project_name>/    ← survey、landscape 报告按项目隔离
+  logs/<project_name>/      ← 对话日志按项目隔离，跨 Qoder 项目采集
+  parsed/                   ← 全局共享（所有项目同一知识库）
+  notes/                    ← 全局共享
+```
+
 ---
 
 ## CLI 命令参考
 
+全局安装后，在任意目录直接使用 `scholar` 命令：
+
 ```bash
+# 全局安装（一次配置，处处可用）
+pip install -e .              # 开发模式
+# 或
+python build_exe.py           # 打包为独立 scholar.exe
+
 # 论文库
-python -m scholar stats                     # 知识库统计
-python -m scholar search "attention"        # 全文搜索
-python -m scholar list-papers --year 2024   # 按年份列出
-python -m scholar info <paper_id>           # 论文详情（支持 ULID/arXiv/DOI/slug）
-python -m scholar export-bib                # 导出 BibTeX
+scholar stats                     # 知识库统计
+scholar search "attention"        # 全文搜索
+scholar list-papers --year 2024   # 按年份列出
+scholar info <paper_id>           # 论文详情（支持 ULID/arXiv/DOI/slug）
+scholar export-bib                # 导出 BibTeX
 
 # 图谱查询（需 Neo4j 运行）
 python -m scholar graph-stats               # 图谱统计
@@ -375,17 +402,35 @@ cd test && pytest                           # 运行 121 项自动化测试
 
 data/papers/       570 篇论文（每篇：paper.pdf + source.tar.gz）
 output/
-  parsed/          555 篇结构化 JSON（核心数据源）
-  notes/           556 份阅读笔记 + 534 份质量评分 JSON
-  drafts/          综述、Related Work、报告
+  parsed/          555 篇结构化 JSON（核心数据源，全局共享）
+  notes/           556 份阅读笔记 + 534 份质量评分 JSON（全局共享）
+  drafts/<project>/  综述、Related Work、报告（按项目隔离）
   bib/             BibTeX 文件
   experiments/     实验代码复现
   digests/         研究同步报告
-  logs/            对话日志（按周轮转 week-YYYY-WNN.jsonl）
+  logs/<project>/  对话日志（按项目隔离，跨 Qoder 项目采集）
   research-interests.json  研究方向画像
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
-scholar/           Python CLI 工具集（35 命令）
+scholar/           Python CLI 工具集（39 命令）
+  _shared.py       共享对象（app, console, parser, _get_db）
+  cli.py           入口文件（导入 _shared + 命令模块）
+  commands/        9 个命令模块（按功能分组，消除循环导入）
+    core_ops.py       init, scan, info, search, list-papers, stats
+    paper_ops.py      parse, parse-all, ingest, export-bib
+    metadata_ops.py   year-fix, author-fix, venue-fix, metadata-enrich
+    graph_ops.py      graph-build, graph-stats, graph-query, cite-network, cite-resolve
+    rag_ops.py        rag-index, rag-search
+    batch_ops.py      auto-notes, quality-score, classify, bootstrap, batch-ingest, kb-update
+    research_ops.py   interests, research-sync, survey, landscape
+    execution_ops.py  compile-paper, exp-run, exp-compare, exp-setup, exp-debug, dataset-download
+    external_ops.py   arxiv-search, arxiv-download
+  config.py        双模式配置（dev → 源码目录 / frozen → ~/.scholar-studio/）
+  tex_parser.py    TeX 源码解析器
+  db.py            PostgreSQL 接口
+  graph_db.py      Neo4j 图谱操作
+  rag.py           RAG 向量检索
+  ...              其他领域模块
 scholar_mcp/       MCP Server（43 工具，Qoder 桥接层）
 test/              自动化测试套件（8 个文件，121 项测试）
   conftest.py      共享 fixtures
@@ -400,6 +445,13 @@ test/              自动化测试套件（8 个文件，121 项测试）
 infra/             Docker 编排（PostgreSQL + Neo4j）
   docker-compose.yml
   init.sql         PostgreSQL 建表脚本（papers, sections, formulas, citations, chunks）
+
+# 打包与分发
+build_exe.py       PyInstaller 一键构建脚本
+scholar.spec       PyInstaller 配置文件
+scholar_cli.py     PyInstaller 独立入口脚本
+pyproject.toml     包元数据 + console_scripts 入口点
+
 plugin/            Qoder Plugin 分发版
 ```
 
@@ -417,9 +469,10 @@ plugin/            Qoder Plugin 分发版
 | 阅读笔记 | 556 |
 | 质量评分 | 534 |
 | 领域分类 | 555 |
-| 年份覆盖 | 457/555 (82%) |
+| 年份覆盖 | 510/555 (91%) |
 | 作者覆盖 | 540/555 (97%) |
 | 摘要覆盖 | 534/555 (96%) |
+| Venue 覆盖 | 548/555 (98%) |
 
 ### 领域分布
 
@@ -522,6 +575,48 @@ plugin/
 3. 启动数据库后，所有 15 个 Skills 即可使用
 
 > **本地 IDE 用户**：不需要 Plugin，直接 clone 本仓库即可，`.qoder/skills/` 会自动加载。
+
+---
+
+## 打包为独立 EXE（PyInstaller）
+
+将 Scholar Studio 打包为独立可执行文件，无需 Python 环境即可使用：
+
+### 方式一：pip 全局安装（最简单）
+
+```powershell
+pip install -e .              # 开发模式，改代码即时生效
+scholar stats                 # 任意目录可用
+scholar search "transformer"  # 全局命令
+```
+
+### 方式二：PyInstaller 打包
+
+```powershell
+# onedir 模式（推荐，启动快）
+python build_exe.py
+# 产物：dist/scholar/scholar.exe
+
+# onefile 模式（单文件）
+python build_exe.py --onefile
+# 产物：dist/scholar.exe
+```
+
+### 首次使用
+
+```powershell
+scholar init          # 初始化 ~/.scholar-studio/ 目录结构
+# 配置 .env（API keys）
+# 启动 Docker（PostgreSQL + Neo4j）
+scholar stats         # 验证一切正常
+```
+
+### 数据目录
+
+| 运行模式 | 数据/输出位置 | 切换方式 |
+|---------|-------------|----------|
+| pip 安装（开发） | 源码目录 `output/` | 固定，不随 cwd 变化 |
+| PyInstaller 打包 | `~/.scholar-studio/output/` | `SCHOLAR_HOME` 环境变量覆盖 |
 
 ---
 

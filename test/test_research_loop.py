@@ -106,9 +106,8 @@ class TestLogAnalysis:
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
         with patch.object(rl.config, "LOGS_DIR", logs_dir):
-            path, entries = rl.get_unanalyzed_logs()
-        assert path == Path("")
-        assert entries == []
+            result = rl.get_unanalyzed_logs()
+        assert result == {}
 
     def test_get_unanalyzed_logs_returns_earliest(self, tmp_path):
         logs_dir = tmp_path / "logs"
@@ -124,7 +123,9 @@ class TestLogAnalysis:
             encoding="utf-8"
         )
         with patch.object(rl.config, "LOGS_DIR", logs_dir):
-            path, entries = rl.get_unanalyzed_logs()
+            result = rl.get_unanalyzed_logs()
+        assert len(result) == 1
+        path, entries = list(result.values())[0]
         assert "W24" in path.name
         assert len(entries) == 2
         assert entries[0]["text"] == "test1"
@@ -144,7 +145,9 @@ class TestLogAnalysis:
             encoding="utf-8"
         )
         with patch.object(rl.config, "LOGS_DIR", logs_dir):
-            path, entries = rl.get_unanalyzed_logs()
+            result = rl.get_unanalyzed_logs()
+        assert len(result) == 1
+        path, entries = list(result.values())[0]
         assert "W25" in path.name
 
     def test_get_unanalyzed_skips_malformed_lines(self, tmp_path):
@@ -157,7 +160,9 @@ class TestLogAnalysis:
             encoding="utf-8"
         )
         with patch.object(rl.config, "LOGS_DIR", logs_dir):
-            path, entries = rl.get_unanalyzed_logs()
+            result = rl.get_unanalyzed_logs()
+        assert len(result) == 1
+        path, entries = list(result.values())[0]
         assert len(entries) == 2
 
     def test_mark_week_analyzed(self, tmp_path):

@@ -86,7 +86,9 @@ class TestAdaptiveResearchLoop:
              patch.object(rl.config, "INTERESTS_FILE", interests_file):
 
             # Step 2: Read unanalyzed logs
-            path, entries = rl.get_unanalyzed_logs()
+            all_logs = rl.get_unanalyzed_logs()
+            assert len(all_logs) == 1
+            path, entries = list(all_logs.values())[0]
             assert "W25" in path.name
             assert len(entries) == 3
 
@@ -100,8 +102,8 @@ class TestAdaptiveResearchLoop:
             rl.mark_week_analyzed("2026-W25", interests_found=1, entries=3)
 
             # Verify: week no longer shows up as unanalyzed
-            path2, entries2 = rl.get_unanalyzed_logs()
-            assert path2 == Path("")
+            result2 = rl.get_unanalyzed_logs()
+            assert result2 == {}
 
         # Step 5: Sync (mocked arXiv + ingest)
         mock_dl = [{

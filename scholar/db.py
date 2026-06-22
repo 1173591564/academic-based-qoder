@@ -59,6 +59,15 @@ class Database:
         )
         return self._conn
 
+    def close(self):
+        """Close the underlying connection if any."""
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+
     @contextmanager
     def cursor(self):
         conn = self._connect()

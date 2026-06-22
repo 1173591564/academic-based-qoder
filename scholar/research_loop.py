@@ -99,61 +99,89 @@ def remove_interest(category: str) -> tuple[dict, bool]:
 # 日志分析
 # ===================================================================
 
-def get_unanalyzed_logs() -> tuple[Path, list[dict]]:
-    """找到最早一个未分析的周日志文件，返回其内容。
+def get_unanalyzed_logs() -> dict[str, tuple[Path, list[dict]]]:
+    """扫描所有项目的未分析日志，按项目分组返回。
 
     逻辑：
-    1. 扫描 output/logs/week-*.jsonl 获取所有周文件
-    2. 读取 output/logs/analyzed.json 获取已完成列表
-    3. 差集 = 未分析的周（取最早的一周）
-    4. 读取该文件所有行，解析为 dict 列表
+    1. 扫描 output/logs/ 下的子目录（每个子目录 = 一个项目）
+    2. 同时兼容旧的平面文件（output/logs/week-*.jsonl）
+    3. 对每个项目：读取 analyzed.json → 找最早未分析周 → 解析条目
+    4. 每条条目自动注入 project 字段
 
-    返回: (week_file_path, [{"ts": "...", "week": "...", "text": "..."}, ...])
-         如果没有未分析的日志，返回 (Path(""), [])
+    返回: {project_name: (week_file_path, [{"ts":..., "role":..., "text":..., "project":...}, ...])}
+         如果没有未分析的日志，返回空 dict
     """
     logs_dir = config.LOGS_DIR
-    week_files = sorted(logs_dir.glob("week-*.jsonl"))
-    if not week_files:
-        return Path(""), []
+    result: dict[str, tuple[Path, list[dict]]] = {}
 
-    # 读取已完成列表
-    analyzed_path = logs_dir / "analyzed.json"
-    analyzed = {}
-    if analyzed_path.exists():
-        try:
-            analyzed = json.loads(analyzed_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+    # 收集所有可能的日志源：子目录 + 旧的平面文件
+    project_dirs: dict[str, Path] = {}
 
-    # 找最早的未分析周
-    for wf in week_files:
-        # 从文件名提取 week_id，如 week-2026-W24.jsonl → 2026-W24
-        match = re.match(r"week-(.+)\.jsonl", wf.name)
-        if not match:
+    # 新格式：per-project subdirectories
+    for sub in sorted(logs_dir.iterdir()):
+        if sub.is_dir() and sub.name not in ('__pycache__',):
+            project_dirs[sub.name] = sub
+
+    # 旧格式：平面文件（向后兼容）
+    flat_weeks = sorted(logs_dir.glob("week-*.jsonl"))
+    if flat_weeks:
+        project_dirs["_legacy"] = logs_dir
+
+    # 对每个项目查找未分析周
+    for proj_name, proj_dir in project_dirs.items():
+        week_files = sorted(proj_dir.glob("week-*.jsonl"))
+        if not week_files:
             continue
-        week_id = match.group(1)
-        if week_id in analyzed:
-            continue
-        # 读取该周日志
-        entries = []
-        for line in wf.read_text(encoding="utf-8").strip().splitlines():
-            if not line.strip():
-                continue
+
+        # 读取已完成列表（每个项目有自己的 analyzed.json）
+        analyzed_path = proj_dir / "analyzed.json"
+        analyzed: dict = {}
+        if analyzed_path.exists():
             try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
+                analyzed = json.loads(analyzed_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # 找最早的未分析周
+        for wf in week_files:
+            match = re.match(r"week-(.+)\.jsonl", wf.name)
+            if not match:
                 continue
-        return wf, entries
+            week_id = match.group(1)
+            if week_id in analyzed:
+                continue
+            # 读取该周日志
+            entries: list[dict] = []
+            for line in wf.read_text(encoding="utf-8").strip().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    # 注入项目名（如果条目本身没有）
+                    if "project" not in entry:
+                        entry["project"] = proj_name
+                    entries.append(entry)
+                except json.JSONDecodeError:
+                    continue
+            if entries:
+                result[proj_name] = (wf, entries)
+            break  # 每个项目只取最早一个未分析周
 
-    return Path(""), []
+    return result
 
 
-def mark_week_analyzed(week_id: str, interests_found: int, entries: int) -> None:
-    """标记某周日志已完成分析，写入 analyzed.json。
+def mark_week_analyzed(week_id: str, interests_found: int, entries: int,
+                        project: str = "") -> None:
+    """标记某周日志已完成分析，写入对应项目的 analyzed.json。
 
     week_id: ISO 周编号，如 "2026-W24"
+    project: 项目名（空字符串 = 旧格式平面目录）
     """
-    analyzed_path = config.LOGS_DIR / "analyzed.json"
+    if project:
+        analyzed_dir = config.LOGS_DIR / config.sanitize_project_name(project)
+    else:
+        analyzed_dir = config.LOGS_DIR
+    analyzed_path = analyzed_dir / "analyzed.json"
     analyzed = {}
     if analyzed_path.exists():
         try:

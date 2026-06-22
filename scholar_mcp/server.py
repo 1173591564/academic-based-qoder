@@ -456,7 +456,7 @@ def scholar_metadata_enrich(apply: bool = False, limit: int = 0) -> str:
 # ─── Research Loop ──────────────────────────────────────────────
 
 @mcp.tool()
-def scholar_interests(action: str = "list", keywords: str = "", category: str = "general", max_results: int = 10, week: str = "", interests_found: int = 0) -> str:
+def scholar_interests(action: str = "list", keywords: str = "", category: str = "general", max_results: int = 10, week: str = "", interests_found: int = 0, project: str = "") -> str:
     """Manage research directions and analyze conversation logs.
 
     Args:
@@ -466,6 +466,7 @@ def scholar_interests(action: str = "list", keywords: str = "", category: str = 
         max_results: Max results per search (for add, default 10)
         week: Week ID like 2026-W24 (for mark-analyzed)
         interests_found: Number of interests found (for mark-analyzed)
+        project: Project name (for mark-analyzed, empty = current project)
     """
     args = ["interests", action]
     if keywords:
@@ -478,6 +479,8 @@ def scholar_interests(action: str = "list", keywords: str = "", category: str = 
         args.extend(["--week", week])
     if action == "mark-analyzed":
         args.extend(["--found", str(interests_found)])
+    if project:
+        args.extend(["--project", project])
     return _run_scholar(*args, timeout=30)
 
 
