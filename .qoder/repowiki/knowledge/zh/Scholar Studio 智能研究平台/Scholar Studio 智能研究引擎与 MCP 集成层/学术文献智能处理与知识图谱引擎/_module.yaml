@@ -1,0 +1,21 @@
+schema_version: 1
+module_path: scholar_app/scholar_core_logic
+title: 学术文献智能处理与知识图谱引擎
+scope:
+    - scholar/_shared.py
+    - scholar/auto_notes.py
+    - scholar/cite_resolve.py
+    - scholar/classify.py
+    - scholar/db.py
+    - scholar/graph_db.py
+    - scholar/id_resolver.py
+    - scholar/kb_update.py
+    - scholar/metadata_enrich.py
+    - scholar/quality.py
+    - scholar/rag.py
+    - scholar/research_loop.py
+    - scholar/tex_parser.py
+    - scholar/year_fix.py
+source_files: []
+depends_on: []
+related_to: []

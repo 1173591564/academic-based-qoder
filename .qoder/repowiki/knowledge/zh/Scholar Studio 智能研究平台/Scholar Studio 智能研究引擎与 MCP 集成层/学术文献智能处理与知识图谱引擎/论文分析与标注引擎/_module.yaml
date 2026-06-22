@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: scholar_app/scholar_core_logic/analysis_and_annotation
+title: 论文分析与标注引擎
+scope:
+    - scholar/classify.py
+    - scholar/quality.py
+    - scholar/auto_notes.py
+source_files: []
+depends_on: []
+related_to: []

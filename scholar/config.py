@@ -34,6 +34,23 @@ def _resolve_scholar_home() -> Path:
 SCHOLAR_HOME = _resolve_scholar_home()
 PROJECT_ROOT = SCHOLAR_HOME
 
+
+def _resolve_workspace_dir() -> Path:
+    """Determine workspace directory (per-project output root).
+
+    Priority: SCHOLAR_WORKSPACE env var > frozen mode cwd > SCHOLAR_HOME
+    In dev mode, equals SCHOLAR_HOME (zero behavior change).
+    """
+    ws = os.getenv("SCHOLAR_WORKSPACE")
+    if ws:
+        return Path(ws)
+    if getattr(sys, 'frozen', False):
+        return Path.cwd()
+    return SCHOLAR_HOME
+
+
+WORKSPACE_DIR = _resolve_workspace_dir()
+
 # 加载 .env（从 SCHOLAR_HOME 目录）
 try:
     from dotenv import load_dotenv
@@ -78,14 +95,14 @@ LEAN_DIR = PROJECT_ROOT / "LEAN"
 # Output directories (all generated artifacts)
 OUTPUT_DIR = PROJECT_ROOT / "output"
 PARSED_DIR = OUTPUT_DIR / "parsed"
-NOTES_DIR = OUTPUT_DIR / "notes"
-DRAFTS_DIR = OUTPUT_DIR / "drafts"
+NOTES_DIR = WORKSPACE_DIR / "output" / "notes"
+DRAFTS_DIR = WORKSPACE_DIR / "output" / "drafts"
 BIB_DIR = OUTPUT_DIR / "bib"
 EXPERIMENTS_DIR = OUTPUT_DIR / "experiments"
 DATASETS_DIR = OUTPUT_DIR / "datasets"
 PDFS_DIR = OUTPUT_DIR / "pdfs"
 DIGESTS_DIR = OUTPUT_DIR / "digests"
-LOGS_DIR = OUTPUT_DIR / "logs"
+LOGS_DIR = WORKSPACE_DIR / "output" / "logs"
 INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 
 # Ensure output directories exist (parents=True for fresh-clone safety)
@@ -157,6 +174,35 @@ def init_scholar_home() -> dict:
         "created": created,
         "already_exists": len(created) == 0,
         "env_example": str(env_example),
+    }
+
+
+def init_workspace() -> dict:
+    """Initialize workspace directory structure (per-workspace outputs).
+
+    Creates WORKSPACE_DIR/output/{drafts,notes,logs}.
+    Shared knowledge base (parsed/) stays in SCHOLAR_HOME.
+    """
+    created: list[str] = []
+    ws = WORKSPACE_DIR
+    dirs_to_create = [
+        ws / "output" / "drafts",
+        ws / "output" / "notes",
+        ws / "output" / "logs",
+    ]
+    for d in dirs_to_create:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(str(d))
+    return {
+        "workspace": str(ws),
+        "scholar_home": str(SCHOLAR_HOME),
+        "created": created,
+        "already_exists": len(created) == 0,
+        "parsed_dir": str(PARSED_DIR),
+        "drafts_dir": str(DRAFTS_DIR),
+        "notes_dir": str(NOTES_DIR),
+        "logs_dir": str(LOGS_DIR),
     }
 
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索

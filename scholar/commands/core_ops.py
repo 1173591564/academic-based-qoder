@@ -70,6 +70,42 @@ def init():
 
 
 # ===================================================================
+# init-workspace: Initialize a workspace directory
+# ===================================================================
+@app.command(name="init-workspace")
+def init_workspace_cmd():
+    """Initialize current directory as a Scholar Studio workspace.
+
+    Creates output/drafts/, output/notes/, output/logs/ in the current workspace.
+    Shared knowledge base (parsed/) remains in SCHOLAR_HOME.
+    Run this in each project directory after 'scholar init'.
+    """
+    console.print("[cyan]Initializing workspace...[/]\n")
+
+    result = config.init_workspace()
+    ws = result["workspace"]
+    created = result["created"]
+
+    if result["already_exists"]:
+        console.print("[green][OK][/green] Workspace already initialized at [bold]{0}[/bold]".format(ws))
+    else:
+        console.print("[green][OK][/green] Created workspace directories:")
+        for d in created:
+            console.print("  [dim]+[/dim] {0}".format(d))
+
+    console.print("\n[bold]Dual-copy layout:[/bold]")
+    console.print("  [dim]Shared KB:[/dim]  {0}".format(result["scholar_home"]))
+    console.print("    parsed/  -> {0}".format(result["parsed_dir"]))
+    console.print("  [dim]Workspace:[/dim] {0}".format(ws))
+    console.print("    drafts/  -> {0}".format(result["drafts_dir"]))
+    console.print("    notes/   -> {0}".format(result["notes_dir"]))
+    console.print("    logs/    -> {0}".format(result["logs_dir"]))
+
+    mode = "frozen (.exe)" if config.IS_FROZEN else "development (source)"
+    console.print("\n[dim]Mode: {0}[/dim]".format(mode))
+
+
+# ===================================================================
 # scan: Scan papers directory and show status
 # ===================================================================
 @app.command()

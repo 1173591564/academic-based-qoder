@@ -5,5 +5,4 @@ scope:
     - LEAN/
 source_files: []
 depends_on: []
-related_to:
-    - path: scholar_app
+related_to: []

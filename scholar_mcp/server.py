@@ -14,6 +14,9 @@ from mcp.server.fastmcp import FastMCP
 # Project root: parent of scholar_mcp/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Use scholar.config for consistent path resolution across dev/frozen/workspace modes
+from scholar import config as scholar_config
+
 mcp = FastMCP(
     "Scholar Studio",
     instructions="Academic research toolkit with 445+ AI papers, citation graph, Lean4 verification, Hybrid ID, kb-update, and execution layer.",
@@ -28,7 +31,7 @@ def _run_scholar(*args: str, timeout: int = 120) -> str:
         capture_output=True,
         text=True,
         timeout=timeout,
-        cwd=str(PROJECT_ROOT),
+        cwd=str(scholar_config.WORKSPACE_DIR),
     )
     output = result.stdout
     if result.returncode != 0 and result.stderr:
@@ -346,7 +349,7 @@ def read_auto_note(paper_id: str) -> str:
     """
     from scholar.id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
-    path = PROJECT_ROOT / "output" / "notes" / f"{ulid}.md"
+    path = scholar_config.NOTES_DIR / f"{ulid}.md"
     if not path.exists():
         return f"Note for {paper_id} not found. Run: python -m scholar auto-notes {paper_id}"
     return path.read_text(encoding="utf-8")
@@ -361,7 +364,7 @@ def read_quality_score(paper_id: str) -> str:
     """
     from scholar.id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
-    path = PROJECT_ROOT / "output" / "notes" / f"{ulid}-quality.json"
+    path = scholar_config.NOTES_DIR / f"{ulid}-quality.json"
     if not path.exists():
         return f"Quality score for {paper_id} not found. Run: python -m scholar quality-score {paper_id}"
     return path.read_text(encoding="utf-8")
@@ -378,7 +381,7 @@ def read_parsed_paper(paper_id: str) -> str:
     """
     from scholar.id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
-    path = PROJECT_ROOT / "output" / "parsed" / f"{ulid}.json"
+    path = scholar_config.PARSED_DIR / f"{ulid}.json"
     if not path.exists():
         return f"Paper {paper_id} not found or not yet parsed."
     return path.read_text(encoding="utf-8")
@@ -590,7 +593,7 @@ def scholar_read_experiment_report(paper_id: str) -> str:
     """
     from scholar.id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
-    exp_dir = PROJECT_ROOT / "output" / "experiments" / ulid
+    exp_dir = scholar_config.EXPERIMENTS_DIR / ulid
     log_path = exp_dir / "run_log.txt"
     results_path = exp_dir / "results.json"
 
@@ -614,12 +617,12 @@ def scholar_read_compile_log(paper_id: str) -> str:
     from scholar.id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
     # Check common compile output locations
-    for subdir in ["pdfs", "drafts"]:
-        log_path = PROJECT_ROOT / "output" / subdir / f"{ulid}.log"
+    for log_path in [scholar_config.PDFS_DIR / f"{ulid}.log",
+                     scholar_config.DRAFTS_DIR / f"{ulid}.log"]:
         if log_path.exists():
             return log_path.read_text(encoding="utf-8")
     # Also check experiments dir
-    log_path = PROJECT_ROOT / "output" / "experiments" / ulid / "compile.log"
+    log_path = scholar_config.EXPERIMENTS_DIR / ulid / "compile.log"
     if log_path.exists():
         return log_path.read_text(encoding="utf-8")
     return f"No compile log found for {paper_id}"

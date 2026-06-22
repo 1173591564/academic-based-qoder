@@ -114,10 +114,15 @@ if ($papersCount -eq 0) {
     Write-Host "  $papersCount papers loaded. You can start working:" -ForegroundColor Cyan
 }
 Write-Host ""
+Write-Host "Phase 2 — Workspace initialization:" -ForegroundColor Yellow
+Write-Host "  To start working in a project directory:" -ForegroundColor Cyan
+Write-Host "    cd <your-project>" -ForegroundColor White
+Write-Host "    scholar init-workspace" -ForegroundColor White
+Write-Host ""
 Write-Host "Common commands:" -ForegroundColor DarkGray
-Write-Host "  python -m scholar stats              # KB statistics"
-Write-Host "  python -m scholar search 'query'     # Full-text search"
-Write-Host "  python -m scholar kb-update --query 'topic' --max 5  # Add new papers"
+Write-Host "  scholar stats              # KB statistics"
+Write-Host "  scholar search 'query'     # Full-text search"
+Write-Host "  scholar kb-update --query 'topic' --max 5  # Add new papers"
 Write-Host ""
 Write-Host "In Qoder IDE, just type naturally:" -ForegroundColor DarkGray
 Write-Host "  调研 Transformer / 精读 2401.04088 / 维护知识库" -ForegroundColor White

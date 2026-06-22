@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: scholar_app/scholar_mcp_server
+title: Scholar Studio MCP 服务层
+scope:
+    - scholar_mcp/
+source_files: []
+depends_on: []
+related_to: []
