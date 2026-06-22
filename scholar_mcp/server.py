@@ -34,6 +34,14 @@ def _resolve(paper_id: str) -> str:
     return resolve_id(paper_id) or paper_id
 
 
+def _load_parsed(paper_id: str) -> dict | None:
+    """Load parsed JSON with LRU cache (if SharedState available)."""
+    state = get_state()
+    if state:
+        return state.get_parsed(paper_id)
+    return dbmod.load_parsed(paper_id)
+
+
 def _run_scholar(*args: str, timeout: int = 120) -> str:
     """Run a scholar CLI command and return stdout."""
     cmd = [sys.executable, "-m", "scholar"] + list(args)
@@ -97,7 +105,7 @@ def scholar_info(paper_id: str) -> str:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
     ulid = _resolve(paper_id)
-    data = dbmod.load_parsed(ulid)
+    data = _load_parsed(ulid)
     if data is None:
         return f"Paper not parsed yet. Run: scholar parse {paper_id}"
     lines = [
@@ -125,7 +133,7 @@ def scholar_search(query: str) -> str:
     keyword_lower = query.lower()
     results = []
     for paper_id in dbmod.list_parsed():
-        data = dbmod.load_parsed(paper_id)
+        data = _load_parsed(paper_id)
         if not data:
             continue
         score = 0
@@ -159,7 +167,7 @@ def scholar_list_papers(year: int | None = None) -> str:
     """
     papers = []
     for paper_id in dbmod.list_parsed():
-        data = dbmod.load_parsed(paper_id)
+        data = _load_parsed(paper_id)
         if data:
             if year and data.get("year") != year:
                 continue
@@ -187,7 +195,7 @@ def scholar_stats() -> str:
     years = {}
     venues = {}
     for pid in parsed_ids:
-        data = dbmod.load_parsed(pid)
+        data = _load_parsed(pid)
         if not data:
             continue
         y = data.get("year")
@@ -238,7 +246,7 @@ def scholar_export_bib(output: str = "output/bib/references.bib") -> str:
     """
     entries = []
     for paper_id in dbmod.list_parsed():
-        data = dbmod.load_parsed(paper_id)
+        data = _load_parsed(paper_id)
         if not data:
             continue
         title = data.get("title", "Untitled")
@@ -265,18 +273,21 @@ def scholar_year_fix(apply: bool = False) -> str:
     Args:
         apply: If True, write changes to JSON files. If False, dry-run preview.
     """
-    from scholar import year_fix as yf
-    stats, updates = yf.complete_years(dry_run=not apply)
-    lines = [
-        f"Lean4 papers: {stats['lean_papers']}",
-        f"Matched: {stats['matched']}",
-        f"{'Filled' if apply else 'Would fill'}: {stats['filled']}",
-        f"Still missing: {stats['still_missing']}",
-    ]
-    if stats['still_missing'] > 0:
-        arxiv_result = yf.complete_years_arxiv(dry_run=not apply, limit=stats['still_missing'])
-        lines.append(f"arXiv fallback: queried={arxiv_result['queried']}, filled={arxiv_result['filled']}")
-    return "\n".join(lines)
+    try:
+        from scholar import year_fix as yf
+        stats, updates = yf.complete_years(dry_run=not apply)
+        lines = [
+            f"Lean4 papers: {stats['lean_papers']}",
+            f"Matched: {stats['matched']}",
+            f"{'Filled' if apply else 'Would fill'}: {stats['filled']}",
+            f"Still missing: {stats['still_missing']}",
+        ]
+        if stats['still_missing'] > 0:
+            arxiv_result = yf.complete_years_arxiv(dry_run=not apply, limit=stats['still_missing'])
+            lines.append(f"arXiv fallback: queried={arxiv_result['queried']}, filled={arxiv_result['filled']}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Year fix failed: {e}"
 
 
 # ─── Graph & Network ────────────────────────────────────────────
@@ -299,11 +310,13 @@ def scholar_graph_query(concept: str) -> str:
     try:
         from scholar import graph_db as gdb_mod
         gdb = gdb_mod.GraphDB()
-        if not gdb.available:
-            return "Neo4j not available. Run: docker compose up -d neo4j"
-        papers = gdb_mod.find_papers_by_concept(gdb, concept)
-        related = gdb_mod.find_related_concepts(gdb, concept)
-        gdb.close()
+        try:
+            if not gdb.available:
+                return "Neo4j not available. Run: docker compose up -d neo4j"
+            papers = gdb_mod.find_papers_by_concept(gdb, concept)
+            related = gdb_mod.find_related_concepts(gdb, concept)
+        finally:
+            gdb.close()
         lines = [f"Papers with concept: {concept} ({len(papers)})"]
         for p in papers[:20]:
             lines.append(f"  {(p.get('title') or 'N/A')[:50]}  {p.get('year', '')}  {p.get('venue', '') or ''}")
@@ -326,32 +339,33 @@ def scholar_cite_network(paper_id: str | None = None) -> str:
     try:
         from scholar import graph_db as gdb_mod
         gdb = gdb_mod.GraphDB()
-        if not gdb.available:
-            return "Neo4j not available. Run: docker compose up -d neo4j"
-        if paper_id:
-            ulid = _resolve(paper_id)
-            forward = gdb_mod.get_forward_citations(gdb, ulid)
-            backward = gdb_mod.get_backward_citations(gdb, ulid)
-            lines = [f"Forward citations ({len(forward)}):"]
-            for p in forward[:10]:
-                lines.append(f"  -> [{p.get('year', '?')}] {(p.get('title') or 'N/A')[:50]}")
-            lines.append(f"\nBackward citations ({len(backward)}):")
-            for p in backward[:10]:
-                lines.append(f"  <- [{p.get('year', '?')}] {(p.get('title') or 'N/A')[:50]}")
+        try:
+            if not gdb.available:
+                return "Neo4j not available. Run: docker compose up -d neo4j"
+            if paper_id:
+                ulid = _resolve(paper_id)
+                forward = gdb_mod.get_forward_citations(gdb, ulid)
+                backward = gdb_mod.get_backward_citations(gdb, ulid)
+                lines = [f"Forward citations ({len(forward)}):"]
+                for p in forward[:10]:
+                    lines.append(f"  -> [{p.get('year', '?')}] {(p.get('title') or 'N/A')[:50]}")
+                lines.append(f"\nBackward citations ({len(backward)}):")
+                for p in backward[:10]:
+                    lines.append(f"  <- [{p.get('year', '?')}] {(p.get('title') or 'N/A')[:50]}")
+                return "\n".join(lines)
+            else:
+                stats = gdb_mod.get_citation_stats(gdb)
+                lines = [
+                    f"Total papers in graph: {stats['total_papers']}",
+                    f"Total citation edges:  {stats['total_citations']}",
+                ]
+                if stats.get("most_cited"):
+                    lines.append("\nMost cited papers:")
+                    for p in stats["most_cited"][:10]:
+                        lines.append(f"  {(p.get('title') or p.get('ulid', ''))[:50]}  cited by {p.get('cited_by', 0)}")
+                return "\n".join(lines)
+        finally:
             gdb.close()
-            return "\n".join(lines)
-        else:
-            stats = gdb_mod.get_citation_stats(gdb)
-            gdb.close()
-            lines = [
-                f"Total papers in graph: {stats['total_papers']}",
-                f"Total citation edges:  {stats['total_citations']}",
-            ]
-            if stats.get("most_cited"):
-                lines.append("\nMost cited papers:")
-                for p in stats["most_cited"][:10]:
-                    lines.append(f"  {(p.get('title') or p.get('ulid', ''))[:50]}  cited by {p.get('cited_by', 0)}")
-            return "\n".join(lines)
     except Exception as e:
         return f"Citation network analysis failed: {e}"
 
@@ -374,19 +388,22 @@ def scholar_rag_search(query: str, hybrid: bool = False) -> str:
         query: Natural language search query
         hybrid: If True, use hybrid search (vector + BM25 + RRF fusion)
     """
-    from scholar import rag
-    if hybrid:
-        results = rag.search_rag_hybrid(query, limit=10)
-        title = f"Hybrid Search: '{query}' ({len(results)} results)"
-    else:
-        results = rag.search_rag(query, limit=10)
-        title = f"RAG Search: '{query}' ({len(results)} results)"
-    if not results:
-        return f"No RAG results for '{query}'. Build index first: scholar rag-index"
-    lines = [title]
-    for r in results:
-        lines.append(f"  {r.get('paper_id', '')}  {(r.get('section') or '')[:15]}  {(r.get('content') or '')[:60]}  sim={r.get('similarity', 0):.3f}")
-    return "\n".join(lines)
+    try:
+        from scholar import rag
+        if hybrid:
+            results = rag.search_rag_hybrid(query, limit=10)
+            title = f"Hybrid Search: '{query}' ({len(results)} results)"
+        else:
+            results = rag.search_rag(query, limit=10)
+            title = f"RAG Search: '{query}' ({len(results)} results)"
+        if not results:
+            return f"No RAG results for '{query}'. Build index first: scholar rag-index"
+        lines = [title]
+        for r in results:
+            lines.append(f"  {r.get('paper_id', '')}  {(r.get('section') or '')[:15]}  {(r.get('content') or '')[:60]}  sim={r.get('similarity', 0):.3f}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"RAG search failed: {e}"
 
 
 # ─── External ───────────────────────────────────────────────────
@@ -430,25 +447,27 @@ def scholar_graph_stats() -> str:
     try:
         from scholar import graph_db as gdb_mod
         gdb = gdb_mod.GraphDB()
-        if not gdb.available:
-            return "Neo4j not available. Run: docker compose up -d neo4j"
-        paper_count = gdb.run("MATCH (p:Paper) RETURN count(p) AS c")[0]["c"]
-        innov_count = gdb.run("MATCH (i:Innovation) RETURN count(i) AS c")[0]["c"]
-        cites_count = gdb.run("MATCH ()-[c:CITES]->() RETURN count(c) AS c")[0]["c"]
-        concept_count = gdb.run("MATCH ()-[h:HAS_CONCEPT]->() RETURN count(h) AS c")[0]["c"]
-        lines = [
-            f"Paper nodes:      {paper_count}",
-            f"Innovation nodes: {innov_count}",
-            f"CITES edges:      {cites_count}",
-            f"HAS_CONCEPT:      {concept_count}",
-        ]
-        top_cited = gdb.run("MATCH (p:Paper) WHERE p.in_degree > 0 RETURN p.title AS title, p.in_degree AS score ORDER BY score DESC LIMIT 10")
-        if top_cited:
-            lines.append("\nTop cited papers:")
-            for r in top_cited:
-                lines.append(f"  {(r.get('title') or 'N/A')[:60]}  cited by {r.get('score', 0)}")
-        gdb.close()
-        return "\n".join(lines)
+        try:
+            if not gdb.available:
+                return "Neo4j not available. Run: docker compose up -d neo4j"
+            paper_count = gdb.run("MATCH (p:Paper) RETURN count(p) AS c")[0]["c"]
+            innov_count = gdb.run("MATCH (i:Innovation) RETURN count(i) AS c")[0]["c"]
+            cites_count = gdb.run("MATCH ()-[c:CITES]->() RETURN count(c) AS c")[0]["c"]
+            concept_count = gdb.run("MATCH ()-[h:HAS_CONCEPT]->() RETURN count(h) AS c")[0]["c"]
+            lines = [
+                f"Paper nodes:      {paper_count}",
+                f"Innovation nodes: {innov_count}",
+                f"CITES edges:      {cites_count}",
+                f"HAS_CONCEPT:      {concept_count}",
+            ]
+            top_cited = gdb.run("MATCH (p:Paper) WHERE p.in_degree > 0 RETURN p.title AS title, p.in_degree AS score ORDER BY score DESC LIMIT 10")
+            if top_cited:
+                lines.append("\nTop cited papers:")
+                for r in top_cited:
+                    lines.append(f"  {(r.get('title') or 'N/A')[:60]}  cited by {r.get('score', 0)}")
+            return "\n".join(lines)
+        finally:
+            gdb.close()
     except Exception as e:
         return f"Graph stats failed: {e}"
 
@@ -500,7 +519,7 @@ def scholar_venue_fix(apply: bool = False) -> str:
             data["venue"] = venue
             json_file.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     total = fixed_arxiv + fixed_preprint
-    return f"{'Fixed' if apply else 'Would fix'}: {total} (arXiv: {fixed_arxiv}, Preprint: {fixed_preprint})"
+    return f"{'Fixed' if apply else 'Would fix'}: {total} (arXiv: {fixed_arxiv}, Preprint: {fixed_preprint}, Skipped: {skipped})"
 
 
 @mcp.tool()
@@ -621,8 +640,7 @@ def read_auto_note(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    from scholar.id_resolver import resolve_id
-    ulid = resolve_id(paper_id) or paper_id
+    ulid = _resolve(paper_id)
     path = scholar_config.NOTES_DIR / f"{ulid}.md"
     if not path.exists():
         return f"Note for {paper_id} not found. Run: python -m scholar auto-notes {paper_id}"
@@ -636,8 +654,7 @@ def read_quality_score(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    from scholar.id_resolver import resolve_id
-    ulid = resolve_id(paper_id) or paper_id
+    ulid = _resolve(paper_id)
     path = scholar_config.NOTES_DIR / f"{ulid}-quality.json"
     if not path.exists():
         return f"Quality score for {paper_id} not found. Run: python -m scholar quality-score {paper_id}"
@@ -653,8 +670,7 @@ def read_parsed_paper(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    from scholar.id_resolver import resolve_id
-    ulid = resolve_id(paper_id) or paper_id
+    ulid = _resolve(paper_id)
     path = scholar_config.PARSED_DIR / f"{ulid}.json"
     if not path.exists():
         return f"Paper {paper_id} not found or not yet parsed."
@@ -746,26 +762,7 @@ def scholar_interests(action: str = "list", keywords: str = "", category: str = 
         project: Project name (for mark-analyzed, empty = current project)
     """
     from scholar import research_loop as rl
-    if action == "list":
-        data = rl.load_interests()
-        if not data["interests"]:
-            return "No interests configured. Use: interests add --keywords \"...\" --category \"...\""
-        lines = [f"Research Interests ({len(data['interests'])} directions):"]
-        for i, item in enumerate(data["interests"], 1):
-            lines.append(f"  {i}. [{item['category']}] {item['keywords']}")
-            lines.append(f"     Searches: {item.get('search_count', 0)} | Last: {item.get('last_searched', 'never')}")
-        return "\n".join(lines)
-    elif action == "add":
-        if not keywords:
-            return "Error: keywords required for add action"
-        rl.add_interest(keywords, category, max_results)
-        return f"Added direction [{category}]: {keywords}"
-    elif action == "remove":
-        _, removed = rl.remove_interest(category)
-        if removed:
-            return f"Removed direction [{category}]"
-        return f"Direction [{category}] not found"
-    elif action in ("logs", "mark-analyzed"):
+    if action in ("logs", "mark-analyzed"):
         # Complex operations — delegate to CLI
         args = ["interests", action]
         if week:
@@ -775,6 +772,28 @@ def scholar_interests(action: str = "list", keywords: str = "", category: str = 
         if project:
             args.extend(["--project", project])
         return _run_scholar(*args, timeout=30)
+    try:
+        if action == "list":
+            data = rl.load_interests()
+            if not data["interests"]:
+                return "No interests configured. Use: interests add --keywords \"...\" --category \"...\""
+            lines = [f"Research Interests ({len(data['interests'])} directions):"]
+            for i, item in enumerate(data["interests"], 1):
+                lines.append(f"  {i}. [{item['category']}] {item['keywords']}")
+                lines.append(f"     Searches: {item.get('search_count', 0)} | Last: {item.get('last_searched', 'never')}")
+            return "\n".join(lines)
+        elif action == "add":
+            if not keywords:
+                return "Error: keywords required for add action"
+            rl.add_interest(keywords, category, max_results)
+            return f"Added direction [{category}]: {keywords}"
+        elif action == "remove":
+            _, removed = rl.remove_interest(category)
+            if removed:
+                return f"Removed direction [{category}]"
+            return f"Direction [{category}] not found"
+    except Exception as e:
+        return f"Interests {action} failed: {e}"
     return f"Unknown action: {action}. Available: list, add, remove, logs, mark-analyzed"
 
 
@@ -882,8 +901,7 @@ def scholar_read_experiment_report(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    from scholar.id_resolver import resolve_id
-    ulid = resolve_id(paper_id) or paper_id
+    ulid = _resolve(paper_id)
     exp_dir = scholar_config.EXPERIMENTS_DIR / ulid
     log_path = exp_dir / "run_log.txt"
     results_path = exp_dir / "results.json"
@@ -905,8 +923,7 @@ def scholar_read_compile_log(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    from scholar.id_resolver import resolve_id
-    ulid = resolve_id(paper_id) or paper_id
+    ulid = _resolve(paper_id)
     # Check common compile output locations
     for log_path in [scholar_config.PDFS_DIR / f"{ulid}.log",
                      scholar_config.DRAFTS_DIR / f"{ulid}.log"]:

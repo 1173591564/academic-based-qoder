@@ -11,6 +11,7 @@ Usage (MCP server):
     state = get_state()  # use in tool handlers
 """
 import threading
+from collections import OrderedDict
 from typing import Optional
 
 from . import config
@@ -29,7 +30,7 @@ class SharedState:
         self._lock = threading.Lock()
         self._pool = None            # psycopg2 ThreadedConnectionPool
         self._id_resolver = None     # IDResolver cache (279ms one-time)
-        self._parsed_cache: dict[str, dict] = {}
+        self._parsed_cache: OrderedDict[str, dict] = OrderedDict()
         self._parsed_cache_max = 100
 
     # ── Database ──────────────────────────────────────────────
@@ -62,23 +63,27 @@ class SharedState:
     # ── Parsed JSON Cache ─────────────────────────────────────
 
     def get_parsed(self, paper_id: str) -> Optional[dict]:
-        """LRU-cached parsed JSON reader."""
-        if paper_id in self._parsed_cache:
-            return self._parsed_cache[paper_id]
+        """LRU-cached parsed JSON reader (thread-safe)."""
+        with self._lock:
+            if paper_id in self._parsed_cache:
+                self._parsed_cache.move_to_end(paper_id)
+                return self._parsed_cache[paper_id]
         data = dbmod.load_parsed(paper_id)
         if data:
-            if len(self._parsed_cache) >= self._parsed_cache_max:
-                # Evict oldest entry (simple FIFO, good enough)
-                self._parsed_cache.pop(next(iter(self._parsed_cache)))
-            self._parsed_cache[paper_id] = data
+            with self._lock:
+                if paper_id not in self._parsed_cache:
+                    if len(self._parsed_cache) >= self._parsed_cache_max:
+                        self._parsed_cache.popitem(last=False)
+                    self._parsed_cache[paper_id] = data
         return data
 
     def invalidate_parsed(self, paper_id: str = None):
-        """Invalidate cache for one paper or all."""
-        if paper_id:
-            self._parsed_cache.pop(paper_id, None)
-        else:
-            self._parsed_cache.clear()
+        """Invalidate cache for one paper or all (thread-safe)."""
+        with self._lock:
+            if paper_id:
+                self._parsed_cache.pop(paper_id, None)
+            else:
+                self._parsed_cache.clear()
 
     # ── Connection Pool ───────────────────────────────────────
 

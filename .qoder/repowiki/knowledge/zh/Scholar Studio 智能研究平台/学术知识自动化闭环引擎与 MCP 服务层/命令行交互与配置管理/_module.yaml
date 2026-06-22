@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: scholar_app/scholar_cli_interface
-title: 学术研究工作流 CLI 入口与配置管理
+title: 命令行交互与配置管理
 scope:
     - scholar/cli.py
     - scholar/__main__.py

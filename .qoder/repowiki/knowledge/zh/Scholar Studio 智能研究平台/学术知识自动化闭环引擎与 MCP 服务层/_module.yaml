@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: scholar_app
-title: 学术智能研究平台与 MCP 服务集成
+title: 学术知识自动化闭环引擎与 MCP 服务层
 scope:
     - scholar/
     - scholar_mcp/

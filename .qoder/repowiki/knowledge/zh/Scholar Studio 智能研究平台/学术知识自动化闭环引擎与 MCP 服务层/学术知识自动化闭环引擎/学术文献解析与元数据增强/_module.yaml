@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: scholar_app/scholar_core_logic/parsing_and_resolution
+title: 学术文献解析与元数据增强
+scope:
+    - scholar/tex_parser.py
+    - scholar/cite_resolve.py
+    - scholar/id_resolver.py
+    - scholar/year_fix.py
+    - scholar/metadata_enrich.py
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar_app/scholar_core_logic/analysis_and_annotation

@@ -81,16 +81,21 @@ class Database:
         if self._pool is not None:
             # Pool mode: borrow/return connection per cursor
             conn = self._pool.getconn()
-            cur = conn.cursor()
             try:
-                yield cur
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
+                cur = conn.cursor()
+                try:
+                    yield cur
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+                finally:
+                    cur.close()
             finally:
-                cur.close()
-                self._pool.putconn(conn)
+                try:
+                    self._pool.putconn(conn)
+                except Exception:
+                    pass  # pool may be closed; suppress secondary exception
         else:
             # Single-connection mode (CLI)
             conn = self._connect()
