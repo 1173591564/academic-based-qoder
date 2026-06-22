@@ -3,16 +3,22 @@ schema_version: 1
 locale: zh-CN
 branch: dev
 nodes_managed: true
-exported_at: "2026-06-22T09:50:58Z"
+exported_at: "2026-06-22T13:45:59Z"
 modules:
     "":
-        dir_name: Scholar Studio 智能研究平台
-        title: Scholar Studio 智能研究平台
-        scope: []
-        source_files: []
-        children:
-            - lean_project
-            - scholar_app
+        dir_name: Scholar Studio 智能研究平台核心 CLI
+        title: Scholar Studio 智能研究平台核心 CLI
+        scope:
+            - '**'
+        source_files:
+            - scholar/_shared.py
+            - scholar/db.py
+            - scholar_mcp/server.py
+            - scholar/commands/paper_ops.py
+            - scholar/commands/execution_ops.py
+            - scholar/commands/graph_ops.py
+            - scholar/commands/batch_ops.py
+        children: []
         depends_on: []
         related_to: []
     build_system:
@@ -33,21 +39,19 @@ modules:
         depends_on: []
         related_to: []
     configuration_system:
-        dir_name: 配置系统：基于环境变量与双模式路径解析的集中式管理
-        title: 配置系统：基于环境变量与双模式路径解析的集中式管理
+        dir_name: 基于环境变量与双模式路径解析的集中式配置管理
+        title: 基于环境变量与双模式路径解析的集中式配置管理
         scope: []
         source_files:
             - scholar/config.py
             - .env.example
             - infra/docker-compose.yml
             - pyproject.toml
-            - scholar/db.py
-            - scholar/rag.py
         children: []
         depends_on: []
         related_to: []
     dependency_management:
-        dir_name: 混合依赖管理体系：Python (pip_setuptools) 与 Lean4 (Lake)
+        dir_name: 混合依赖管理体系：Python (pip_setuptools) 与 Lean4 (Lake)_2
         title: 混合依赖管理体系：Python (pip/setuptools) 与 Lean4 (Lake)
         scope: []
         source_files:
@@ -61,17 +65,18 @@ modules:
         depends_on: []
         related_to: []
     error_handling:
-        dir_name: 错误处理机制：基于 Typer CLI 的防御性编程与优雅降级
-        title: 错误处理机制：基于 Typer CLI 的防御性编程与优雅降级
+        dir_name: 错误处理：基于 CLI 的防御性编程与优雅降级
+        title: 错误处理：基于 CLI 的防御性编程与优雅降级
         scope: []
         source_files:
             - scholar/_shared.py
             - scholar/db.py
-            - scholar_mcp/server.py
+            - scholar/graph_db.py
+            - scholar/tex_parser.py
+            - scholar/rag.py
+            - scholar/research_loop.py
+            - scholar/commands/core_ops.py
             - scholar/commands/paper_ops.py
-            - scholar/commands/execution_ops.py
-            - scholar/commands/graph_ops.py
-            - scholar/commands/batch_ops.py
         children: []
         depends_on: []
         related_to: []
@@ -83,10 +88,11 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_app/scholar_core_logic/parsing_and_resolution
     logging_system:
-        dir_name: 基于 Rich 的 CLI 交互输出与日志策略
-        title: 基于 Rich 的 CLI 交互输出与日志策略
+        dir_name: 基于 Rich Console 的 CLI 交互输出与日志策略
+        title: 基于 Rich Console 的 CLI 交互输出与日志策略
         scope: []
         source_files:
             - scholar/_shared.py
@@ -94,13 +100,13 @@ modules:
             - scholar/commands/core_ops.py
             - scholar/commands/paper_ops.py
             - scholar/research_loop.py
-            - scholar_mcp/server.py
+            - .qoder/hooks/log-conversation.ps1
         children: []
         depends_on: []
         related_to: []
     scholar_app:
-        dir_name: Scholar Studio 智能研究引擎与 MCP 集成层
-        title: Scholar Studio 智能研究引擎与 MCP 集成层
+        dir_name: 学术智能研究平台与 MCP 服务集成
+        title: 学术智能研究平台与 MCP 服务集成
         scope:
             - scholar/
             - scholar_mcp/
@@ -112,8 +118,8 @@ modules:
         depends_on: []
         related_to: []
     scholar_app/scholar_cli_interface:
-        dir_name: Scholar Studio CLI 接口与配置管理
-        title: Scholar Studio CLI 接口与配置管理
+        dir_name: 学术研究工作流 CLI 入口与配置管理
+        title: 学术研究工作流 CLI 入口与配置管理
         scope:
             - scholar/cli.py
             - scholar/__main__.py
@@ -121,7 +127,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_app/scholar_mcp_server
     scholar_app/scholar_core_logic:
         dir_name: 学术文献智能处理与知识图谱引擎
         title: 学术文献智能处理与知识图谱引擎
@@ -169,13 +176,15 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: lean_project
     scholar_app/scholar_mcp_server:
-        dir_name: Scholar Studio MCP 服务层
-        title: Scholar Studio MCP 服务层
+        dir_name: Scholar MCP 服务层
+        title: Scholar MCP 服务层
         scope:
             - scholar_mcp/
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: scholar_app/scholar_cli_interface

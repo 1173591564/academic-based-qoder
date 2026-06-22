@@ -181,8 +181,12 @@ def init_workspace() -> dict:
     """Initialize workspace directory structure (per-workspace outputs).
 
     Creates WORKSPACE_DIR/output/{drafts,notes,logs}.
+    Copies .qoder/ template (rules, skills, hooks, commands) from source.
     Shared knowledge base (parsed/) stays in SCHOLAR_HOME.
     """
+    import shutil
+    import json as _json
+
     created: list[str] = []
     ws = WORKSPACE_DIR
     dirs_to_create = [
@@ -194,6 +198,32 @@ def init_workspace() -> dict:
         if not d.exists():
             d.mkdir(parents=True, exist_ok=True)
             created.append(str(d))
+
+    # Copy .qoder/ template from source directory (skip repowiki, plans, __pycache__)
+    qoder_source = Path(__file__).resolve().parent.parent / ".qoder"
+    qoder_target = ws / ".qoder"
+    if qoder_source.exists() and not qoder_target.exists():
+        shutil.copytree(
+            qoder_source, qoder_target,
+            ignore=shutil.ignore_patterns('repowiki', 'plans', '__pycache__', '*.log'),
+        )
+        created.append(str(qoder_target))
+
+        # Generate mcp.json with correct workspace paths
+        mcp_json = {
+            "mcpServers": {
+                "scholar": {
+                    "command": "python",
+                    "args": ["-m", "scholar_mcp"],
+                    "cwd": str(ws),
+                }
+            }
+        }
+        (qoder_target / "mcp.json").write_text(
+            _json.dumps(mcp_json, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     return {
         "workspace": str(ws),
         "scholar_home": str(SCHOLAR_HOME),

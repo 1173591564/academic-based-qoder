@@ -47,7 +47,7 @@ PARSER["TeX解析器"]
 GET_DB["数据库获取函数"]
 end
 subgraph "命令模块层"
-CORE["core_ops.py<br/>核心操作: init, scan, info, search, list-papers, stats"]
+CORE["core_ops.py<br/>核心操作: init, init-workspace, scan, info, search, list-papers, stats"]
 PAPER["paper_ops.py<br/>论文处理: parse, parse-all, ingest, export-bib"]
 META["metadata_ops.py<br/>元数据: year-fix, author-fix, venue-fix, metadata-enrich"]
 GRAPH["graph_ops.py<br/>图谱: graph-build, graph-stats, graph-query, cite-network, cite-resolve"]
@@ -121,10 +121,11 @@ EXTERNAL --> CONFIG
 ## 模块化命令体系
 
 ### 核心操作模块 (core_ops.py)
-负责基础的系统管理和状态查询功能，包括初始化、扫描、信息展示、搜索、列表和统计等核心命令。
+负责基础的系统管理和状态查询功能，包括初始化、工作空间初始化、扫描、信息展示、搜索、列表和统计等核心命令。
 
 **主要命令**
 - `init`: 初始化知识库目录结构和配置文件
+- `init-workspace`: 初始化当前目录作为工作空间
 - `scan`: 扫描论文目录并显示解析状态
 - `info`: 查看单篇论文的详细信息
 - `search`: 全文检索已解析的论文
@@ -132,7 +133,7 @@ EXTERNAL --> CONFIG
 - `stats`: 显示知识库统计信息
 
 **章节来源**
-- [core_ops.py:14-402](file://scholar/commands/core_ops.py#L14-L402)
+- [core_ops.py:14-438](file://scholar/commands/core_ops.py#L14-L438)
 
 ### 论文处理模块 (paper_ops.py)
 专注于论文的解析、批量处理、增量入库和BibTeX导出等功能。
@@ -243,41 +244,51 @@ EXTERNAL --> CONFIG
 **章节来源**
 - [core_ops.py:17-70](file://scholar/commands/core_ops.py#L17-L70)
 
+#### init-workspace：初始化工作空间
+- 功能：初始化当前目录作为Scholar Studio工作空间，在当前工作空间中创建output/drafts/、output/notes/、output/logs/目录
+- 输出：创建过程的详细信息和双拷贝布局说明
+- 选项：无
+
+**更新** 新增命令，用于支持项目级工作空间初始化
+
+**章节来源**
+- [core_ops.py:72-106](file://scholar/commands/core_ops.py#L72-L106)
+
 #### scan：扫描论文目录
 - 功能：遍历论文目录，统计解析状态、源码存在性和PDF存在性
 - 输出：表格形式的状态概览和摘要面板
 - 优化：大量数据时显示首尾片段并插入省略行
 
 **章节来源**
-- [core_ops.py:75-152](file://scholar/commands/core_ops.py#L75-L152)
+- [core_ops.py:111-189](file://scholar/commands/core_ops.py#L111-L189)
 
 #### info：查看论文详情
 - 功能：加载解析后的JSON文件，展示标题、作者、年份、会议、TeX文件数、主文件名、摘要、章节、公式、引用等
 - 输出：面板形式的详细信息和表格化的章节、公式、引用列表
 
 **章节来源**
-- [core_ops.py:158-218](file://scholar/commands/core_ops.py#L158-L218)
+- [core_ops.py:194-254](file://scholar/commands/core_ops.py#L194-L254)
 
 #### search：全文检索
 - 功能：优先查询数据库，否则回退到解析JSON文件进行关键词匹配
 - 输出：表格列出Paper ID、标题、年份，支持限制结果数量
 
 **章节来源**
-- [core_ops.py:223-276](file://scholar/commands/core_ops.py#L223-L276)
+- [core_ops.py:259-313](file://scholar/commands/core_ops.py#L259-L313)
 
 #### list-papers：列出解析论文
 - 功能：按年份过滤与限制数量列出论文元数据
 - 输出：表格含Paper ID、标题、年份、会议、节数、公式数、引用数
 
 **章节来源**
-- [core_ops.py:282-322](file://scholar/commands/core_ops.py#L282-L322)
+- [core_ops.py:318-358](file://scholar/commands/core_ops.py#L318-L358)
 
 #### stats：知识库统计
 - 功能：统计解析论文数量、总节数、公式数、引用数、数据库连通性与元数据覆盖率
 - 输出：面板统计与按年份、按会议的分布
 
 **章节来源**
-- [core_ops.py:328-402](file://scholar/commands/core_ops.py#L328-L402)
+- [core_ops.py:364-438](file://scholar/commands/core_ops.py#L364-L438)
 
 ### 论文处理命令
 
@@ -624,6 +635,7 @@ EXTERNAL --> CONFIG
 - **LaTeX编译失败**：compile-paper解析.log提取致命/警告/信息类错误，定位文件与行号；必要时增加重试次数
 - **嵌入API密钥缺失**：rag-index要求设置SCHOLAR_EMBEDDING_API_KEY
 - **文件不存在**：parse/compile-paper等命令对缺失文件进行明确报错并退出
+- **工作空间初始化失败**：init-workspace命令会在当前目录创建output子目录，确保有足够的磁盘权限
 
 **章节来源**
 - [graph_ops.py:20-23](file://scholar/commands/graph_ops.py#L20-L23)
@@ -632,7 +644,7 @@ EXTERNAL --> CONFIG
 - [rag_ops.py:18-22](file://scholar/commands/rag_ops.py#L18-L22)
 
 ## 结论
-新模块化CLI架构通过共享对象中心的设计，实现了高度解耦的命令体系。9个专门的命令模块各司其职，既保持了功能的完整性，又提高了代码的可维护性和扩展性。通过合理的错误处理、进度反馈与回退策略，既保证了易用性也兼顾了健壮性。建议在生产环境中配合环境变量与外部服务配置，充分利用bootstrap与kb-update等流水线命令实现快速初始化与持续更新。
+新模块化CLI架构通过共享对象中心的设计，实现了高度解耦的命令体系。9个专门的命令模块各司其职，既保持了功能的完整性，又提高了代码的可维护性和扩展性。通过合理的错误处理、进度反馈与回退策略，既保证了易用性也兼顾了健壮性。新增的`init-workspace`命令进一步完善了部署工作流，支持项目级工作空间的初始化。建议在生产环境中配合环境变量与外部服务配置，充分利用bootstrap与kb-update等流水线命令实现快速初始化与持续更新。
 
 ## 附录
 
@@ -653,6 +665,7 @@ EXTERNAL --> CONFIG
 - **检索与分析**：rag-search或search + graph-query + classify + quality-score
 - **实验管理**：exp-setup + exp-run + exp-compare + exp-debug
 - **维护与补全**：year-fix + author-fix + metadata-enrich + venue-fix
+- **工作空间管理**：scholar init + scholar init-workspace + scholar stats
 
 **章节来源**
 - [batch_ops.py:149-260](file://scholar/commands/batch_ops.py#L149-L260)

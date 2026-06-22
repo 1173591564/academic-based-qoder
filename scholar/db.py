@@ -24,15 +24,23 @@ def _try_import_psycopg2():
 class Database:
     """PostgreSQL database interface with file-only fallback."""
 
-    def __init__(self):
+    def __init__(self, pool=None):
         self.psycopg2 = _try_import_psycopg2()
         self._conn = None
+        self._pool = pool  # optional external connection pool (MCP mode)
 
     @property
     def available(self) -> bool:
         if self.psycopg2 is None:
             return False
-        # Use a fresh throwaway connection so we never cache a dead one
+        if self._pool is not None:
+            try:
+                conn = self._pool.getconn()
+                self._pool.putconn(conn)
+                return True
+            except Exception:
+                return False
+        # No pool: test with a fresh throwaway connection
         try:
             conn = self.psycopg2.connect(
                 host=config.PG_HOST, port=config.PG_PORT,
@@ -70,16 +78,31 @@ class Database:
 
     @contextmanager
     def cursor(self):
-        conn = self._connect()
-        cur = conn.cursor()
-        try:
-            yield cur
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cur.close()
+        if self._pool is not None:
+            # Pool mode: borrow/return connection per cursor
+            conn = self._pool.getconn()
+            cur = conn.cursor()
+            try:
+                yield cur
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
+                self._pool.putconn(conn)
+        else:
+            # Single-connection mode (CLI)
+            conn = self._connect()
+            cur = conn.cursor()
+            try:
+                yield cur
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
 
     # -----------------------------------------------------------
     # Paper operations

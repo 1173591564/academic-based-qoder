@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: scholar_app/scholar_cli_interface
+title: 学术研究工作流 CLI 入口与配置管理
+scope:
+    - scholar/cli.py
+    - scholar/__main__.py
+    - scholar/config.py
+source_files: []
+depends_on: []
+related_to:
+    - path: scholar_app/scholar_mcp_server

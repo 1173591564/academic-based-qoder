@@ -22,6 +22,7 @@ scholar_hiddenimports = [
     'scholar',
     'scholar.cli',
     'scholar._shared',
+    'scholar._state',
     'scholar.config',
     'scholar.db',
     'scholar.graph_db',
