@@ -257,79 +257,93 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
 
 ---
 
-## 架构概览
+## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      Qoder IDE                            │
-│                                                          │
-│  ┌─────────┐   ┌──────────┐   ┌────────────────────┐   │
-│  │ 7 Rules  │   │15 Skills │   │ 3 Hooks + 6 Cmds   │   │
-│  │ (always) │   │(SKILL.md)│   │  (自动化/快捷)      │   │
-│  └────┬─────┘   └────┬─────┘   └────────────────────┘   │
-│       │              │                                    │
-│       ▼              ▼                                    │
-│  ┌────────────────────────────────┐                      │
-│  │   Scholar MCP Server (43 工具)  │                      │
-│  │   (Qoder ↔ CLI 桥接层)          │                      │
-│  └────────────┬───────────────────┘                      │
-└───────────────│──────────────────────────────────────────┘
-                │  CLI 命令
-                ▼
-┌───────────────────────────────────────────────────────────┐
-│              scholar/ Python CLI (39 命令)                 │
-│                                                          │
-│   cli.py (入口) ← _shared.py (app/console/parser)        │
-│       ↓                                                   │
-│   commands/                                               │
-│     core_ops.py      ← init, scan, info, search, stats   │
-│     paper_ops.py     ← parse, parse-all, ingest, bib     │
-│     metadata_ops.py  ← year-fix, author-fix, venue-fix   │
-│     graph_ops.py     ← graph-build, cite-network          │
-│     rag_ops.py       ← rag-index, rag-search              │
-│     batch_ops.py     ← auto-notes, quality, classify      │
-│     research_ops.py  ← interests, survey, landscape        │
-│     execution_ops.py ← compile-paper, exp-*               │
-│     external_ops.py  ← arxiv-search, arxiv-download       │
-└────────┬──────────────┬─────────────────┬────────────────┘
-         │              │                 │
-         ▼              ▼                 ▼
-┌──────────────┐ ┌───────────┐  ┌─────────────────┐
-│ PostgreSQL   │ │  Neo4j    │  │ data/papers/    │
-│ + pgvector   │ │  概念图谱  │  │ 570 篇论文源文件 │
-│ 端口 5433    │ │  端口 7474 │  │ (PDF + TeX)     │
-└──────────────┘ └───────────┘  └─────────────────┘
++=====================================================================+
+|                          Qoder IDE                                   |
+|                                                                      |
+|   +-----------+    +------------+    +--------------------------+    |
+|   |  7 Rules  |    | 15 Skills  |    |  3 Hooks + 6 Commands    |    |
+|   | (always)  |    | (SKILL.md) |    |  (automation/shortcuts)  |    |
+|   +-----+-----+    +-----+------+    +--------------------------+    |
+|         |                |                                             |
+|         +-------+--------+                                             |
+|                 |                                                      |
+|                 v                                                      |
+|   +-----------------------------------------------------------------+ |
+|   |           Scholar MCP Server  (43 tools)                        | |
+|   |           Qoder <-> CLI bridge layer                            | |
+|   +------------------------------+----------------------------------+ |
++==================================|====================================+
+                                   |  CLI commands
+                                   v
++---------------------------------------------------------------------+
+|                    scholar/ Python CLI  (39 commands)                |
+|                                                                      |
+|    cli.py (entry) <--- _shared.py (app / console / parser / _get_db)|
+|        |                                                             |
+|        v                                                             |
+|    commands/                                                         |
+|      +-- core_ops.py ........ init, scan, info, search, stats       |
+|      +-- paper_ops.py ....... parse, parse-all, ingest, export-bib  |
+|      +-- metadata_ops.py .... year-fix, author-fix, venue-fix       |
+|      +-- graph_ops.py ....... graph-build, graph-stats, cite-*      |
+|      +-- rag_ops.py ......... rag-index, rag-search                 |
+|      +-- batch_ops.py ....... auto-notes, quality, classify, kb-*   |
+|      +-- research_ops.py .... interests, research-sync, survey      |
+|      +-- execution_ops.py ... compile-paper, exp-run/compare/setup  |
+|      +-- external_ops.py .... arxiv-search, arxiv-download          |
+|                                                                      |
+|    Domain Modules:                                                   |
+|      config.py | tex_parser.py | db.py | graph_db.py | rag.py       |
++------+----------------------------+------------------+--------------+
+       |                            |                  |
+       v                            v                  v
++----------------+    +------------------+    +------------------+
+|  PostgreSQL    |    |      Neo4j       |    |  data/papers/    |
+|  + pgvector    |    |  Citation Graph  |    |  570 Papers      |
+|  port 5433     |    |  Concept Graph   |    |  (PDF + TeX)     |
++----------------+    |  port 7474/7687  |    +------------------+
+                      +------------------+
 
-┌──────────────────────────────────────────────────────────┐
-│                  Qoder Work (定时任务)                     │
-│                                                          │
-│   日志分析 → 方向提取 → 飞书推送 → 用户确认 → 自动同步    │
-└──────────────────────────────────────────────────────────┘
++=====================================================================+
+|                       Qoder Work  (Scheduled Tasks)                  |
+|                                                                      |
+|   Log Analysis --> Direction Extraction --> Feishu Push --> Confirm  |
+|                                                           --> Sync   |
++=====================================================================+
 ```
 
-### 数据流
+### Data Flow
 
 ```
-论文 TeX 源码 → parse → JSON (parsed/<ULID>.json)
-    ↓                        ↓
-PostgreSQL (sections,     Neo4j (papers, concepts,
- formulas, citations)      REPLACES 关系)
-    ↓
-RAG 向量索引 (智谱 embedding-2, HNSW)
+Paper TeX Sources -----> parse -----> JSON (parsed/<ULID>.json)
+    |                        |
+    v                        v
+PostgreSQL               Neo4j
+ (sections,               (papers, concepts,
+  formulas,                REPLACES relations)
+  citations)
+    |
+    v
+RAG Vector Index (Zhipu embedding-2, HNSW)
 
-对话日志 → week-*.jsonl → 方向提取 → interests.json → 飞书推送 → 确认 → 自动入库
+Conversation Logs --> week-*.jsonl --> Direction Extraction --> interests.json
+                                                                  |
+                                                    Feishu Push --> Confirm --> Auto-Ingest
 ```
 
-### 输出目录（按项目隔离）
+### Output Directory (Project-Isolated)
 
-`output/` 下的草稿和日志按项目名自动分目录：
+Drafts and logs under `output/` are auto-partitioned by project name:
 
 ```
 output/
-  drafts/<project_name>/    ← survey、landscape 报告按项目隔离
-  logs/<project_name>/      ← 对话日志按项目隔离，跨 Qoder 项目采集
-  parsed/                   ← 全局共享（所有项目同一知识库）
-  notes/                    ← 全局共享
+  drafts/<project_name>/    <-- survey / landscape reports (per-project)
+  logs/<project_name>/      <-- conversation logs (cross-project capture)
+  parsed/                   <-- shared globally (one knowledge base)
+  notes/                    <-- shared globally
 ```
 
 ---
