@@ -198,3 +198,16 @@ export interface ExperimentMetricsData {
   comparison: MetricComparison[];
   error?: string;
 }
+
+export interface TimelineYear {
+  year: number;
+  count: number;
+  papers: { id: string; title: string }[];
+}
+
+export interface TimelineData {
+  topic: string;
+  total: number;
+  years: TimelineYear[];
+  error?: string;
+}

@@ -9,7 +9,7 @@ alwaysApply: true
 **Fallback**: Execute CLI commands via terminal.
 
 ## MCP Server (recommended)
-The scholar MCP server exposes 47 tools. Start it with:
+The scholar MCP server exposes 52 tools. Start it with:
 ```bash
 cd <project-root> && python -m scholar_mcp
 ```

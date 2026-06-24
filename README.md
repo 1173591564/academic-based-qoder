@@ -272,7 +272,7 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
 |                 |                                                      |
 |                 v                                                      |
 |   +-----------------------------------------------------------------+ |
-|   |           Scholar MCP Server  (46 tools)                        | |
+|   |           Scholar MCP Server  (52 tools)                        | |
 |   |           Qoder <-> CLI bridge layer                            | |
 |   +------------------------------+----------------------------------+ |
 +==================================|====================================+
@@ -398,7 +398,7 @@ python -m scholar ingest <paper_id>         # 增量导入单篇
 python -m scholar arxiv-search "query"      # 搜索 arXiv
 
 # 测试
-cd test && pytest                           # 运行 121 项自动化测试
+cd test && pytest                           # 运行 245 项自动化测试
 ```
 
 ---

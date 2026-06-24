@@ -1434,3 +1434,103 @@ body {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+
+/* ============================================================ */
+/*  Academic Components — CitationGraph, PaperReader, etc.       */
+/* ============================================================ */
+
+/* Common */
+.preview-error, .preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+.preview-error p, .preview-empty p { margin: 0; }
+.preview-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.hint { color: var(--text-tertiary); font-size: 12px; }
+
+/* CitationGraph */
+.citation-graph-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.graph-header { padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.graph-stats { font-size: 12px; color: var(--text-secondary); }
+
+/* PaperReader */
+.paper-reader { display: flex; flex-direction: column; height: 100%; }
+.paper-header { padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.paper-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0; }
+.paper-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-secondary); }
+.paper-stats { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--text-tertiary); }
+.paper-body { display: flex; gap: 16px; flex: 1; overflow: hidden; }
+.paper-toc { width: 200px; overflow-y: auto; border-right: 1px solid var(--border); padding-right: 12px; }
+.paper-toc h3 { font-size: 12px; color: var(--text-tertiary); margin: 0 0 8px 0; text-transform: uppercase; }
+.toc-item { font-size: 12px; color: var(--text-secondary); padding: 3px 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toc-item:hover { color: var(--accent); }
+.toc-level-2 { padding-left: 12px; }
+.toc-level-3 { padding-left: 24px; }
+.paper-content { flex: 1; overflow-y: auto; }
+.paper-abstract h3 { font-size: 14px; color: var(--text-primary); margin: 0 0 8px 0; }
+.paper-abstract { font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.paper-tags { margin-top: 16px; }
+.paper-tags h3 { font-size: 12px; color: var(--text-tertiary); margin: 0 0 8px 0; }
+.tag-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.tag-category { font-size: 11px; color: var(--text-tertiary); }
+.tag-badge { font-size: 11px; padding: 2px 8px; background: var(--accent-dim); color: var(--accent); border-radius: 10px; }
+
+/* QualityRadar */
+.quality-radar { padding: 8px 0; }
+.radar-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.grade-badge {
+  width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 700; color: #fff;
+}
+.total-score { font-size: 14px; color: var(--text-secondary); }
+.dimension-details { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.dim-detail { display: grid; grid-template-columns: 80px 1fr 50px; align-items: center; gap: 8px; font-size: 12px; }
+.dim-name { color: var(--text-secondary); }
+.dim-bar { height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; }
+.dim-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+.dim-score { color: var(--text-tertiary); text-align: right; }
+.dim-detail-text { grid-column: 1 / -1; font-size: 11px; color: var(--text-tertiary); }
+
+/* KBDashboard */
+.kb-dashboard { padding: 8px 0; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+.stat-value { font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat-label { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+.coverage-section { margin-bottom: 20px; }
+.coverage-section h3, .chart-section h3 { font-size: 13px; color: var(--text-primary); margin: 0 0 10px 0; }
+.coverage-item { display: grid; grid-template-columns: 80px 1fr 40px; align-items: center; gap: 8px; margin-bottom: 6px; }
+.coverage-label { font-size: 12px; color: var(--text-secondary); }
+.coverage-bar { height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; }
+.coverage-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+.coverage-pct { font-size: 11px; color: var(--text-tertiary); text-align: right; }
+.chart-section { margin-bottom: 20px; }
+
+/* ExperimentMetrics */
+.experiment-metrics { padding: 8px 0; }
+.metrics-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.metrics-header h3 { font-size: 14px; color: var(--text-primary); margin: 0; }
+.metrics-meta { display: flex; gap: 8px; }
+.mode-badge, .runtime-badge { font-size: 11px; padding: 2px 8px; background: var(--accent-dim); color: var(--accent); border-radius: 10px; }
+.metrics-table { margin-top: 16px; }
+.metrics-table h4 { font-size: 12px; color: var(--text-tertiary); margin: 0 0 8px 0; }
+.metrics-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.metrics-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-tertiary); font-weight: 500; }
+.metrics-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.value-ours { color: var(--accent); font-weight: 500; }
+.value-gap { font-size: 11px; }

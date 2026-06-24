@@ -15,6 +15,7 @@ import type {
   QualityRadarData,
   KBDashboardData,
   ExperimentMetricsData,
+  TimelineData,
 } from "../types";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
@@ -28,6 +29,7 @@ import { PaperReader } from "./PaperReader";
 import { QualityRadar } from "./QualityRadar";
 import { KBDashboard } from "./KBDashboard";
 import { ExperimentMetrics } from "./ExperimentMetrics";
+import { Timeline } from "./Timeline";
 
 export function ChatView({
   settings,
@@ -53,7 +55,7 @@ export function ChatView({
     content: string;
   } | null>(null);
   const [previewType, setPreviewType] = useState<
-    "text" | "citation_graph" | "paper_reader" | "quality_radar" | "kb_dashboard" | "experiment_metrics" | "markdown"
+    "text" | "citation_graph" | "paper_reader" | "quality_radar" | "kb_dashboard" | "experiment_metrics" | "timeline" | "markdown"
   >("text");
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -293,6 +295,8 @@ export function ChatView({
             setPreviewType("kb_dashboard");
           } else if (parsed.our_metrics || parsed.comparison) {
             setPreviewType("experiment_metrics");
+          } else if (parsed.years && Array.isArray(parsed.years)) {
+            setPreviewType("timeline");
           } else {
             setPreviewType("text");
           }
@@ -528,6 +532,11 @@ export function ChatView({
               {previewType === "experiment_metrics" && (
                 <ExperimentMetrics
                   data={JSON.parse(previewContent.content) as ExperimentMetricsData}
+                />
+              )}
+              {previewType === "timeline" && (
+                <Timeline
+                  data={JSON.parse(previewContent.content) as TimelineData}
                 />
               )}
               {previewType === "markdown" && (

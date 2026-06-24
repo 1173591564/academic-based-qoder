@@ -1626,6 +1626,111 @@ def scholar_get_experiment_metrics(paper_id: str) -> str:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
+@mcp.tool()
+def scholar_get_timeline(topic: str = "", limit: int = 50) -> str:
+    """Return papers as timeline data for visualization.
+    Frontend-optimized: use with Recharts LineChart/ScatterChart.
+
+    Args:
+        topic: Topic filter (empty = global timeline)
+        limit: Max papers per year
+    """
+    try:
+        if topic:
+            pids = dbmod.search_parsed(topic, limit=200)
+        else:
+            pids = dbmod.list_parsed()
+
+        years_data = {}
+        for pid in pids:
+            data = _load_parsed(pid)
+            if not data:
+                continue
+            year = data.get("year")
+            if not year:
+                continue
+            if year not in years_data:
+                years_data[year] = []
+            years_data[year].append({
+                "id": pid,
+                "title": (data.get("title") or "")[:80],
+            })
+
+        years = []
+        for y in sorted(years_data.keys()):
+            papers = years_data[y][:limit]
+            years.append({
+                "year": y,
+                "count": len(years_data[y]),
+                "papers": papers,
+            })
+
+        return json.dumps({
+            "topic": topic or "all",
+            "total": sum(y["count"] for y in years),
+            "years": years,
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def scholar_reclassify(paper_id: str, tags: str) -> str:
+    """Write LLM-generated classification tags to paper JSON.
+
+    Args:
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
+        tags: JSON string, e.g. '{"domain": ["NLP"], "method": ["Transformer"]}'
+    """
+    try:
+        ulid = _resolve(paper_id)
+        json_path = scholar_config.PARSED_DIR / f"{ulid}.json"
+        if not json_path.exists():
+            return json.dumps({"error": f"Paper not found: {paper_id}"}, ensure_ascii=False)
+
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        parsed_tags = json.loads(tags)
+        data["tags"] = parsed_tags
+        json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        return json.dumps({"paper_id": ulid, "tags": parsed_tags, "updated": True}, ensure_ascii=False)
+    except json.JSONDecodeError as e:
+        return json.dumps({"error": f"Invalid tags JSON: {e}"}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def scholar_enhance_quality(paper_id: str, quality: str) -> str:
+    """Write LLM-generated quality assessment to paper JSON + quality file.
+
+    Args:
+        paper_id: Paper ID (ULID/arXiv/DOI/slug)
+        quality: JSON string with quality scores
+    """
+    try:
+        ulid = _resolve(paper_id)
+        parsed_quality = json.loads(quality)
+
+        # Write to quality file
+        quality_path = scholar_config.NOTES_DIR / f"{ulid}-quality.json"
+        quality_path.parent.mkdir(parents=True, exist_ok=True)
+        quality_path.write_text(json.dumps(parsed_quality, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # Also update parsed JSON
+        json_path = scholar_config.PARSED_DIR / f"{ulid}.json"
+        if json_path.exists():
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            data["quality"] = parsed_quality
+            json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        return json.dumps({"paper_id": ulid, "quality": parsed_quality, "updated": True}, ensure_ascii=False)
+    except json.JSONDecodeError as e:
+        return json.dumps({"error": f"Invalid quality JSON: {e}"}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
 def main():
     mcp.run()
 

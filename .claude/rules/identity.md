@@ -59,8 +59,8 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 ## 项目结构速查
 
 ```
-.claude/rules/            Agent 规则（onboarding, identity, tools, pipelines, academic）
-.claude/skills/           15 个学术 skills（8 原子 + 7 工作流，每个含 Next Steps 引导）
+.qoder/rules/              Agent 规则（onboarding, identity, tools, pipelines, academic）
+.qoder/skills/             15 个学术 skills（8 原子 + 7 工作流，每个含 Next Steps 引导）
 data/papers/<ULID>/        每篇论文：paper.pdf + source.tar.gz
 output/parsed/<ULID>.json  563 篇结构化 TeX 解析数据（核心数据源）
 output/notes/              阅读笔记、审稿报告、验证日志
@@ -71,7 +71,7 @@ output/digests/            研究同步报告
 output/logs/               对话日志（按周轮转）
 output/research-interests.json  研究方向画像
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
-scholar/                   Python CLI 工具集（35 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，47 工具）
+scholar/                   Python CLI 工具集（37 命令）
+scholar_mcp/               MCP Server（CLI → Qoder 原生工具，52 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

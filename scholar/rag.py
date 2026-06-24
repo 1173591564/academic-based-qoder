@@ -192,16 +192,21 @@ def store_chunks_pg(chunks: list[dict], embeddings: list[list[float]]):
         )
         cur = conn.cursor()
 
+        # Batch insert using executemany for performance
+        batch_data = []
         for chunk, emb in zip(chunks, embeddings):
             if emb is None:
                 continue
             emb_str = "[" + ",".join(str(x) for x in emb) + "]"
-            cur.execute(
+            batch_data.append((chunk["paper_id"], chunk.get("section", ""), chunk["content"], emb_str))
+
+        if batch_data:
+            cur.executemany(
                 """
                 INSERT INTO chunks (paper_id, section, content, embedding)
                 VALUES (%s, %s, %s, %s::vector)
                 """,
-                (chunk["paper_id"], chunk.get("section", ""), chunk["content"], emb_str),
+                batch_data,
             )
 
         conn.commit()
