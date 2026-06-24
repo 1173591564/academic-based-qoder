@@ -6,10 +6,8 @@ source_files:
     - pyproject.toml
     - requirements.txt
     - desktop/package.json
-    - desktop/package-lock.json
     - desktop/src-tauri/Cargo.toml
     - LEAN/lakefile.toml
     - LEAN/lake-manifest.json
-    - LEAN/lean-toolchain
 depends_on: []
 related_to: []

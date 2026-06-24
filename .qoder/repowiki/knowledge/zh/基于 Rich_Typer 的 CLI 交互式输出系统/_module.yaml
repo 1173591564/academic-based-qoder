@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: logging_system
+title: 基于 Rich/Typer 的 CLI 交互式输出系统
+scope: []
+source_files:
+    - scholar/_shared.py
+    - scholar/cli.py
+    - scholar/commands/core_ops.py
+    - scholar/commands/batch_ops.py
+    - scholar_mcp/server.py
+depends_on: []
+related_to: []

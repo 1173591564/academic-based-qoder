@@ -8,6 +8,23 @@ import type {
   DotfilesStatus,
   DistributionResult,
 } from "../types";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
+  FolderOpen,
+  Upload,
+  Hexagon,
+  Terminal,
+  Play,
+  Square as SquareIcon,
+} from "lucide-react";
+
+function shortenPath(p: string): string {
+  if (!p) return "";
+  const parts = p.replace(/\\/g, "/").split("/");
+  return parts.length > 3 ? ".../" + parts.slice(-2).join("/") : p;
+}
 
 export function SettingsPage({
   settings,
@@ -34,6 +51,12 @@ export function SettingsPage({
   const [dotfilesStatus, setDotfilesStatus] =
     useState<DotfilesStatus | null>(null);
   const [distributing, setDistributing] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "error" } | null>(null);
+
+  const showToast = (msg: string, type: "ok" | "error" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     invoke<HealthStatus>("health_check", {
@@ -65,13 +88,13 @@ export function SettingsPage({
       });
       setDockerServices(updated);
     } catch (e) {
-      alert(`Docker 操作失败: ${e}`);
+      showToast(`Docker 操作失败: ${e}`, "error");
     }
   };
 
   const handleDistributeDotfiles = async () => {
     if (!form.workDir) {
-      alert("请先选择工作目录");
+      showToast("请先选择工作目录", "error");
       return;
     }
     setDistributing(true);
@@ -79,13 +102,13 @@ export function SettingsPage({
       const result = await invoke<DistributionResult>("distribute_dotfiles", {
         workDir: form.workDir,
       });
-      alert(`✅ ${result.message}`);
+      showToast(result.message);
       const status = await invoke<DotfilesStatus>("check_dotfiles_status", {
         workDir: form.workDir,
       });
       setDotfilesStatus(status);
     } catch (e) {
-      alert(`分发失败: ${e}`);
+      showToast(`分发失败: ${e}`, "error");
     } finally {
       setDistributing(false);
     }
@@ -98,7 +121,7 @@ export function SettingsPage({
       });
       setForm({ ...form, cliPath: path });
     } catch (e) {
-      alert(`未检测到 CLI：${e}`);
+      showToast(`未检测到 CLI：${e}`, "error");
     }
   };
 
@@ -129,7 +152,7 @@ export function SettingsPage({
 
   const handleSave = async () => {
     if (!form.workDir.trim()) {
-      alert("请选择工作目录");
+      showToast("请选择工作目录", "error");
       return;
     }
     let list: string[] = [];
@@ -146,7 +169,6 @@ export function SettingsPage({
       JSON.stringify([form.workDir, ...filtered].slice(0, 5))
     );
 
-    // Auto-distribute dotfiles if not yet distributed (for technical scholars)
     if (!dotfilesStatus?.has_claude) {
       setDistributing(true);
       try {
@@ -165,32 +187,12 @@ export function SettingsPage({
 
   const healthItems = health
     ? [
-        {
-          label: "Scholar CLI",
-          ok: health.scholar_exe,
-          detail: health.scholar_exe_path,
-        },
-        {
-          label: "Python",
-          ok: health.python,
-          detail: health.python_path,
-        },
-        {
-          label: "Claude Code CLI",
-          ok: health.claude_cli,
-          detail: health.claude_cli_path,
-        },
-        {
-          label: "Qoder CLI",
-          ok: health.qoder_cli,
-          detail: health.qoder_cli_path,
-        },
+        { label: "Scholar CLI", ok: health.scholar_exe, detail: health.scholar_exe_path },
+        { label: "Python", ok: health.python, detail: health.python_path },
+        { label: "Claude Code CLI", ok: health.claude_cli, detail: health.claude_cli_path },
+        { label: "Qoder CLI", ok: health.qoder_cli, detail: health.qoder_cli_path },
         { label: "MCP Server", ok: health.mcp_importable, detail: "" },
-        {
-          label: "Rules 目录",
-          ok: health.rules_dir,
-          detail: `${health.skills_count} skills`,
-        },
+        { label: "Rules 目录", ok: health.rules_dir, detail: `${health.skills_count} skills` },
         { label: "Output 目录", ok: health.output_dir, detail: "" },
         { label: "PostgreSQL", ok: health.pg_running, detail: health.pg_running ? ":5433" : "未启动" },
         { label: "Neo4j", ok: health.neo4j_running, detail: health.neo4j_running ? ":7474" : "未启动" },
@@ -200,6 +202,13 @@ export function SettingsPage({
   return (
     <div className="settings-page">
       <div className="settings-card">
+        <div className="settings-back-row">
+          <button className="settings-back-btn" onClick={onCancel}>
+            <ArrowLeft size={16} />
+            返回聊天
+          </button>
+        </div>
+
         <h2 className="settings-title">配置</h2>
         <p className="settings-desc">选择 CLI IDE 后端并配置工作环境</p>
 
@@ -208,22 +217,21 @@ export function SettingsPage({
             <label className="settings-label">系统健康检查</label>
             <div className="health-panel">
               {healthItems.map((item) => (
-                <div
-                  key={item.label}
-                  className={`health-item ${item.ok ? "ok" : "fail"}`}
-                >
-                  <span className="health-icon">{item.ok ? "✓" : "✕"}</span>
+                <div key={item.label} className={`health-item ${item.ok ? "ok" : "fail"}`}>
+                  <span className="health-icon">
+                    {item.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                  </span>
                   <span className="health-label">{item.label}</span>
                   {item.detail && (
-                    <span className="health-detail">{item.detail}</span>
+                    <span className="health-detail" title={item.detail}>
+                      {shortenPath(item.detail)}
+                    </span>
                   )}
                 </div>
               ))}
             </div>
             {!health.overall && (
-              <div className="health-warning">
-                部分组件不可用，可能影响功能
-              </div>
+              <div className="health-warning">部分组件不可用，可能影响功能</div>
             )}
           </div>
         )}
@@ -234,16 +242,15 @@ export function SettingsPage({
             <div className="docker-panel">
               {dockerServices.map((svc) => (
                 <div key={svc.name} className="docker-item">
-                  <span
-                    className={`docker-status ${svc.running ? "running" : "stopped"}`}
-                  />
+                  <span className={`docker-status ${svc.running ? "running" : "stopped"}`} />
                   <span className="docker-name">{svc.name}</span>
                   <span className="docker-state">{svc.status}</span>
-                  <button
-                    className="docker-btn"
-                    onClick={() => handleDockerToggle(svc.name, !svc.running)}
-                  >
-                    {svc.running ? "停止" : "启动"}
+                  <button className="docker-btn" onClick={() => handleDockerToggle(svc.name, !svc.running)}>
+                    {svc.running ? (
+                      <><SquareIcon size={10} fill="currentColor" /> 停止</>
+                    ) : (
+                      <><Play size={10} fill="currentColor" /> 启动</>
+                    )}
                   </button>
                 </div>
               ))}
@@ -256,18 +263,8 @@ export function SettingsPage({
           <div className="ide-selector">
             {(
               [
-                {
-                  value: "claude-code",
-                  name: "Claude Code",
-                  icon: "⬡",
-                  desc: "Anthropic CLI · 兼容 CCSwitch 模型切换",
-                },
-                {
-                  value: "qoder-cli",
-                  name: "Qoder CLI",
-                  icon: "Q",
-                  desc: "Qoder IDE CLI · 支持 skills/commands",
-                },
+                { value: "claude-code", name: "Claude Code", icon: <Hexagon size={24} />, desc: "Anthropic CLI · 兼容 CCSwitch 模型切换" },
+                { value: "qoder-cli", name: "Qoder CLI", icon: <Terminal size={24} />, desc: "Qoder IDE CLI · 支持 skills/commands" },
               ] as const
             ).map((ide) => (
               <div
@@ -290,34 +287,20 @@ export function SettingsPage({
           <label className="settings-label">工作目录</label>
           <div className="workspace-selector">
             <button className="workspace-picker-btn" onClick={handleSelectDir}>
-              📁 选择目录
+              <FolderOpen size={14} /> 选择目录
             </button>
-            <span className="workspace-path">
-              {form.workDir || "未选择"}
-            </span>
+            <span className="workspace-path">{form.workDir || "未选择"}</span>
           </div>
-          {workspaceInfo && (
-            <div className="settings-hint">{workspaceInfo}</div>
-          )}
+          {workspaceInfo && <div className="settings-hint">{workspaceInfo}</div>}
 
           {dotfilesStatus && form.workDir && (
             <div className="dotfiles-status">
               <div className="dotfiles-summary">
-                <span
-                  className={`dotfiles-badge ${dotfilesStatus.has_claude ? "ok" : "missing"}`}
-                >
-                  .claude/{" "}
-                  {dotfilesStatus.has_claude
-                    ? `✓ ${dotfilesStatus.total_files} files`
-                    : "✕ 缺失"}
+                <span className={`dotfiles-badge ${dotfilesStatus.has_claude ? "ok" : "missing"}`}>
+                  .claude/ {dotfilesStatus.has_claude ? `✓ ${dotfilesStatus.total_files} files` : "✕ 缺失"}
                 </span>
-                <span
-                  className={`dotfiles-badge ${dotfilesStatus.has_qoder ? "ok" : "missing"}`}
-                >
-                  .qoder/{" "}
-                  {dotfilesStatus.has_qoder
-                    ? `✓ ${dotfilesStatus.qoder_total} files`
-                    : "✕ 缺失"}
+                <span className={`dotfiles-badge ${dotfilesStatus.has_qoder ? "ok" : "missing"}`}>
+                  .qoder/ {dotfilesStatus.has_qoder ? `✓ ${dotfilesStatus.qoder_total} files` : "✕ 缺失"}
                 </span>
                 <span className="dotfiles-meta">
                   {dotfilesStatus.last_distributed === "never"
@@ -325,19 +308,12 @@ export function SettingsPage({
                     : `上次分发: ${new Date(parseInt(dotfilesStatus.last_distributed) * 1000).toLocaleString("zh-CN")}`}
                 </span>
               </div>
-              <button
-                className="distribute-btn"
-                onClick={handleDistributeDotfiles}
-                disabled={distributing}
-              >
-                {distributing
-                  ? "分发中..."
-                  : "📤 分发 .claude + .qoder 到此目录"}
+              <button className="distribute-btn" onClick={handleDistributeDotfiles} disabled={distributing}>
+                {distributing ? "分发中..." : <><Upload size={14} /> 分发 .claude + .qoder 到此目录</>}
               </button>
               <div className="settings-hint">
-                分发后，此目录将包含 15 个 skills + 7 个 rules +
-                定制化的 CLAUDE.md/mcp.json。 Claude Code 或 Qoder CLI
-                打开此目录时会自动发现并加载所有配置。
+                分发后，此目录将包含 15 个 skills + 7 个 rules + 定制化的 CLAUDE.md/mcp.json。
+                Claude Code 或 Qoder CLI 打开此目录时会自动发现并加载所有配置。
               </div>
             </div>
           )}
@@ -356,43 +332,45 @@ export function SettingsPage({
               ))}
             </div>
           )}
-          <div className="settings-hint">
-            Scholar Studio 将在此目录下读写 output/、data/ 等数据
-          </div>
+          <div className="settings-hint">Scholar Studio 将在此目录下读写 output/、data/ 等数据</div>
         </div>
 
         <div className="settings-group">
-          <label className="settings-label">
-            CLI 路径（留空自动检测）
-          </label>
+          <label className="settings-label">CLI 路径（留空自动检测）</label>
           <div className="cli-path-row">
             <input
               type="text"
               className="settings-input"
               placeholder="自动检测…"
               value={form.cliPath}
-              onChange={(e) =>
-                setForm({ ...form, cliPath: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, cliPath: e.target.value })}
             />
-            <button className="detect-btn" onClick={handleDetectCli}>
-              检测
-            </button>
+            <button className="detect-btn" onClick={handleDetectCli}>检测</button>
           </div>
-          <div className="settings-hint">
-            Claude Code CLI 路径 · 兼容 CCSwitch 模型切换，无需单独 API Key
-          </div>
+          <div className="settings-hint">Claude Code CLI 路径 · 兼容 CCSwitch 模型切换，无需单独 API Key</div>
         </div>
 
         <div className="settings-actions">
-          <button className="btn-secondary" onClick={onCancel}>
-            取消
-          </button>
-          <button className="btn-primary" onClick={handleSave}>
-            保存
-          </button>
+          <button className="btn-secondary" onClick={onCancel}>取消</button>
+          <button className="btn-primary" onClick={handleSave}>保存</button>
         </div>
+
+        <div className="settings-version">Scholar Studio v0.1.0</div>
       </div>
+      {toast && (
+        <div
+          className={`toast-notification ${toast.type}`}
+          style={{
+            position: "fixed", bottom: "2rem", right: "2rem",
+            padding: "0.75rem 1.5rem", borderRadius: "8px",
+            background: toast.type === "ok" ? "#43b581" : "#e74c3c",
+            color: "#fff", fontSize: "0.9rem", zIndex: 9999,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

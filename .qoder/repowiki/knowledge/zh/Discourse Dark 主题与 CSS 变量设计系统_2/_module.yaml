@@ -6,6 +6,8 @@ source_files:
     - desktop/src/App.css
     - desktop/src/App.tsx
     - desktop/src/components/ChatView.tsx
-    - desktop/index.html
+    - desktop/src/components/SettingsPage.tsx
+    - desktop/package.json
+    - desktop/vite.config.ts
 depends_on: []
 related_to: []

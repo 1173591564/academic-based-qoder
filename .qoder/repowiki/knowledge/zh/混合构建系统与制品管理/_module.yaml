@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: build_system
+title: 混合构建系统与制品管理
+scope: []
+source_files:
+    - pyproject.toml
+    - build_exe.py
+    - build_plugin.py
+    - scholar.spec
+    - infra/docker-compose.yml
+    - LEAN/lakefile.toml
+    - LEAN/.github/workflows/lean_action_ci.yml
+    - pytest.ini
+depends_on: []
+related_to: []

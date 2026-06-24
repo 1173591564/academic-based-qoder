@@ -483,7 +483,24 @@ def scholar_rag_search(query: str, hybrid: bool = False) -> str:
             results = rag.search_rag(query, limit=10)
             title = f"RAG Search: '{query}' ({len(results)} results)"
         if not results:
-            return f"No RAG results for '{query}'. Build index first: scholar rag-index"
+            # Provide actionable diagnostic to user
+            hints = []
+            if not scholar_config.EMBEDDING_API_KEY:
+                hints.append("SCHOLAR_EMBEDDING_API_KEY not set — semantic search disabled")
+            try:
+                from scholar import rag as rag_mod
+                conn = rag_mod._get_pg_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT count(*) FROM chunks")
+                chunk_count = cur.fetchone()[0]
+                cur.close()
+                conn.close()
+                if chunk_count == 0:
+                    hints.append("RAG index empty — run: scholar rag-index")
+            except Exception:
+                hints.append("PostgreSQL not available — RAG requires pgvector")
+            hint_str = "; ".join(hints) if hints else "Build index first: scholar rag-index"
+            return f"No RAG results for '{query}'. {hint_str}"
         lines = [title]
         for r in results:
             lines.append(f"  {r.get('paper_id', '')}  {(r.get('section') or '')[:15]}  {(r.get('content') or '')[:60]}  sim={r.get('similarity', 0):.3f}")
@@ -1618,51 +1635,16 @@ def scholar_get_kb_dashboard() -> str:
     Frontend-optimized: use with Recharts charts.
     """
     try:
-        paper_dirs = [d for d in scholar_config.PAPERS_DIR.iterdir() if d.is_dir()]
-        parsed_ids = dbmod.list_parsed()
-        total_formulas = 0
-        total_citations = 0
-        total_sections = 0
-        has_year = 0
-        has_authors = 0
-        has_abstract = 0
-        has_venue = 0
-        years = {}
-        venues = {}
-        for pid in parsed_ids:
-            data = _load_parsed(pid)
-            if not data:
-                continue
-            y = data.get("year")
-            if y:
-                years[y] = years.get(y, 0) + 1
-                has_year += 1
-            if data.get("authors"):
-                has_authors += 1
-            if data.get("abstract"):
-                has_abstract += 1
-            v = data.get("venue")
-            if v:
-                venues[v] = venues.get(v, 0) + 1
-                has_venue += 1
-            total_formulas += len(data.get("formulas", []))
-            total_citations += len(data.get("citations", []))
-            total_sections += len(data.get("sections", []))
-        total = len(parsed_ids) or 1
+        stats = _get_stats_cached()
         return json.dumps({
-            "paper_folders": len(paper_dirs),
-            "parsed": len(parsed_ids),
-            "sections": total_sections,
-            "formulas": total_formulas,
-            "citations": total_citations,
-            "coverage": {
-                "year": round(has_year / total, 2),
-                "authors": round(has_authors / total, 2),
-                "abstract": round(has_abstract / total, 2),
-                "venue": round(has_venue / total, 2),
-            },
-            "by_year": dict(sorted(years.items())),
-            "by_venue": dict(sorted(venues.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "paper_folders": stats["paper_folders"],
+            "parsed": stats["parsed"],
+            "sections": stats["sections"],
+            "formulas": stats["formulas"],
+            "citations": stats["citations"],
+            "coverage": stats["coverage"],
+            "by_year": stats["by_year"],
+            "by_venue": stats["by_venue"],
         }, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)

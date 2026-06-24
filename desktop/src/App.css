@@ -14,7 +14,7 @@
   /* Text */
   --text-primary: #FBF7EF;
   --text-secondary: rgba(251, 247, 239, 0.6);
-  --text-tertiary: rgba(251, 247, 239, 0.38);
+  --text-tertiary: rgba(251, 247, 239, 0.45);
 
   /* Accent */
   --accent: #D4A574;
@@ -61,18 +61,18 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(251, 247, 239, 0.1);
-  border-radius: 3px;
+  background: rgba(251, 247, 239, 0.15);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(251, 247, 239, 0.2);
+  background: rgba(251, 247, 239, 0.3);
 }
 
 /* ============================================================ */
@@ -118,8 +118,7 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
 .icon-btn {
@@ -558,15 +557,16 @@ body {
 .settings-page {
   height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: var(--bg-base);
-  padding: 40px;
+  padding: 24px 40px 40px;
+  overflow-y: auto;
 }
 
 .settings-card {
   width: 100%;
-  max-width: 520px;
+  max-width: 640px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -854,12 +854,12 @@ body {
 }
 
 .filter-btn {
-  padding: 3px 10px;
+  padding: 4px 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1561,4 +1561,280 @@ body {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+/* ============================================================ */
+/*  Empty State Component                                         */
+/* ============================================================ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  flex: 1;
+}
+
+.empty-state-icon {
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.empty-state-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.empty-state-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+/* ============================================================ */
+/*  Welcome Screen Redesign                                       */
+/* ============================================================ */
+
+.welcome-logo-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent-dim), rgba(212, 165, 116, 0.08));
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  margin-bottom: 16px;
+  box-shadow: 0 0 40px rgba(212, 165, 116, 0.12);
+}
+
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 14px 18px;
+  min-width: 180px;
+}
+
+.quick-action-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.quick-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-action-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quick-action-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================ */
+/*  Settings Page — Back Button + Version                          */
+/* ============================================================ */
+
+.settings-back-row {
+  margin-bottom: 20px;
+}
+
+.settings-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.settings-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-version {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.workspace-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.distribute-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ============================================================ */
+/*  Health Badge (header)                                          */
+/* ============================================================ */
+
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition);
+  min-height: 24px;
+}
+
+.health-badge.healthy {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.health-badge.unhealthy {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.health-badge:hover {
+  opacity: 0.85;
+}
+
+/* ============================================================ */
+/*  File Tree Icon Colors                                          */
+/* ============================================================ */
+
+.file-icon-folder {
+  color: var(--accent);
+}
+
+.file-icon-json {
+  color: #fbbf24;
+}
+
+.file-icon-md {
+  color: #60a5fa;
+}
+
+.file-icon-py {
+  color: #4ade80;
+}
+
+.folder-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================ */
+/*  Skill Icon Colors                                              */
+/* ============================================================ */
+
+.skill-icon {
+  display: flex;
+  align-items: center;
+}
+
+.skill-icon-workflow {
+  color: #a78bfa;
+}
+
+.skill-icon-atomic {
+  color: #fbbf24;
+}
+
+/* ============================================================ */
+/*  New Chat Button with Icon                                       */
+/* ============================================================ */
+
+.new-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ============================================================ */
+/*  Message Fade-in Animation                                       */
+/* ============================================================ */
+
+.message {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================ */
+/*  Button Active States                                             */
+/* ============================================================ */
+
+.icon-btn:active,
+.btn-primary:active,
+.btn-secondary:active,
+.send-btn:active:not(:disabled),
+.quick-action-btn:active,
+.docker-btn:active {
+  transform: scale(0.95);
+}
+
+/* ============================================================ */
+/*  Preview Panel Entrance Animation                                 */
+/* ============================================================ */
+
+.preview-panel {
+  animation: previewIn 0.2s ease-out;
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================ */
+/*  Input Focus Glow                                                */
+/* ============================================================ */
+
+.chat-input-wrapper:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
 }

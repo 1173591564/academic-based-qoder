@@ -1,4 +1,5 @@
-import React from "react";
+﻿import React from "react";
+import { ArrowUp, Square } from "lucide-react";
 
 export function ChatInput({
   text,
@@ -53,7 +54,7 @@ export function ChatInput({
         />
         {loading ? (
           <button className="send-btn stop-btn" onClick={onStop} title="停止生成">
-            ■
+            <Square size={14} fill="currentColor" />
           </button>
         ) : (
           <button
@@ -61,7 +62,7 @@ export function ChatInput({
             onClick={handleSubmit}
             disabled={!text.trim()}
           >
-            ↑
+            <ArrowUp size={18} strokeWidth={2.5} />
           </button>
         )}
       </div>

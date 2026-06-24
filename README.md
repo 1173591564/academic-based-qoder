@@ -279,7 +279,7 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
                                    |  CLI commands
                                    v
 +---------------------------------------------------------------------+
-|                    scholar/ Python CLI  (42 commands)                |
+|                    scholar/ Python CLI  (44 commands)                |
 |                                                                      |
 |    cli.py (entry) <--- _shared.py (app / console / parser / _get_db)|
 |        |                                                             |
@@ -426,7 +426,7 @@ output/
   research-interests.json  研究方向画像
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
-scholar/           Python CLI 工具集（42 命令）
+scholar/           Python CLI 工具集（44 命令）
   _shared.py       共享对象（app, console, parser, _get_db）
   cli.py           入口文件（导入 _shared + 命令模块）
   commands/        9 个命令模块（按功能分组，消除循环导入）

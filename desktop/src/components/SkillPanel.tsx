@@ -1,4 +1,6 @@
-import type { SkillInfo } from "../types";
+﻿import type { SkillInfo } from "../types";
+import { EmptyState } from "./EmptyState";
+import { Repeat, Zap, Cpu } from "lucide-react";
 
 export function SkillPanel({
   skills,
@@ -21,7 +23,11 @@ export function SkillPanel({
               onClick={() => onSkillClick(skill)}
             >
               <span className="skill-icon">
-                {skill.is_workflow ? "🔄" : "⚡"}
+                {skill.is_workflow ? (
+                  <Repeat size={14} className="skill-icon-workflow" />
+                ) : (
+                  <Zap size={14} className="skill-icon-atomic" />
+                )}
               </span>
               <div className="skill-info">
                 <div className="skill-name">{skill.display_name}</div>
@@ -32,7 +38,11 @@ export function SkillPanel({
             </div>
           ))
         ) : (
-          <div className="empty-hint">暂无技能</div>
+          <EmptyState
+            icon={Cpu}
+            title="暂无可用技能"
+            description="确保 MCP 服务已启动"
+          />
         )}
       </div>
     </>

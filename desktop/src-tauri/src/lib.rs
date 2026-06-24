@@ -19,22 +19,30 @@ fn get_scholar_path() -> Result<PathBuf, String> {
     // In development mode, CARGO_MANIFEST_DIR = desktop/src-tauri
     // Go up 2 levels to reach project root, then dist/scholar/scholar.exe
     if cfg!(debug_assertions) {
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
-        if manifest_dir.is_empty() {
-            return Err("CARGO_MANIFEST_DIR not set".to_string());
+        // option_env! embeds the value at compile time (env::var reads runtime env, which is wrong)
+        let manifest_dir = option_env!("CARGO_MANIFEST_DIR").unwrap_or("");
+        if !manifest_dir.is_empty() {
+            let exe_path = PathBuf::from(&manifest_dir)
+                .parent()
+                .and_then(|p| p.parent())
+                .map(|p| p.join("dist").join("scholar").join("scholar.exe"));
+            if let Some(exe_path) = exe_path {
+                if exe_path.exists() {
+                    return Ok(exe_path);
+                }
+            }
         }
-        let exe_path = PathBuf::from(&manifest_dir)
-            .parent()
-            .ok_or("Failed to get parent of CARGO_MANIFEST_DIR")?
-            .parent()
-            .ok_or("Failed to get project root")?
-            .join("dist")
-            .join("scholar")
-            .join("scholar.exe");
-        if exe_path.exists() {
-            return Ok(exe_path);
+        // Fallback: try relative to current exe
+        if let Ok(exe) = env::current_exe() {
+            let project_root = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent());
+            if let Some(root) = project_root {
+                let fallback = root.join("dist").join("scholar").join("scholar.exe");
+                if fallback.exists() {
+                    return Ok(fallback);
+                }
+            }
         }
-        return Err(format!("scholar.exe not found at {:?}", exe_path));
+        return Err("scholar.exe not found (checked dist/scholar/scholar.exe)".to_string());
     }
 
     // In production, scholar.exe is next to the app executable
@@ -51,14 +59,20 @@ fn get_scholar_home() -> String {
     if let Ok(home) = env::var("SCHOLAR_HOME") {
         return home;
     }
-    // In dev mode, compute project root from CARGO_MANIFEST_DIR
+    // In dev mode, compute project root from CARGO_MANIFEST_DIR (compile-time macro)
     if cfg!(debug_assertions) {
-        if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-            if let Some(project_root) = PathBuf::from(&manifest_dir)
+        if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
+            if let Some(project_root) = PathBuf::from(manifest_dir)
                 .parent()
                 .and_then(|p| p.parent())
             {
                 return project_root.to_string_lossy().to_string();
+            }
+        }
+        // Fallback: try relative to current exe
+        if let Ok(exe) = env::current_exe() {
+            if let Some(root) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+                return root.to_string_lossy().to_string();
             }
         }
     }
@@ -365,10 +379,9 @@ fn qodercli_search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Detect CLI executable path via `where`/`which`, then fallback to common install locations
-#[tauri::command]
-fn detect_cli(cli_ide: String) -> Result<String, String> {
-    let (cmd_name, fallback_paths) = match cli_ide.as_str() {
+/// Find CLI executable path (shared logic for detect_cli and invoke_agent_stream)
+fn find_cli_path(cli_ide: &str) -> Option<String> {
+    let (cmd_name, fallback_paths) = match cli_ide {
         "claude-code" => ("claude", {
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
             let mut paths: Vec<PathBuf> = if cfg!(windows) {
@@ -387,12 +400,11 @@ fn detect_cli(cli_ide: String) -> Result<String, String> {
                     PathBuf::from("/usr/bin/claude"),
                 ]
             };
-            // Also check qodercli common paths in case user mislabeled
             paths.extend(qodercli_search_paths());
             paths
         }),
         "qoder-cli" => ("qodercli", qodercli_search_paths()),
-        _ => return Err(format!("未知的 CLI IDE: {}。当前支持: claude-code, qoder-cli", cli_ide)),
+        _ => return None,
     };
 
     // 1. Try where / which
@@ -406,7 +418,7 @@ fn detect_cli(cli_ide: String) -> Result<String, String> {
             let path = String::from_utf8_lossy(&out.stdout);
             let first = path.lines().next().unwrap_or("").trim();
             if !first.is_empty() {
-                return Ok(first.to_string());
+                return Some(first.to_string());
             }
         }
     }
@@ -415,14 +427,24 @@ fn detect_cli(cli_ide: String) -> Result<String, String> {
     for c in &fallback_paths {
         if c.as_os_str().is_empty() { continue; }
         if c.exists() {
-            return Ok(c.to_string_lossy().to_string());
+            return Some(c.to_string_lossy().to_string());
         }
     }
 
-    Err(format!(
-        "未找到 {} CLI，请确认已安装或手动填写路径",
-        cmd_name
-    ))
+    None
+}
+
+/// Detect CLI executable path via `where`/`which`, then fallback to common install locations
+#[tauri::command]
+fn detect_cli(cli_ide: String) -> Result<String, String> {
+    find_cli_path(&cli_ide).ok_or_else(|| {
+        let cmd_name = match cli_ide.as_str() {
+            "claude-code" => "claude",
+            "qoder-cli" => "qodercli",
+            _ => &cli_ide,
+        };
+        format!("未找到 {} CLI，请确认已安装或手动填写路径", cmd_name)
+    })
 }
 
 /// Read a rule file, stripping YAML front-matter if present
@@ -536,9 +558,15 @@ fn invoke_agent_stream(
     session_id: Option<&str>,
     is_first: bool,
 ) -> Result<(), String> {
-    let exe = match cli_ide {
-        "qoder-cli" => cli_path.filter(|p| !p.is_empty()).unwrap_or("qodercli"),
-        _ => cli_path.filter(|p| !p.is_empty()).unwrap_or("claude"),
+    // Resolve CLI path: use provided path, or auto-detect
+    let exe = match cli_path.filter(|p| !p.is_empty()) {
+        Some(p) => p.to_string(),
+        None => find_cli_path(cli_ide).unwrap_or_else(|| {
+            match cli_ide {
+                "qoder-cli" => "qodercli".to_string(),
+                _ => "claude".to_string(),
+            }
+        }),
     };
     let scholar_home = get_scholar_home();
 
@@ -598,19 +626,20 @@ fn invoke_agent_stream(
         system_prompt
     };
 
-    #[cfg(windows)]
-    let mut cmd = {
-        let mut c = Command::new("cmd");
-        c.arg("/c").arg(exe);
-        c
-    };
-    #[cfg(not(windows))]
-    let mut cmd = Command::new(exe);
+    // Direct invocation — avoids cmd.exe mangling special chars in system prompt
+    let mut cmd = Command::new(&exe);
 
     if mcp_written {
         cmd.arg("--mcp-config").arg(&mcp_path);
     }
-    cmd.arg("--append-system-prompt").arg(system_prompt);
+    // Safety: Windows command-line limit is 32KB; truncate system prompt if needed
+    let safe_prompt = if system_prompt.len() > 30000 {
+        eprintln!("Warning: system prompt truncated ({} -> 30000 chars)", system_prompt.len());
+        system_prompt.chars().take(30000).collect::<String>()
+    } else {
+        system_prompt
+    };
+    cmd.arg("--append-system-prompt").arg(&safe_prompt);
     cmd.arg("--output-format").arg("stream-json");
 
     if let Some(sid) = session_id {
@@ -1269,10 +1298,8 @@ struct DockerService {
 }
 
 #[tauri::command]
-fn docker_status(work_dir: String) -> Vec<DockerService> {
-    let base = if work_dir.is_empty() { get_scholar_home() } else { work_dir };
-    let compose_file = PathBuf::from(&base).join("infra").join("docker-compose.yml");
-
+fn docker_status(_work_dir: String) -> Vec<DockerService> {
+    // Check if Docker daemon is running
     let docker_ok = Command::new("docker").arg("info").output()
         .map(|o| o.status.success()).unwrap_or(false);
 
@@ -1283,18 +1310,15 @@ fn docker_status(work_dir: String) -> Vec<DockerService> {
         ];
     }
 
-    if !compose_file.exists() {
-        return vec![
-            DockerService { name: "Neo4j".into(), running: false, status: "未找到 docker-compose.yml".into() },
-            DockerService { name: "PostgreSQL".into(), running: false, status: "未找到 docker-compose.yml".into() },
-        ];
-    }
-
-    ["neo4j", "postgres"].iter().map(|name| {
-        let output = Command::new("docker").args(["ps", "-q", "-f", &format!("name={}", name)]).output();
+    // Always check running containers by name pattern, even without compose file
+    let services = [("scholar-neo4j", "Neo4j"), ("scholar-postgres", "PostgreSQL")];
+    services.iter().map(|(container_name, display_name)| {
+        let output = Command::new("docker")
+            .args(["ps", "-q", "-f", &format!("name={}", container_name)])
+            .output();
         let running = output.map(|o| !o.stdout.is_empty()).unwrap_or(false);
         DockerService {
-            name: name.to_string(),
+            name: display_name.to_string(),
             running,
             status: if running { "running".into() } else { "stopped".into() },
         }

@@ -8,6 +8,5 @@ source_files:
     - LEAN/lakefile.toml
     - LEAN/lake-manifest.json
     - LEAN/lean-toolchain
-    - scholar_studio.egg-info/requires.txt
 depends_on: []
 related_to: []

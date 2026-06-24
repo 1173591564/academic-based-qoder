@@ -1,5 +1,5 @@
 /-
-  AiEvolution.Database — 125 Innovations + 417 Papers + relations.
+  AiEvolution.Database — 125 Innovations + 440 Papers + relations.
 
   This is the canonical data source parsed by:
   - scholar/year_fix.py  (parse_lean_papers, parse_lean_innovations)
@@ -170,7 +170,7 @@ def CodeLLaMA : Innovation := { id := "CodeLLaMA", line := ResearchLine.CodingLL
 def StarCoder : Innovation := { id := "StarCoder", line := ResearchLine.CodingLLM, core := false, year := 2023, properties := { scalability := 4, simplicity := 3, stability := 4 } }
 
 -- ===================================================================
--- 417 Paper Records (generated from output/parsed/*.json)
+-- 440 Paper Records (generated from output/parsed/*.json)
 -- ===================================================================
 
 def p_000 : Paper := { id := "3D_Gaussian_Splatting_for_Real_Time_Radiance_Field_Rendering", year := 2023 }

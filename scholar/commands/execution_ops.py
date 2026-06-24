@@ -610,6 +610,16 @@ def exp_run(
     console.print(f"[cyan]Running experiment:[/] {main_script.name}")
     console.print(f"  Mode: {mode}, GPU: {gpu}, Docker: {use_docker}, Timeout: {timeout}s")
 
+    # Pre-check: warn if template contains unfilled TODO sections
+    for check_file in [exp_dir / "model.py", exp_dir / "main.py", main_script]:
+        if check_file.exists():
+            content = check_file.read_text(encoding="utf-8", errors="replace")
+            if "TODO" in content or "pass  # TODO" in content:
+                console.print(f"[yellow]Warning: {check_file.name} contains unfilled TODO sections. Results may be meaningless.[/]")
+                if mode != "quick":
+                    console.print("[yellow]  Use --mode quick for synthetic data testing, or fill in TODOs first.[/]")
+                break
+
     env_args = []
     if mode == "quick":
         env_args = ["--mode", "quick"]
@@ -943,5 +953,27 @@ def dataset_download(
             console.print("[yellow]Install datasets: pip install datasets[/]")
         except Exception as e:
             console.print(f"[yellow]HuggingFace download failed: {e}[/]")
+
+    if source in ("auto", "paperswithcode"):
+        try:
+            import urllib.request
+            import json as _json
+            url = f"https://paperswithcode.com/api/v1/datasets/?q={dataset_name}"
+            req = urllib.request.Request(url, headers={"User-Agent": "ScholarStudio/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+            if data.get("results"):
+                for item in data["results"][:3]:
+                    console.print(f"  [dim]Found: {item.get('name', '?')} — {item.get('description', '')[:80]}[/]")
+                    dl_url = item.get("url", "")
+                    if dl_url:
+                        console.print(f"  [cyan]Download page: https://paperswithcode.com{dl_url}[/]")
+                console.print(f"[yellow]Papers with Code datasets require manual download from the URL(s) above.[/]")
+                return
+            else:
+                console.print(f"[yellow]No dataset found on Papers with Code for '{dataset_name}'.[/]")
+        except Exception as e:
+            if source == "paperswithcode":
+                console.print(f"[yellow]Papers with Code search failed: {e}[/]")
 
     console.print(f"[yellow]Could not download {dataset_name}. Try manual download.[/]")

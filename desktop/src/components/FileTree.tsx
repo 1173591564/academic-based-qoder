@@ -1,10 +1,30 @@
 import { useState } from "react";
 import type { FileNode } from "../types";
+import { EmptyState } from "./EmptyState";
+import {
+  FileText,
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  RefreshCw,
+  FileJson,
+  FileCode,
+  BookOpen,
+  FolderOpenIcon,
+} from "lucide-react";
 
 interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
   onFileClick: (path: string, name: string) => void;
+}
+
+function getFileIcon(name: string) {
+  if (name.endsWith(".json")) return <FileJson size={14} className="file-icon file-icon-json" />;
+  if (name.endsWith(".md")) return <BookOpen size={14} className="file-icon file-icon-md" />;
+  if (name.endsWith(".py")) return <FileCode size={14} className="file-icon file-icon-py" />;
+  return <FileText size={14} className="file-icon" />;
 }
 
 function FileTreeNode({ node, depth, onFileClick }: FileTreeNodeProps) {
@@ -18,7 +38,7 @@ function FileTreeNode({ node, depth, onFileClick }: FileTreeNodeProps) {
         title={node.path}
         onClick={() => onFileClick(node.path, node.name)}
       >
-        <span className="file-icon">📄</span>
+        {getFileIcon(node.name)}
         <span className="file-name">{node.name}</span>
       </div>
     );
@@ -28,11 +48,17 @@ function FileTreeNode({ node, depth, onFileClick }: FileTreeNodeProps) {
     <div>
       <div
         className="file-item folder"
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        style={{ paddingLeft: `${depth * 16 + 4}px` }}
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="folder-arrow">{expanded ? "▾" : "▸"}</span>
-        <span className="file-icon">📁</span>
+        <span className="folder-arrow">
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </span>
+        {expanded ? (
+          <FolderOpen size={14} className="file-icon file-icon-folder" />
+        ) : (
+          <Folder size={14} className="file-icon file-icon-folder" />
+        )}
         <span className="file-name">{node.name}</span>
       </div>
       {expanded && node.children && (
@@ -69,7 +95,7 @@ export function FileTree({
       <div className="sidebar-header">
         <span className="sidebar-title">工作区</span>
         <button className="icon-btn" onClick={onRefresh} title="刷新">
-          ↻
+          <RefreshCw size={14} />
         </button>
       </div>
       <div className="file-filter-bar">
@@ -109,7 +135,11 @@ export function FileTree({
               />
             ))
         ) : (
-          <div className="empty-hint">暂无文件</div>
+          <EmptyState
+            icon={FolderOpenIcon}
+            title="工作区暂无文件"
+            description="选择目录后，输出文件将显示在此"
+          />
         )}
       </div>
     </>

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: lean_formal
+title: AI演进形式化验证与PDSS架构建模
+scope:
+    - LEAN/
+source_files: []
+depends_on: []
+related_to: []

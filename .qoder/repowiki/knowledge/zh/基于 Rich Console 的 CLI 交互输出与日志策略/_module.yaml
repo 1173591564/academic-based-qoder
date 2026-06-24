@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: logging_system
+title: 基于 Rich Console 的 CLI 交互输出与日志策略
+scope: []
+source_files:
+    - scholar/_shared.py
+    - scholar/cli.py
+    - scholar/commands/core_ops.py
+    - scholar/commands/paper_ops.py
+    - scholar/research_loop.py
+    - .qoder/hooks/log-conversation.ps1
+depends_on: []
+related_to: []

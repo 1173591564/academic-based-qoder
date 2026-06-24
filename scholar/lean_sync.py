@@ -205,17 +205,26 @@ def _run_lake_build() -> dict:
     """
     import subprocess
     import shutil
-    import os
+    import sys
 
     lean_dir = config.LEAN_DIR
 
-    # Find lake executable: check PATH, then elan bin directory
+    # Find lake executable: check PATH, then elan directories
     lake = shutil.which("lake")
     if not lake:
         elan_bin = Path.home() / ".elan" / "bin"
-        candidate = elan_bin / ("lake.exe" if os.name == "nt" else "lake")
+        candidate = elan_bin / ("lake.exe" if sys.platform == "win32" else "lake")
         if candidate.exists():
             lake = str(candidate)
+    if not lake:
+        # Also check elan toolchains directory (consistent with lean_verify in execution_ops.py)
+        elan_toolchains = Path.home() / ".elan" / "toolchains"
+        if elan_toolchains.exists():
+            for tc in elan_toolchains.iterdir():
+                candidate = tc / "bin" / ("lake.exe" if sys.platform == "win32" else "lake")
+                if candidate.exists():
+                    lake = str(candidate)
+                    break
     if not lake:
         return {"success": False, "error": "lake executable not found (install elan or add ~/.elan/bin to PATH)"}
 

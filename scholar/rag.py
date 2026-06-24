@@ -142,7 +142,9 @@ def _zhipu_embedding(text: str) -> Optional[list[float]]:
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result["data"][0]["embedding"]
-    except Exception:
+    except Exception as e:
+        import sys as _sys
+        print(f"[rag] Zhipu embedding failed: {e}", file=_sys.stderr)
         return None
 
 
@@ -171,7 +173,9 @@ def _openai_embedding(text: str) -> Optional[list[float]]:
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result["data"][0]["embedding"]
-    except Exception:
+    except Exception as e:
+        import sys as _sys
+        print(f"[rag] OpenAI embedding failed: {e}", file=_sys.stderr)
         return None
 
 

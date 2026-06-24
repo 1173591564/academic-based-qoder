@@ -1,42 +1,32 @@
-Scholar Studio 采用多语言混合架构，针对 Python 后端、Lean4 形式化验证模块、Tauri 桌面应用（Rust + TypeScript）分别建立了独立的依赖管理策略。
+Scholar Studio 采用多语言混合架构，针对 Python 后端、Tauri 桌面前端（React + Rust）以及 Lean 形式化验证模块分别建立了独立的依赖管理体系。
 
-### 1. Python 后端 (`pyproject.toml` & `requirements.txt`)
-- **声明方式**：同时维护 `pyproject.toml`（现代标准）和 `requirements.txt`（传统兼容）。
-- **包管理器**：推荐使用支持 `pyproject.toml` 的现代工具（如 `pip` 或 `uv`）。
+### 1. Python 后端 (Scholar CLI & MCP)
+- **管理工具**：同时维护 `pyproject.toml` (PEP 621 标准) 和 `requirements.txt`。
 - **核心依赖**：
-  - `typer`, `rich`: CLI 交互与美化。
-  - `psycopg2-binary`, `neo4j`: 数据库连接（PostgreSQL, Neo4j）。
-  - `PyMuPDF`, `bibtexparser`: 论文解析。
+  - `typer`, `rich`: 构建 CLI 交互界面。
+  - `psycopg2-binary`, `neo4j`: 关系型数据库与图数据库驱动。
+  - `PyMuPDF`, `bibtexparser`: 论文解析与文献处理。
   - `mcp`: Model Context Protocol 支持。
-- **版本策略**：使用最小版本约束（如 `>=0.9.0`），未提供全局锁文件（`requirements.lock`），依赖稳定性依赖于开发环境的局部锁定或 CI 缓存。
+- **版本策略**：在 `pyproject.toml` 中使用宽松的版本约束（如 `>=0.9.0`），便于获取最新功能；`requirements.txt` 作为备选安装入口，保持同步。
+- **构建系统**：使用 `setuptools` 作为构建后端，定义了 `scholar` 命令行入口点。
 
-### 2. Lean4 形式化验证 (`LEAN/lakefile.toml`)
-- **构建系统**：使用 Lean4 官方包管理器 **Lake**。
-- **依赖锁定**：通过 `lake-manifest.json` 严格锁定所有传递性依赖的 Git Commit Hash，确保形式化证明的可复现性。
+### 2. 桌面应用前端 (Tauri + React)
+- **Node.js 依赖**：通过 `desktop/package.json` 管理。
+  - **UI 框架**：React 19, Vite 8。
+  - **可视化**：`cytoscape` (图谱), `recharts` (图表), `katex` (公式渲染)。
+  - **Tauri 集成**：`@tauri-apps/api` 及插件 (`dialog`)。
+- **Rust 后端依赖**：通过 `desktop/src-tauri/Cargo.toml` 管理。
+  - **核心库**：`tauri` (v2.11.3), `serde` (序列化), `tauri-plugin-log/dialog`。
+  - **版本锁定**：依赖 Cargo 的 `Cargo.lock` 机制确保 Rust 依赖的确定性构建。
+
+### 3. Lean 形式化验证模块
+- **管理工具**：使用 Lean 4 的官方包管理器 **Lake**。
+- **配置文件**：`LEAN/lakefile.toml` 定义项目元数据，`LEAN/lake-manifest.json` 锁定依赖版本。
 - **核心依赖**：
-  - `mathlib`: 数学基础库（本地路径引用 `.lake/packages/mathlib`）。
-  - `leanprover-community/*`: 包括 `plausible`, `aesop`, `batteries` 等社区标准库。
-- **工具链**：通过 `lean-toolchain` 指定 Lean 版本（当前为 `lean4-local`，暗示可能使用本地编译或特定环境版本）。
+  - `mathlib`: 数学标准库（通过 path 类型本地引用或远程同步）。
+  - `leanprover-community` 生态：`plausible`, `aesop`, `proofwidgets`, `batteries` 等。
+- **版本控制**：`lake-manifest.json` 记录了每个 Git 依赖的具体 commit hash (`rev`) 和输入修订版 (`inputRev`)，确保了形式化证明环境的严格一致性。
 
-### 3. 桌面端前端 (`desktop/package.json`)
-- **包管理器**：npm (Lockfile v3)。
-- **注册源**：配置为国内镜像 `https://registry.npmmirror.com`（见于 `package-lock.json`）。
-- **核心依赖**：
-  - `@tauri-apps/api`: Tauri 前端桥接。
-  - `react`, `cytoscape`, `recharts`: UI 框架与可视化。
-  - `katex`, `react-markdown`: 学术公式与文档渲染。
-- **版本策略**：使用 Caret 范围（`^`），依赖 `package-lock.json` 进行精确版本锁定。
-
-### 4. 桌面端后端 (`desktop/src-tauri/Cargo.toml`)
-- **包管理器**：Cargo (Rust)。
-- **核心依赖**：
-  - `tauri`: 桌面应用框架。
-  - `tauri-plugin-dialog`, `tauri-plugin-log`: 官方插件。
-  - `serde`: 序列化支持。
-- **版本策略**：遵循 Rust 生态惯例，通过 `Cargo.lock`（未直接读取但隐含存在）锁定版本。
-
-### 开发者规范
-1. **Python 依赖更新**：修改 `pyproject.toml` 后需同步更新 `requirements.txt`（若用于部署）。
-2. **Lean 依赖同步**：修改 `lakefile.toml` 后必须提交更新后的 `lake-manifest.json` 以锁定新依赖。
-3. **前端依赖安装**：由于配置了国内镜像，在国内网络环境下可直接 `npm install`；跨平台协作时需注意 `package-lock.json` 的完整性。
-4. **环境隔离**：各子模块（`LEAN`, `desktop`）拥有独立的依赖上下文，严禁在根目录混用不同语言的包管理命令。
+### 开发规范
+- **隔离性**：各语言栈依赖互不干扰，通过目录结构 (`desktop/`, `LEAN/`, 根目录) 物理隔离。
+- **锁定机制**：前端和 Lean 模块使用了严格的锁定文件 (`package-lock.json`, `lake-manifest.json`)，Python 模块建议在生产环境通过 `pip freeze` 生成锁定文件以确保复现性。

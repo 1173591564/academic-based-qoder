@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: plugin_system
+title: plugin_system
+scope:
+    - plugin/
+source_files: []
+depends_on: []
+related_to: []

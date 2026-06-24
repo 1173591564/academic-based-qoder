@@ -236,6 +236,7 @@ def init_workspace() -> dict:
     }
 
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索
+# Note: defaults are for local Docker dev only; set .env for production
 PG_HOST = os.getenv("SCHOLAR_PG_HOST", "localhost")
 PG_PORT = int(os.getenv("SCHOLAR_PG_PORT", "5433"))
 PG_NAME = os.getenv("SCHOLAR_PG_NAME", "scholar")

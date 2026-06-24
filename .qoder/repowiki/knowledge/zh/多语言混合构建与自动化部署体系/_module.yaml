@@ -1,0 +1,17 @@
+schema_version: 1
+module_path: build_system
+title: 多语言混合构建与自动化部署体系
+scope: []
+source_files:
+    - pyproject.toml
+    - .github/workflows/test.yml
+    - scripts/build_exe.py
+    - scripts/scholar.spec
+    - scripts/startup.ps1
+    - scripts/build_plugin.py
+    - infra/docker-compose.yml
+    - LEAN/lakefile.toml
+    - desktop/package.json
+    - pytest.ini
+depends_on: []
+related_to: []

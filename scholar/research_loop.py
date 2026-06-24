@@ -170,6 +170,75 @@ def get_unanalyzed_logs() -> dict[str, tuple[Path, list[dict]]]:
     return result
 
 
+# AI/ML 领域常见关键词集，用于日志兴趣提取
+_AI_KEYWORDS = {
+    "transformer", "attention", "bert", "gpt", "llm", "diffusion", "gan",
+    "reinforcement", "rlhf", "ppo", "dpo", "alignment", "safety",
+    "fine-tuning", "pretraining", "embedding", "rag", "knowledge",
+    "graph", "neural", "deep", "learning", "federated", "transfer",
+    "multimodal", "vision", "language", "nlp", "cv", "segmentation",
+    "detection", "classification", "generation", "summarization",
+    "translation", "reasoning", "planning", "reward", "policy",
+    "agent", "tool", "prompt", "chain", "retrieval", "benchmark",
+    "dataset", "evaluation", "metric", "accuracy", "bleu", "rouge",
+    "quantization", "pruning", "distillation", "efficient", "scaling",
+    "mixture", "expert", "moe", "adapter", "lora", "peft",
+    "contrastive", "self-supervised", "supervised", "unsupervised",
+    "Transformer", "Attention", "BERT", "GPT", "LLM", "Diffusion",
+    "RLHF", "PPO", "DPO", "MoE", "LoRA", "PEFT",
+}
+
+
+def extract_interests_from_logs(entries: list[dict], top_n: int = 5) -> list[str]:
+    """从对话日志条目中提取高频技术关键词作为候选研究方向。
+
+    轻量级 TF 提取，不依赖外部 NLP 库。
+    作为 fallback：当密主 LLM 不可用时，提供基础关键词发现能力。
+
+    Args:
+        entries: 对话日志条目列表 [{"role": "user"/"assistant", "text": "..."}, ...]
+        top_n: 返回前 N 个关键词
+
+    Returns: ["transformer", "diffusion", ...]
+    """
+    from collections import Counter
+
+    # 只分析用户消息（包含研究意图）
+    user_text = " ".join(
+        e.get("text", "") for e in entries if e.get("role") == "user"
+    )
+    if not user_text.strip():
+        return []
+
+    # 分词：提取英文单词和中文词组
+    words = re.findall(r'[a-zA-Z]{2,}|[\u4e00-\u9fff]+', user_text)
+
+    # 统计词频，优先保留 AI 领域关键词
+    word_counts = Counter(words)
+
+    # 第一轮：筛选已知 AI 关键词
+    ai_matches = [
+        (w, c) for w, c in word_counts.most_common(50)
+        if w in _AI_KEYWORDS and c >= 1
+    ]
+    ai_matches.sort(key=lambda x: x[1], reverse=True)
+
+    # 第二轮：如果不足，补充高频通用词（排除停用词）
+    _stopwords = {"the", "and", "for", "that", "this", "with", "from",
+                  "have", "are", "was", "will", "can", "not", "but",
+                  "all", "your", "you", "what", "how", "why", "when",
+                  "是的", "可以", "需要", "一个", "这个", "那个"}
+    if len(ai_matches) < top_n:
+        general = [
+            (w, c) for w, c in word_counts.most_common(100)
+            if w not in _stopwords and len(w) >= 3 and w not in _AI_KEYWORDS
+        ]
+        general.sort(key=lambda x: x[1], reverse=True)
+        ai_matches.extend(general[:top_n - len(ai_matches)])
+
+    return [w for w, _ in ai_matches[:top_n]]
+
+
 def mark_week_analyzed(week_id: str, interests_found: int, entries: int,
                         project: str = "") -> None:
     """标记某周日志已完成分析，写入对应项目的 analyzed.json。

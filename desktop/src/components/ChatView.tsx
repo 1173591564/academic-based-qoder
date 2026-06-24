@@ -31,6 +31,8 @@ import { KBDashboard } from "./KBDashboard";
 import { ExperimentMetrics } from "./ExperimentMetrics";
 import { Timeline } from "./Timeline";
 
+import { Plus, Settings as SettingsIcon, Circle } from "lucide-react";
+
 // MCP Bridge: call scholar MCP tools directly from the shell
 async function callScholarMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
   return await invoke<string>("call_scholar_mcp", {
@@ -458,7 +460,7 @@ export function ChatView({
         <header className="chat-header">
           <div className="chat-header-left">
             <button className="new-chat-btn" onClick={handleNewChat}>
-              + 新对话
+              <Plus size={14} /> 新对话
             </button>
           </div>
           <div className="chat-header-center">
@@ -471,13 +473,14 @@ export function ChatView({
           </div>
           <div className="chat-header-right">
             {health && (
-              <span
-                className={`health-indicator ${health.overall ? "healthy" : "unhealthy"}`}
-                title={
-                  health.overall ? "系统健康" : "部分组件不可用，点击设置查看"
-                }
+              <button
+                className={`health-badge ${health.overall ? "healthy" : "unhealthy"}`}
+                title={health.overall ? "系统健康" : "部分组件不可用，点击设置查看"}
                 onClick={onOpenSettings}
-              />
+              >
+                <Circle size={8} fill="currentColor" />
+                <span>{health.overall ? "正常" : "异常"}</span>
+              </button>
             )}
             {dockerServices.length > 0 &&
               dockerServices.map((svc) => (
@@ -496,7 +499,7 @@ export function ChatView({
               onClick={onOpenSettings}
               title="设置"
             >
-              ⚙
+              <SettingsIcon size={16} />
             </button>
           </div>
         </header>

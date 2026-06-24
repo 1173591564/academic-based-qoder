@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: dev
 nodes_managed: true
-exported_at: "2026-06-24T13:31:25Z"
+exported_at: "2026-06-24T14:01:39Z"
 modules:
     "":
         dir_name: Scholar Studio AI 研究引擎
@@ -27,32 +27,32 @@ modules:
         depends_on: []
         related_to: []
     build_system:
-        dir_name: 混合构建系统与制品管理
-        title: 混合构建系统与制品管理
+        dir_name: 构建系统与制品管理
+        title: 构建系统与制品管理
         scope: []
         source_files:
             - pyproject.toml
+            - requirements.txt
             - build_exe.py
-            - build_plugin.py
             - scholar.spec
+            - build_plugin.py
             - infra/docker-compose.yml
+            - pytest.ini
             - LEAN/lakefile.toml
             - LEAN/.github/workflows/lean_action_ci.yml
-            - pytest.ini
         children: []
         depends_on: []
         related_to: []
     configuration_system:
-        dir_name: Scholar Studio 配置系统：双模态路径解析与环境变量分层
-        title: Scholar Studio 配置系统：双模态路径解析与环境变量分层
+        dir_name: 配置系统：双模目录解析与环境变量分层加载
+        title: 配置系统：双模目录解析与环境变量分层加载
         scope: []
         source_files:
             - scholar/config.py
             - .env.example
             - infra/docker-compose.yml
-            - desktop/src-tauri/src/lib.rs
-            - desktop/src-tauri/tauri.conf.json
             - pyproject.toml
+            - desktop/src-tauri/src/lib.rs
         children: []
         depends_on: []
         related_to: []
@@ -64,9 +64,11 @@ modules:
             - pyproject.toml
             - requirements.txt
             - desktop/package.json
+            - desktop/package-lock.json
             - desktop/src-tauri/Cargo.toml
             - LEAN/lakefile.toml
             - LEAN/lake-manifest.json
+            - LEAN/lean-toolchain
         children: []
         depends_on: []
         related_to: []
@@ -80,29 +82,30 @@ modules:
         depends_on: []
         related_to: []
     error_handling:
-        dir_name: 错误处理与容错机制
-        title: 错误处理与容错机制
+        dir_name: 错误处理：防御性编程与静默降级模式
+        title: 错误处理：防御性编程与静默降级模式
         scope: []
         source_files:
+            - scholar/_shared.py
             - scholar/db.py
             - scholar/graph_db.py
-            - scholar/config.py
             - scholar/rag.py
-            - scholar/_shared.py
+            - scholar/kb_update.py
             - scholar/commands/paper_ops.py
-            - scholar/commands/core_ops.py
+            - scholar/commands/batch_ops.py
+            - scholar/commands/graph_ops.py
         children: []
         depends_on: []
         related_to: []
     frontend_style:
-        dir_name: Discourse Dark 主题与 CSS 变量设计系统_2
+        dir_name: Discourse Dark 主题与 CSS 变量设计系统_3
         title: Discourse Dark 主题与 CSS 变量设计系统
         scope: []
         source_files:
             - desktop/src/App.css
             - desktop/src/App.tsx
             - desktop/src/components/ChatView.tsx
-            - desktop/index.html
+            - desktop/package.json
         children: []
         depends_on: []
         related_to: []
@@ -115,24 +118,16 @@ modules:
         children: []
         depends_on: []
         related_to: []
-    lean_project:
-        dir_name: AI演进形式化验证系统
-        title: AI演进形式化验证系统
-        scope:
-            - LEAN/
-        source_files: []
-        children: []
-        depends_on: []
-        related_to: []
     logging_system:
-        dir_name: 日志系统架构与规范
-        title: 日志系统架构与规范
+        dir_name: 日志与输出系统
+        title: 日志与输出系统
         scope: []
         source_files:
-            - desktop/src-tauri/src/lib.rs
-            - desktop/src-tauri/Cargo.toml
             - scholar/_shared.py
+            - scholar/commands/core_ops.py
             - scholar_mcp/server.py
+            - scholar/_state.py
+            - scholar/config.py
         children: []
         depends_on: []
         related_to: []
