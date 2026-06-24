@@ -1,17 +1,21 @@
 """
-Scholar Studio — Citation Resolution Enhancement
+Scholar Studio — Citation Resolution Enhancement (V2)
 
-Resolves citation references from raw ref_keys to:
-  1. Internal papers (known ULIDs in output/parsed/)
-  2. External papers (fetched from arXiv API, stored as lightweight nodes)
+Resolves citation references using a 3-level matching pipeline:
+  1. DOI exact match (from .bib bibliography → parsed JSON doi field)
+  2. Title fuzzy match (rapidfuzz token_sort_ratio ≥ 85)
+  3. arXiv API fallback (for unresolved refs)
 
-Creates Neo4j ExternalPaper nodes for unresolved references.
+Key improvement over V1: uses bibliography titles instead of ref_keys for matching.
+A ref_key like "vaswani2017" cannot fuzzy-match "Attention Is All You Need",
+but the bibliography entry provides the actual title.
 
 CLI: scholar cite-resolve [--limit N] [--dry-run]
 """
 import json
 import re
 import ast
+import hashlib
 from pathlib import Path
 from typing import Optional
 from collections import Counter
@@ -20,34 +24,8 @@ from . import config
 
 
 # ===================================================================
-# Levenshtein distance for fuzzy title matching
+# Normalization
 # ===================================================================
-
-def _levenshtein(s1: str, s2: str) -> int:
-    """Compute Levenshtein edit distance between two strings."""
-    if len(s1) < len(s2):
-        return _levenshtein(s2, s1)
-    if len(s2) == 0:
-        return len(s1)
-    prev_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        curr_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = prev_row[j + 1] + 1
-            deletions = curr_row[j] + 1
-            substitutions = prev_row[j] + (c1 != c2)
-            curr_row.append(min(insertions, deletions, substitutions))
-        prev_row = curr_row
-    return prev_row[-1]
-
-
-def _similarity(s1: str, s2: str) -> float:
-    """Normalized similarity (0-1) based on Levenshtein distance."""
-    max_len = max(len(s1), len(s2))
-    if max_len == 0:
-        return 1.0
-    return 1.0 - _levenshtein(s1, s2) / max_len
-
 
 def _normalize(text: str) -> str:
     """Normalize text for matching."""
@@ -58,98 +36,205 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _cache_key(text: str) -> str:
+    """Generate a filesystem-safe cache key from text."""
+    return hashlib.md5(text.encode("utf-8")).hexdigest()[:16]
+
+
 # ===================================================================
-# Internal matching: ref_key -> known ULID
+# Rapidfuzz-based fuzzy matching (100x faster than Levenshtein)
+# ===================================================================
+
+try:
+    from rapidfuzz import fuzz
+    _HAS_RAPIDFUZZ = True
+except ImportError:
+    _HAS_RAPIDFUZZ = False
+
+    def _levenshtein(s1: str, s2: str) -> int:
+        if len(s1) < len(s2):
+            return _levenshtein(s2, s1)
+        if len(s2) == 0:
+            return len(s1)
+        prev_row = range(len(s2) + 1)
+        for i, c1 in enumerate(s1):
+            curr_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                insertions = prev_row[j + 1] + 1
+                deletions = curr_row[j] + 1
+                substitutions = prev_row[j] + (c1 != c2)
+                curr_row.append(min(insertions, deletions, substitutions))
+            prev_row = curr_row
+        return prev_row[-1]
+
+    def _similarity(s1: str, s2: str) -> float:
+        max_len = max(len(s1), len(s2))
+        if max_len == 0:
+            return 1.0
+        return 1.0 - _levenshtein(s1, s2) / max_len
+
+
+def _title_similarity(s1: str, s2: str) -> float:
+    """Return 0-100 similarity score using rapidfuzz or fallback."""
+    if _HAS_RAPIDFUZZ:
+        return fuzz.token_sort_ratio(s1, s2)
+    else:
+        return _similarity(_normalize(s1), _normalize(s2)) * 100
+
+
+# ===================================================================
+# Internal index: title → paper info + DOI → paper info
 # ===================================================================
 
 def build_internal_index(parsed_dir: Path = None) -> dict:
     """
-    Build index of all known papers: normalized_title -> {ulid, title, year}.
+    Build index of all known papers.
 
-    Also includes ref_key patterns.
+    Returns:
+        {
+            "titles": {normalized_title: {ulid, title, year, doi}},
+            "dois": {doi_lower: {ulid, title, year}},
+            "count": int
+        }
     """
     if parsed_dir is None:
         parsed_dir = config.PARSED_DIR
 
-    index = {}  # norm_title -> paper info
-    ref_keys = {}  # normalized ref_key -> paper info
+    titles = {}
+    dois = {}
 
     for json_file in parsed_dir.glob("*.json"):
-        data = json.loads(json_file.read_text(encoding="utf-8"))
-        ulid = data["paper_id"]
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        ulid = data.get("paper_id", "")
         title = data.get("title", "")
         year = data.get("year", "")
-        info = {"ulid": ulid, "title": title, "year": year}
+        doi = data.get("doi", "")
+
+        info = {"ulid": ulid, "title": title, "year": year, "doi": doi}
 
         if title:
-            index[_normalize(title)] = info
+            titles[_normalize(title)] = info
 
-        # Also index citation ref_keys from other papers that cite this one
-        # (This is useful when ref_keys match titles)
-        norm = _normalize(title)
-        if norm:
-            ref_keys[norm] = info
+        if doi:
+            dois[doi.lower().strip()] = info
 
-    return {"titles": index, "count": len(index)}
+    return {"titles": titles, "dois": dois, "count": len(titles)}
 
 
-def match_ref_to_internal(ref_key: str, internal_index: dict, threshold: float = 0.8) -> Optional[dict]:
+# ===================================================================
+# Level 1: DOI exact match
+# ===================================================================
+
+def match_via_doi(doi: str, internal_index: dict) -> Optional[dict]:
+    """Try to match a DOI to a known internal paper."""
+    if not doi:
+        return None
+    doi_lower = doi.lower().strip()
+    return internal_index["dois"].get(doi_lower)
+
+
+# ===================================================================
+# Level 2: Title fuzzy match (rapidfuzz)
+# ===================================================================
+
+def match_via_title(title: str, internal_index: dict, threshold: float = 85) -> Optional[dict]:
     """
-    Try to match a citation ref_key to a known internal paper.
+    Try to match a title to a known internal paper using rapidfuzz.
 
     Strategy:
-    1. Exact match (normalized)
-    2. Levenshtein similarity > threshold
-    3. Word overlap > 0.7
+    1. Exact normalized match
+    2. token_sort_ratio ≥ threshold
+    3. partial_ratio ≥ threshold (for substring titles)
     """
-    ref_norm = _normalize(ref_key.replace("_", " "))
+    if not title:
+        return None
+
+    norm_title = _normalize(title)
     titles = internal_index["titles"]
 
     # Exact match
-    if ref_norm in titles:
-        return titles[ref_norm]
+    if norm_title in titles:
+        return titles[norm_title]
 
-    # Levenshtein fuzzy match
-    best_match = None
-    best_sim = 0
-    for norm_title, info in titles.items():
-        sim = _similarity(ref_norm, norm_title)
-        if sim > best_sim:
-            best_sim = sim
-            best_match = info
+    if not _HAS_RAPIDFUZZ:
+        # Fallback: Levenshtein similarity
+        best_match = None
+        best_sim = 0
+        for norm_t, info in titles.items():
+            sim = _similarity(norm_title, norm_t) * 100
+            if sim > best_sim:
+                best_sim = sim
+                best_match = info
+        if best_sim >= threshold:
+            return best_match
+        return None
 
-    if best_sim >= threshold:
-        return best_match
+    # rapidfuzz: use process.extractOne for speed
+    from rapidfuzz import process, fuzz
 
-    # Word overlap
-    ref_words = set(ref_norm.split())
-    for norm_title, info in titles.items():
-        title_words = set(norm_title.split())
-        if ref_words and title_words:
-            overlap = len(ref_words & title_words) / max(len(ref_words), len(title_words))
-            if overlap > 0.7:
-                return info
+    choices = list(titles.keys())
+    if not choices:
+        return None
+
+    # token_sort_ratio handles word reordering
+    result = process.extractOne(
+        norm_title, choices,
+        scorer=fuzz.token_sort_ratio,
+        score_cutoff=threshold,
+    )
+    if result:
+        matched_title, score, _ = result
+        return titles[matched_title]
+
+    # partial_ratio for short titles that are substrings
+    result = process.extractOne(
+        norm_title, choices,
+        scorer=fuzz.partial_ratio,
+        score_cutoff=95,  # Higher threshold for partial to avoid false positives
+    )
+    if result:
+        matched_title, score, _ = result
+        # Verify length ratio to avoid matching "GAN" to "Origins of the Human Brain"
+        len_ratio = min(len(norm_title), len(matched_title)) / max(len(norm_title), len(matched_title))
+        if len_ratio > 0.5:
+            return titles[matched_title]
 
     return None
 
 
 # ===================================================================
-# External resolution: arXiv API
+# Level 3: arXiv API fallback (with disk cache)
 # ===================================================================
 
-def resolve_via_arxiv(ref_key: str) -> Optional[dict]:
+def resolve_via_arxiv(query: str, cache_dir: Path = None) -> Optional[dict]:
     """
-    Try to resolve a citation reference via arXiv API.
+    Try to resolve a citation via arXiv API.
+    Uses disk cache to avoid redundant API calls.
 
     Returns: {title, authors, year, arxiv_id} or None
     """
+    # Check disk cache
+    if cache_dir is None:
+        cache_dir = config.OUTPUT_DIR / "cache" / "cite_resolve"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / f"{_cache_key(query)}.json"
+
+    if cache_file.exists():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            return cached if cached.get("_cached") else cached
+        except Exception:
+            pass
+
     try:
         import xml.etree.ElementTree as ET
         from . import config as _cfg
 
-        # Clean up ref_key for search
-        query = ref_key.replace("_", " ").replace("-", " ")
-        xml_data = _cfg.arxiv_request(f"ti:{query[:200]}", max_results=1)
+        search_query = query.replace("_", " ").replace("-", " ")
+        xml_data = _cfg.arxiv_request(f"ti:{search_query[:200]}", max_results=1)
 
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(xml_data)
@@ -165,19 +250,23 @@ def resolve_via_arxiv(ref_key: str) -> Optional[dict]:
             published = entry.find("atom:published", ns).text
             arxiv_id = entry.find("atom:id", ns).text.split("/abs/")[-1]
 
-            # Verify title similarity
-            title_sim = _similarity(_normalize(ref_key), _normalize(title))
-            if title_sim >= 0.7:
-                return {
+            title_sim = _title_similarity(_normalize(query), _normalize(title))
+            if title_sim >= 70:
+                result = {
                     "title": title,
                     "authors": authors[:5],
                     "year": int(published[:4]) if published else None,
                     "arxiv_id": arxiv_id,
                     "similarity": title_sim,
                 }
+                # Cache positive result
+                cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                return result
     except Exception:
         pass
 
+    # Cache negative result
+    cache_file.write_text(json.dumps({"_cached": True, "result": None}, ensure_ascii=False), encoding="utf-8")
     return None
 
 
@@ -186,11 +275,7 @@ def resolve_via_arxiv(ref_key: str) -> Optional[dict]:
 # ===================================================================
 
 def create_external_nodes(gdb, external_papers: list[dict]) -> int:
-    """
-    Create ExternalPaper nodes in Neo4j for unresolved references.
-
-    Also creates CITES edges from citing papers to external nodes.
-    """
+    """Create ExternalPaper nodes in Neo4j for unresolved references."""
     created = 0
     for paper in external_papers:
         ref_key = paper["ref_key"]
@@ -208,7 +293,6 @@ def create_external_nodes(gdb, external_papers: list[dict]) -> int:
             "authors": ", ".join(paper.get("authors", [])[:5]),
         })
 
-        # Create CITES edge from citing paper
         from_ulid = paper.get("from_ulid")
         if from_ulid:
             gdb.run("""
@@ -223,72 +307,117 @@ def create_external_nodes(gdb, external_papers: list[dict]) -> int:
 
 
 # ===================================================================
-# Main resolution pipeline
+# Main resolution pipeline (V2)
 # ===================================================================
 
 def resolve_citations(parsed_dir: Path = None, limit: int = 200,
                       dry_run: bool = True) -> dict:
     """
-    Run the full citation resolution pipeline.
+    Run the full citation resolution pipeline (V2).
 
-    1. Collect all unique ref_keys across all papers
-    2. Try internal matching (Levenshtein)
-    3. Try arXiv API for unresolved
-    4. Create ExternalPaper nodes in Neo4j
+    3-level matching:
+    1. DOI exact match (from bibliography → parsed JSON doi)
+    2. Title fuzzy match (rapidfuzz token_sort_ratio ≥ 85)
+    3. arXiv API fallback
 
     Returns statistics.
     """
     if parsed_dir is None:
         parsed_dir = config.PARSED_DIR
 
-    # Step 1: Collect all unique ref_keys with their source papers
-    all_refs: dict[str, list[str]] = {}  # ref_key -> [from_ulid, ...]
+    # Step 1: Build internal index (titles + DOIs)
+    internal_index = build_internal_index(parsed_dir)
+
+    # Step 2: Collect all citations with bibliography context
+    # ref_key -> {from_ulids: [...], bib_entry: {...} | None}
+    all_refs: dict[str, dict] = {}
+
     for json_file in parsed_dir.glob("*.json"):
-        data = json.loads(json_file.read_text(encoding="utf-8"))
-        ulid = data["paper_id"]
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        ulid = data.get("paper_id", "")
         citations = data.get("citations", [])
         if isinstance(citations, str):
             try:
                 citations = ast.literal_eval(citations)
             except Exception:
                 citations = []
+
+        # Build bibliography lookup: ref_key -> bib_entry
+        bibliography = data.get("bibliography", [])
+        bib_lookup = {}
+        if isinstance(bibliography, list):
+            for bib in bibliography:
+                if isinstance(bib, dict) and bib.get("ref_key"):
+                    bib_lookup[bib["ref_key"]] = bib
+
         for ref in citations:
             if ref not in all_refs:
-                all_refs[ref] = []
-            all_refs[ref].append(ulid)
+                all_refs[ref] = {"from_ulids": [], "bib_entry": None}
+            all_refs[ref]["from_ulids"].append(ulid)
+
+            # Attach bibliography entry if available
+            if ref in bib_lookup and all_refs[ref]["bib_entry"] is None:
+                all_refs[ref]["bib_entry"] = bib_lookup[ref]
 
     total_refs = len(all_refs)
 
-    # Step 2: Internal matching
-    internal_index = build_internal_index(parsed_dir)
-    resolved_internal = 0
-    unresolved_refs = {}
+    # Step 3: Level 1 — DOI exact match
+    resolved_doi = 0
+    unresolved_after_l1 = {}
 
-    for ref_key, from_ulids in all_refs.items():
-        match = match_ref_to_internal(ref_key, internal_index)
+    for ref_key, info in all_refs.items():
+        bib = info.get("bib_entry") or {}
+        doi = bib.get("doi", "")
+        if doi:
+            match = match_via_doi(doi, internal_index)
+            if match:
+                resolved_doi += 1
+                continue
+        unresolved_after_l1[ref_key] = info
+
+    # Step 4: Level 2 — Title fuzzy match
+    resolved_title = 0
+    unresolved_after_l2 = {}
+
+    for ref_key, info in unresolved_after_l1.items():
+        bib = info.get("bib_entry") or {}
+        title = bib.get("title", "")
+
+        # If no title from bibliography, try ref_key as fallback
+        if not title:
+            title = ref_key.replace("_", " ")
+
+        match = match_via_title(title, internal_index, threshold=85)
         if match:
-            resolved_internal += 1
-        else:
-            unresolved_refs[ref_key] = from_ulids
+            resolved_title += 1
+            continue
+        unresolved_after_l2[ref_key] = info
 
-    # Step 3: arXiv API resolution for unresolved (limited)
+    # Step 5: Level 3 — arXiv API fallback
     resolved_arxiv = 0
     external_papers = []
     queried = 0
 
-    for ref_key, from_ulids in unresolved_refs.items():
+    for ref_key, info in unresolved_after_l2.items():
         if queried >= limit:
             break
         queried += 1
 
-        result = resolve_via_arxiv(ref_key)
+        bib = info.get("bib_entry") or {}
+        # Use title for arXiv search if available, else ref_key
+        search_term = bib.get("title", "") or ref_key.replace("_", " ")
+
+        result = resolve_via_arxiv(search_term)
         if result:
             resolved_arxiv += 1
             result["ref_key"] = ref_key
-            result["from_ulid"] = from_ulids[0] if from_ulids else None
+            result["from_ulid"] = info["from_ulids"][0] if info["from_ulids"] else None
             external_papers.append(result)
 
-    # Step 4: Create external nodes in Neo4j (if not dry run)
+    # Step 6: Create external nodes in Neo4j (if not dry run)
     external_created = 0
     if not dry_run and external_papers:
         try:
@@ -300,14 +429,18 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
         except Exception:
             pass
 
-    still_unresolved = len(unresolved_refs) - resolved_arxiv
+    still_unresolved = len(unresolved_after_l2) - resolved_arxiv
 
     return {
         "total_refs": total_refs,
         "unique_refs": total_refs,
-        "resolved_internal": resolved_internal,
+        "resolved_doi": resolved_doi,
+        "resolved_title": resolved_title,
         "resolved_arxiv": resolved_arxiv,
+        "resolved_total": resolved_doi + resolved_title + resolved_arxiv,
+        "resolution_rate": f"{(resolved_doi + resolved_title + resolved_arxiv) / max(total_refs, 1) * 100:.1f}%",
         "external_nodes_created": external_created,
         "still_unresolved": still_unresolved,
         "queried_arxiv": queried,
+        "has_rapidfuzz": _HAS_RAPIDFUZZ,
     }

@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install rapidfuzz bibtexparser
+
+      - name: Run tests
+        run: |
+          python -m pytest test/ -v --tb=short
+
+      - name: Verify Lean4 (if available)
+        run: |
+          if command -v lake &> /dev/null; then
+            cd LEAN && lake build && cd ..
+          else
+            echo "Lean4 not installed, skipping"
+          fi
+        continue-on-error: true
+
+      - name: Verify MCP import
+        run: |
+          python -c "from scholar_mcp.server import mcp; print('MCP server OK')"

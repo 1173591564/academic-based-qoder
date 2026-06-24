@@ -53,11 +53,29 @@ cd LEAN && grep -r "关键词" AiEvolution/
 
 将尝试结果写入 `output/notes/math-verify-<paper_id>.md`。
 
-### Step 6: 编译验证
+### Step 6: Lean4 编译验证（真实验证）
 ```bash
-cd LEAN && lake build AiEvolution
+# 验证全部 7 个定理
+python -m scholar lean-verify
+
+# 或验证单个定理
+python -m scholar lean-verify --theorem transformer_replaces_rnn
+
+# JSON 输出模式（供 MCP 工具调用）
+python -m scholar lean-verify --json
 ```
-检查编译是否通过。如果失败，分析错误原因并记录。
+此命令会：
+1. 在 `LEAN/` 目录下执行 `lake build AiEvolution`
+2. 从 `Theorems.lean` 中解析全部 7 个定理名称
+3. 根据编译结果判断每个定理是否通过验证
+4. 如果编译失败，解析 stderr 定位出错的定理和错误原因
+5. 输出结构化的验证报告
+
+也可以在 MCP 中调用：
+- `scholar_lean_verify` — 验证全部 7 个定理
+- `scholar_lean_verify(theorem="dpo_replaces_ppo")` — 验证指定定理
+
+⚠️ **重要**：只有 `lake build` 返回 0 时才声称"已验证"。编译失败时，需分析错误信息。
 
 ### Step 7: 生成验证报告
 输出到 `output/notes/math-verify-<formula_label>.md`：

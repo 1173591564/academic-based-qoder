@@ -192,14 +192,38 @@ def scan():
 # info: Show detailed info about a paper
 # ===================================================================
 @app.command()
-def info(paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)")):
+def info(
+    paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
     """Show detailed information about a parsed paper."""
     from ..id_resolver import resolve_id
     ulid = resolve_id(paper_id) or paper_id
     data = dbmod.load_parsed(ulid)
     if data is None:
-        console.print(f"[yellow]Paper not parsed yet.[/] Run: python -m scholar parse {paper_id}")
+        if json_output:
+            print(json.dumps({"error": "Paper not parsed yet", "paper_id": paper_id}))
+        else:
+            console.print(f"[yellow]Paper not parsed yet.[/] Run: python -m scholar parse {paper_id}")
         raise typer.Exit(1)
+
+    if json_output:
+        result = {
+            "paper_id": ulid,
+            "title": data.get("title", "N/A"),
+            "authors": data.get("authors", []),
+            "year": data.get("year"),
+            "venue": data.get("venue"),
+            "abstract": data.get("abstract"),
+            "sections": [
+                {"heading": s.get("heading", "(untitled)"), "level": s.get("level", 1), "content_length": len(s.get("content", ""))}
+                for s in data.get("sections", [])
+            ],
+            "formulas_count": len(data.get("formulas", [])),
+            "citations_count": len(data.get("citations", [])),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return
 
     console.print(Panel(
         f"[bold]{data.get('title', 'N/A')}[/]\n\n"
@@ -260,6 +284,7 @@ def info(paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)")):
 def search(
     keyword: str = typer.Argument(help="Search keyword"),
     limit: int = typer.Option(20, help="Max results"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Search across all parsed papers (title, abstract, sections)."""
     keyword_lower = keyword.lower()
@@ -267,8 +292,17 @@ def search(
 
     database = _get_db()
     if database:
-        results = database.search_papers(keyword)
-        results = results[:limit]
+        raw = database.search_papers(keyword)
+        results = [
+            {
+                "paper_id": r.get("id", r.get("paper_id", "")),
+                "title": r.get("title", "N/A"),
+                "year": r.get("year"),
+                "venue": r.get("venue"),
+                "score": r.get("score", 0),
+            }
+            for r in raw[:limit]
+        ]
     else:
         for paper_id in dbmod.list_parsed():
             data = dbmod.load_parsed(paper_id)
@@ -289,10 +323,15 @@ def search(
                     "paper_id": paper_id,
                     "title": data.get("title", "N/A"),
                     "year": data.get("year"),
+                    "venue": data.get("venue"),
                     "score": score,
                 })
         results.sort(key=lambda x: x["score"], reverse=True)
         results = results[:limit]
+
+    if json_output:
+        print(json.dumps(results, ensure_ascii=False))
+        return
 
     if not results:
         console.print(f"No results for [cyan]'{keyword}'[/]")
@@ -362,7 +401,9 @@ def list_papers(
 # stats: Show knowledge base statistics
 # ===================================================================
 @app.command()
-def stats():
+def stats(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
     """Show knowledge base statistics."""
     paper_dirs = [d for d in config.PAPERS_DIR.iterdir() if d.is_dir()]
     parsed_ids = dbmod.list_parsed()
@@ -401,6 +442,27 @@ def stats():
         total_sections += len(data.get("sections", []))
 
     total = len(parsed_ids)
+
+    if json_output:
+        result = {
+            "paper_folders": len(paper_dirs),
+            "parsed": total,
+            "sections": total_sections,
+            "formulas": total_formulas,
+            "citations": total_citations,
+            "database": db_status,
+            "coverage": {
+                "year": round(has_year / total, 2) if total else 0,
+                "authors": round(has_authors / total, 2) if total else 0,
+                "abstract": round(has_abstract / total, 2) if total else 0,
+                "venue": round(has_venue / total, 2) if total else 0,
+            },
+            "by_year": dict(sorted(years.items())),
+            "by_venue": dict(sorted(venues.items(), key=lambda x: x[1], reverse=True)[:10]),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return
+
     if total == 0:
         console.print(Panel(
             f"Paper folders:   {len(paper_dirs)}\n"

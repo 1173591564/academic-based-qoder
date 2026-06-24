@@ -293,8 +293,8 @@ def search_rag(query: str, limit: int = 10) -> list[dict]:
 # ===================================================================
 
 def _tokenize(text: str) -> list[str]:
-    """Simple whitespace + punctuation tokenizer."""
-    return re.findall(r'[a-z0-9]+', text.lower())
+    """Unicode-aware tokenizer: matches letters and digits from any language."""
+    return re.findall(r'[^\W_]+', text.lower(), re.UNICODE)
 
 
 class BM25Index:

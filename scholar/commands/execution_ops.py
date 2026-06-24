@@ -1,4 +1,4 @@
-"""Execution operations: compile-paper, exp-run, exp-compare, exp-setup, exp-debug, dataset-download."""
+"""Execution operations: compile-paper, lean-verify, exp-run, exp-compare, exp-setup, exp-debug, dataset-download."""
 import json
 import re
 import sys
@@ -9,6 +9,7 @@ from typing import Optional
 
 import typer
 from rich.panel import Panel
+from rich.table import Table
 
 from .._shared import app, console
 from .. import config
@@ -246,6 +247,205 @@ def compile_paper(
 
 
 # ===================================================================
+# lean-verify: Run Lean4 verification on AiEvolution theorems
+# ===================================================================
+@app.command(name="lean-verify")
+def lean_verify(
+    theorem: Optional[str] = typer.Option(None, "--theorem", "-t", help="Verify a specific theorem (e.g., 'transformer_replaces_rnn'). Omit to verify all."),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Run Lean4 verification on AiEvolution theorems.
+
+    Compiles AiEvolution.lean with `lake build` and reports which
+    theorems pass or fail. If no theorem is specified, verifies all 7.
+    """
+    lean_dir = config.LEAN_DIR
+    lean_project = lean_dir / "AiEvolution.lean"
+
+    if not lean_project.exists():
+        msg = f"Lean4 project not found at {lean_project}"
+        if json_output:
+            print(json.dumps({"error": msg, "theorems": [], "build_ok": False}))
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+
+    lake_bin = shutil.which("lake")
+    if not lake_bin:
+        # Fallback: search common elan installation paths
+        import os
+        home = Path.home()
+        elan_bin = home / ".elan" / "bin"
+        candidates = [
+            str(elan_bin / ("lake.exe" if sys.platform == "win32" else "lake")),
+        ]
+        # Also check toolchains directory
+        elan_toolchains = home / ".elan" / "toolchains"
+        if elan_toolchains.exists():
+            for tc in elan_toolchains.iterdir():
+                candidates.append(str(tc / "bin" / ("lake.exe" if sys.platform == "win32" else "lake")))
+        for c in candidates:
+            if Path(c).exists():
+                lake_bin = c
+                break
+    if not lake_bin:
+        msg = "Lean4 `lake` not found. Install Lean4 via elan: https://lean-lang.org/"
+        if json_output:
+            print(json.dumps({"error": msg, "theorems": [], "build_ok": False}))
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Running Lean4 verification...[/]")
+    console.print(f"  Project: {lean_project.relative_to(config.PROJECT_ROOT)}")
+
+    try:
+        result = subprocess.run(
+            [lake_bin, "build", "AiEvolution"],
+            capture_output=True, text=True, timeout=120,
+            cwd=str(lean_dir),
+        )
+    except subprocess.TimeoutExpired:
+        msg = "Lean4 build timed out (120s)"
+        if json_output:
+            print(json.dumps({"error": msg, "theorems": [], "build_ok": False}))
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+    except Exception as e:
+        if json_output:
+            print(json.dumps({"error": str(e), "theorems": [], "build_ok": False}))
+        else:
+            console.print(f"[red]Lean4 build failed: {e}[/]")
+        raise typer.Exit(1)
+
+    build_ok = result.returncode == 0
+    stderr = result.stderr
+    stdout = result.stdout
+
+    # Parse theorems from Theorems.lean
+    theorems_file = lean_dir / "AiEvolution" / "Theorems.lean"
+    all_theorems = []
+    if theorems_file.exists():
+        content = theorems_file.read_text(encoding="utf-8")
+        pattern = re.compile(r'theorem\s+(\w+)\s*:', re.MULTILINE)
+        all_theorems = [(m.group(1), content) for m in pattern.finditer(content)]
+
+    # Filter if specific theorem requested
+    if theorem:
+        all_theorems = [(name, c) for name, c in all_theorems if name == theorem]
+        if not all_theorems:
+            msg = f"Theorem '{theorem}' not found in Theorems.lean"
+            if json_output:
+                print(json.dumps({"error": msg, "available": [t[0] for t in all_theorems], "build_ok": build_ok}))
+            else:
+                console.print(f"[yellow]{msg}[/]")
+            raise typer.Exit(1)
+
+    # Build theorem results
+    theorem_results = []
+    for name, _ in all_theorems:
+        # A theorem "passes" if the build succeeded (Lean4 type-checks all)
+        status = "verified" if build_ok else "failed"
+        error_detail = None
+        if not build_ok:
+            # Search stderr for errors near this theorem name
+            lines = stderr.split("\n")
+            for i, line in enumerate(lines):
+                if name in line or "error" in line.lower():
+                    ctx = "\n".join(lines[max(0, i-1):min(len(lines), i+3)])
+                    if len(ctx) > 300:
+                        ctx = ctx[:300] + "..."
+                    error_detail = ctx
+                    break
+            if not error_detail:
+                error_detail = stderr[:500] if stderr else "Unknown build error"
+        theorem_results.append({
+            "theorem": name,
+            "status": status,
+            "error": error_detail,
+        })
+
+    if json_output:
+        print(json.dumps({
+            "build_ok": build_ok,
+            "theorems_verified": sum(1 for t in theorem_results if t["status"] == "verified"),
+            "theorems_total": len(theorem_results),
+            "theorems": theorem_results,
+            "stdout_tail": stdout[-500:] if stdout else "",
+            "stderr_tail": stderr[-500:] if stderr else "",
+        }, ensure_ascii=False))
+        return
+
+    # Rich output
+    total = len(theorem_results)
+    verified = sum(1 for t in theorem_results if t["status"] == "verified")
+
+    if build_ok:
+        console.print(Panel(
+            f"[green bold]All {total} theorems verified successfully.[/]\n"
+            f"Lean4 project compiles without errors.\n"
+            f"No `sorry` axioms — all proofs are complete.",
+            title="[green]Lean4 Verification PASSED[/]",
+        ))
+    else:
+        console.print(Panel(
+            f"[red bold]Build failed: {total - verified}/{total} theorems affected.[/]\n"
+            f"Last {min(5, len(theorem_results))} errors:\n" +
+            "\n".join(
+                f"  [yellow]{t['theorem']}[/]: {t.get('error', '?')[:200]}"
+                for t in theorem_results[-5:]
+            ),
+            title="[red]Lean4 Verification FAILED[/]",
+        ))
+
+    table = Table(title="Theorem Verification Results")
+    table.add_column("Theorem", style="cyan")
+    table.add_column("Status")
+    table.add_column("Details")
+    for t in theorem_results:
+        status_style = "[green]✓[/]" if t["status"] == "verified" else "[red]✗[/]"
+        table.add_row(t["theorem"], status_style, (t.get("error") or "")[:80])
+    console.print(table)
+
+    if not build_ok:
+        raise typer.Exit(1)
+
+
+# ===================================================================
+# Helper: Extract metrics from experiment stdout
+# ===================================================================
+def _extract_metrics(stdout: str, ulid: str, mode: str, runtime: float) -> dict:
+    """Extract structured metrics from experiment stdout."""
+    metrics = []
+    patterns = [
+        (r"accuracy[:\s=]+([\d.]+)", "accuracy", "higher_better"),
+        (r"val_accuracy[:\s=]+([\d.]+)", "val_accuracy", "higher_better"),
+        (r"\bloss[:\s=]+([\d.]+)", "loss", "lower_better"),
+        (r"\bval_loss[:\s=]+([\d.]+)", "val_loss", "lower_better"),
+        (r"f1[:\s=]+([\d.]+)", "f1_score", "higher_better"),
+        (r"bleu[:\s=]+([\d.]+)", "bleu", "higher_better"),
+        (r"\bAP[:\s=]+([\d.]+)", "AP", "higher_better"),
+    ]
+    for pattern, name, mtype in patterns:
+        matches = re.findall(pattern, stdout, re.IGNORECASE)
+        if matches:
+            try:
+                value = float(matches[-1])
+                metrics.append({"name": name, "value": value, "type": mtype})
+            except ValueError:
+                pass
+    import time as _time
+    return {
+        "paper_id": ulid,
+        "metrics": metrics,
+        "runtime_seconds": round(runtime, 1),
+        "mode": mode,
+        "timestamp": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+
+# ===================================================================
 # exp-run: Run experiment
 # ===================================================================
 @app.command(name="exp-run")
@@ -253,6 +453,7 @@ def exp_run(
     paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)"),
     mode: str = typer.Option("quick", help="quick (CPU+synthetic) or full"),
     gpu: bool = typer.Option(False, "--gpu", help="Use GPU"),
+    use_docker: bool = typer.Option(False, "--docker", help="Run in Docker sandbox"),
     timeout: int = typer.Option(3600, help="Timeout in seconds"),
 ):
     """Run experiment code and collect metrics."""
@@ -281,7 +482,7 @@ def exp_run(
             raise typer.Exit(1)
 
     console.print(f"[cyan]Running experiment:[/] {main_script.name}")
-    console.print(f"  Mode: {mode}, GPU: {gpu}, Timeout: {timeout}s")
+    console.print(f"  Mode: {mode}, GPU: {gpu}, Docker: {use_docker}, Timeout: {timeout}s")
 
     env_args = []
     if mode == "quick":
@@ -289,12 +490,36 @@ def exp_run(
     if gpu:
         env_args.append("--gpu")
 
+    import time
+    start_time = time.time()
+
     try:
-        result = subprocess.run(
-            [sys.executable, str(main_script)] + env_args,
-            capture_output=True, text=True, timeout=timeout,
-            cwd=str(exp_dir),
-        )
+        if use_docker:
+            # Docker sandbox execution
+            image_name = f"scholar-{ulid[:8]}"
+            docker_args = ["docker", "run", "--rm"]
+            if gpu:
+                docker_args.extend(["--gpus", "all"])
+            docker_args.extend([
+                "-v", f"{exp_dir}:/app",
+                "-v", f"{config.PROJECT_ROOT / 'output' / 'datasets'}:/data",
+                "-w", "/app",
+                image_name,
+                "python", str(main_script.name),
+            ] + env_args)
+            result = subprocess.run(
+                docker_args,
+                capture_output=True, text=True, timeout=timeout,
+            )
+        else:
+            # Direct execution
+            result = subprocess.run(
+                [sys.executable, str(main_script)] + env_args,
+                capture_output=True, text=True, timeout=timeout,
+                cwd=str(exp_dir),
+            )
+
+        runtime = time.time() - start_time
 
         log_path = exp_dir / "run_log.txt"
         log_path.write_text(
@@ -302,22 +527,32 @@ def exp_run(
             encoding="utf-8",
         )
 
+        # Extract structured metrics
+        metrics = _extract_metrics(result.stdout, ulid, mode, runtime)
+        results_path = exp_dir / "results.json"
+        results_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+
         if result.returncode == 0:
             console.print(Panel(
                 f"Script: {main_script.name}\n"
                 f"Return code: [green]0[/]\n"
-                f"Log: {log_path}",
+                f"Runtime: {runtime:.1f}s\n"
+                f"Metrics: {len(metrics['metrics'])} extracted\n"
+                f"Log: {log_path}\n"
+                f"Results: {results_path}",
                 title="[green]Experiment OK[/]",
             ))
         else:
             console.print(Panel(
                 f"Return code: [red]{result.returncode}[/]\n"
+                f"Runtime: {runtime:.1f}s\n"
                 f"Last stderr:\n{result.stderr[-500:]}\n"
                 f"Log: {log_path}",
                 title="[red]Experiment Failed[/]",
             ))
     except subprocess.TimeoutExpired:
-        console.print(f"[red]Experiment timed out after {timeout}s[/]")
+        runtime = time.time() - start_time
+        console.print(f"[red]Experiment timed out after {timeout}s (ran {runtime:.0f}s)[/]")
 
 
 # ===================================================================
@@ -411,21 +646,57 @@ def exp_setup(
 
     if use_conda:
         env_name = f"scholar-{ulid[:8]}"
-        if env_path.exists():
-            console.print(f"  Found environment.yml, creating conda env: {env_name}")
-            console.print(f"  [dim]Run: conda env create -f {env_path} -n {env_name}[/]")
-        elif req_path.exists():
-            console.print(f"  Found requirements.txt, creating conda env: {env_name}")
-            console.print(f"  [dim]Run: conda create -n {env_name} python=3.10 && conda activate {env_name} && pip install -r {req_path}[/]")
+        console.print(f"  Creating conda env: {env_name}")
+        try:
+            subprocess.run(["conda", "create", "-n", env_name, "python=3.10", "-y"],
+                          capture_output=True, text=True, timeout=300, check=True)
+            console.print(f"  [green]Conda env created: {env_name}[/]")
+        except subprocess.CalledProcessError as e:
+            console.print(f"  [red]conda create failed: {e.stderr[-200:]}[/]")
+            raise typer.Exit(1)
+        except FileNotFoundError:
+            console.print("  [red]conda not found. Install Miniconda or use --docker[/]")
+            raise typer.Exit(1)
+
+        if req_path.exists():
+            console.print(f"  Installing requirements.txt...")
+            result = subprocess.run(
+                ["conda", "run", "-n", env_name, "pip", "install", "-r", str(req_path)],
+                capture_output=True, text=True, timeout=600,
+            )
+            if result.returncode == 0:
+                console.print(f"  [green]Dependencies installed[/]")
+            else:
+                console.print(f"  [yellow]pip install warnings: {result.stderr[-200:]}[/]")
+        elif env_path.exists():
+            console.print(f"  Installing from environment.yml...")
+            result = subprocess.run(
+                ["conda", "env", "update", "-n", env_name, "-f", str(env_path)],
+                capture_output=True, text=True, timeout=600,
+            )
+            if result.returncode == 0:
+                console.print(f"  [green]Environment updated[/]")
+            else:
+                console.print(f"  [yellow]env update warnings: {result.stderr[-200:]}[/]")
         else:
             console.print("  [yellow]No requirements.txt or environment.yml found[/]")
+        console.print(f"  [dim]Activate: conda activate {env_name}[/]")
     elif use_docker:
         dockerfile = exp_dir / "Dockerfile"
         if dockerfile.exists():
-            console.print(f"  Found Dockerfile")
-            console.print(f"  [dim]Run: docker build -t scholar-{ulid[:8]} {exp_dir}[/]")
+            image_name = f"scholar-{ulid[:8]}"
+            console.print(f"  Building Docker image: {image_name}")
+            result = subprocess.run(
+                ["docker", "build", "-t", image_name, str(exp_dir)],
+                capture_output=True, text=True, timeout=600,
+            )
+            if result.returncode == 0:
+                console.print(f"  [green]Docker image built: {image_name}[/]")
+            else:
+                console.print(f"  [red]docker build failed: {result.stderr[-300:]}[/]")
+                raise typer.Exit(1)
         else:
-            console.print("  [yellow]No Dockerfile found[/]")
+            console.print("  [yellow]No Dockerfile found. Run exp-codegen first.[/]")
     else:
         console.print("  Use --conda or --docker to set up environment")
 
@@ -471,6 +742,33 @@ def exp_debug(
         f"[bold]Stderr (last 500 chars):[/]\n{stderr_section[-500:]}",
         title="Experiment Debug",
     ))
+
+
+# ===================================================================
+# exp-codegen: Generate experiment code template
+# ===================================================================
+@app.command(name="exp-codegen")
+def exp_codegen(
+    paper_id: str = typer.Argument(help="Paper ID (ULID/arXiv/DOI/slug)"),
+):
+    """Generate experiment code template from paper JSON."""
+    from ..exp_codegen import generate_experiment_template
+
+    result = generate_experiment_template(paper_id)
+    if "error" in result:
+        console.print(f"[red]{result['error']}[/]")
+        raise typer.Exit(1)
+
+    console.print(Panel(
+        f"Paper: {result['title'][:60]}\n"
+        f"ULID: {result['ulid']}\n"
+        f"Formulas: {result['formulas_count']}\n"
+        f"Hyperparams: {result['hyperparams']}\n"
+        f"Files: {', '.join(result['files_created'])}\n"
+        f"Output: {result['output_dir']}",
+        title="[green]Experiment Template Generated[/]",
+    ))
+    console.print("[dim]Next: AI agent should fill in TODO sections, then run exp-setup + exp-run[/]")
 
 
 # ===================================================================

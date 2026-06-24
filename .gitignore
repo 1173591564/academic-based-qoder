@@ -38,3 +38,8 @@ scholar-studio-*.zip
 # Environment
 .env
 .env.local
+
+# Desktop app (Tauri)
+node_modules/
+desktop/dist/
+desktop/src-tauri/target/

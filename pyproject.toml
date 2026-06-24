@@ -17,11 +17,13 @@ dependencies = [
     "neo4j>=5.0",
     "python-dotenv>=1.0",
     "PyMuPDF>=1.23",
+    "mcp>=1.0",
+    "rapidfuzz>=3.0",
+    "bibtexparser>=1.4",
 ]
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0"]
-all = ["mcp>=1.0"]
+dev = ["pytest>=7.0", "pytest-benchmark>=4.0"]
 
 [project.scripts]
 scholar = "scholar.cli:main"

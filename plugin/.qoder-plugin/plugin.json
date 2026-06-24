@@ -2,7 +2,7 @@
   "name": "scholar-studio",
   "version": "2.0.0",
   "displayName": "Scholar Studio — AI 学术研究助手",
-  "description": "论文管理、RAG 语义检索、14 个学术 Skills（调研/深度分析/写作/复现/研究空白/知识库维护）、Hybrid ID、Neo4j 引用图谱、Lean4 形式化验证",
+  "description": "论文管理、RAG 语义检索、15 个学术 Skills（调研/深度分析/写作/复现/研究空白/知识库维护）、Hybrid ID、Neo4j 引用图谱、Lean4 形式化验证"
   "author": {
     "name": "Scholar Studio"
   },

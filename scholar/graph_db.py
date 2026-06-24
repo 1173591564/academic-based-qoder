@@ -104,6 +104,13 @@ def resolve_ref_keys(gdb: GraphDB, parsed_dir: Path = None) -> dict:
             norm = _normalize_title(title)
             title_to_ulid[norm] = data["paper_id"]
 
+    # Build word-level inverted index for fast candidate lookup
+    word_index: dict[str, set[str]] = {}
+    for norm_title in title_to_ulid:
+        for word in norm_title.split():
+            if len(word) > 2:  # skip very short words
+                word_index.setdefault(word, set()).add(norm_title)
+
     # Get all unresolved CITES edges
     edges = gdb.run("""
         MATCH (from:Paper)-[c:CITES]->(to:Paper)
@@ -125,16 +132,29 @@ def resolve_ref_keys(gdb: GraphDB, parsed_dir: Path = None) -> dict:
         matched_ulid = title_to_ulid.get(ref_lower)
         best_score = 1.0 if matched_ulid else 0.0
 
-        # Try fuzzy match: only run if no exact match
+        # Try fuzzy match with inverted index: only check candidates sharing words
         if not matched_ulid:
-            for norm_title, ulid in title_to_ulid.items():
+            ref_words = set(ref_lower.split())
+            candidates = set()
+            for w in ref_words:
+                if w in word_index:
+                    candidates.update(word_index[w])
+            # Limit candidates to avoid blow-up on very common words
+            if len(candidates) > 100:
+                # Prioritize by word overlap count
+                scored = [(len(ref_words & set(c.split())), c) for c in candidates]
+                scored.sort(reverse=True)
+                candidates = {c for _, c in scored[:50]}
+
+            for norm_title in candidates:
+                ulid = title_to_ulid[norm_title]
                 if ref_lower in norm_title or norm_title in ref_lower:
                     score = min(len(ref_lower), len(norm_title))
                     if score > best_score:
                         best_score = score
                         matched_ulid = ulid
                 # Word overlap
-                words_a = set(ref_lower.split())
+                words_a = ref_words
                 words_b = set(norm_title.split())
                 if words_a and words_b:
                     overlap = len(words_a & words_b) / max(len(words_a), len(words_b))
@@ -578,6 +598,28 @@ CONCEPT_ALIASES = {
 }
 
 
+# Pre-compiled word-boundary regex patterns for concept aliases (performance)
+_CONCEPT_PATTERNS: dict[str, list[re.Pattern]] = {}
+
+
+def _get_concept_patterns(concept_id: str, aliases: list[str]) -> list[re.Pattern]:
+    """Get or compile word-boundary regex patterns for a concept's aliases."""
+    if concept_id not in _CONCEPT_PATTERNS:
+        _CONCEPT_PATTERNS[concept_id] = [
+            re.compile(r'\b' + re.escape(alias.lower()) + r'\b', re.IGNORECASE)
+            for alias in aliases
+        ]
+    return _CONCEPT_PATTERNS[concept_id]
+
+
+def _match_concept_in_text(full_text: str, concept_id: str, aliases: list[str]) -> bool:
+    """Check if any alias of a concept appears in text with word-boundary matching."""
+    for pattern in _get_concept_patterns(concept_id, aliases):
+        if pattern.search(full_text):
+            return True
+    return False
+
+
 def extract_concepts_tfidf(parsed_dir: Path = None, top_k: int = 5) -> dict:
     """
     Extract key concepts from papers using TF-IDF-like scoring.
@@ -607,10 +649,8 @@ def extract_concepts_tfidf(parsed_dir: Path = None, top_k: int = 5) -> dict:
 
         matched = set()
         for concept_id, aliases in CONCEPT_ALIASES.items():
-            for alias in aliases:
-                if alias.lower() in full_text:
-                    matched.add(concept_id)
-                    break
+            if _match_concept_in_text(full_text, concept_id, aliases):
+                matched.add(concept_id)
 
         paper_concepts[pid] = matched
         for c in matched:
@@ -677,10 +717,8 @@ def build_concept_graph(gdb: GraphDB, parsed_dir: Path = None):
         matched = set()
 
         for concept_id, aliases in CONCEPT_ALIASES.items():
-            for alias in aliases:
-                if alias.lower() in full_text:
-                    matched.add(concept_id)
-                    break
+            if _match_concept_in_text(full_text, concept_id, aliases):
+                matched.add(concept_id)
 
         paper_concepts[pid] = matched
 

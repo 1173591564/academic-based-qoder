@@ -1,8 +1,8 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **570 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 121 项自动化测试。
+基于 Qoder IDE 的学术研究引擎，管理 **581 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 121 项自动化测试。
 
-> **核心理念**：把 570 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills + Hooks 自动化完成调研→精读→对比→写作→追踪的全流程。
+> **核心理念**：把 581 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills + Hooks 自动化完成调研→精读→对比→写作→追踪的全流程。
 
 ---
 
@@ -94,22 +94,22 @@ Bootstrap 按顺序执行 **9 步**，全程约 **40 分钟**：
 
 | # | 命令 | 产出 | 耗时 |
 |---|------|------|------|
-| 1 | `parse-all` | 570 篇论文的 TeX → JSON | ~5 min |
+| 1 | `parse-all` | 581 篇论文的 TeX → JSON | ~5 min |
 | 2 | `year-fix` | 补全缺失年份（交叉引用 Lean4 + arXiv API） | ~1 min |
 | 3 | `author-fix` | 补全缺失作者（arXiv API） | ~1 min |
 | 4 | `graph-build` | Neo4j 图谱（论文 + 概念 + Lean4 关系） | ~3 min |
 | 5 | PG sync | PostgreSQL 写入 sections/formulas/citations | ~2 min |
 | 6 | `rag-index` | 向量索引（需 API Key） | ~30 min |
-| 7 | `auto-notes` | 自动生成 556 份阅读笔记 | ~3 min |
-| 8 | `quality-score` | 534 篇论文 7 维度评分 | ~2 min |
-| 9 | `classify` | 555 篇论文领域分类 | ~1 min |
+| 7 | `auto-notes` | 自动生成 564 份阅读笔记 | ~3 min |
+| 8 | `quality-score` | 542 篇论文 7 维度评分 | ~2 min |
+| 9 | `classify` | 563 篇论文领域分类 | ~1 min |
 
 > **断点续传**：如果中途中断，重新运行 `bootstrap` 会自动跳过已完成的步骤。
 
 ### Step 6: 在 Qoder 中打开
 
 1. 用 Qoder 打开项目目录
-2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（43 个工具）
+2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（46 个工具）
 3. 在对话框中直接开始使用
 
 ### Step 7: 验证一切正常
@@ -130,18 +130,18 @@ python -m scholar stats
 
 ```
 ╭────────────────────── Knowledge Base Stats ───────────────────────╮
-│ Paper folders:   570                                              │
-│ Parsed:          555                                              │
-│ Total sections:  16344                                            │
-│ Total formulas:  6776                                             │
-│ Total citations: 43397                                            │
+│ Paper folders:   581                                              │
+│ Parsed:          563                                              │
+│ Total sections:  16461                                            │
+│ Total formulas:  6940                                             │
+│ Total citations: 43682                                            │
 │ Database:        connected                                        │
 │                                                                   │
 │ Metadata Coverage:                                                │
-│   Year:      457/555 (82%)                                        │
-│   Authors:   540/555 (97%)                                        │
-│   Abstract:  534/555 (96%)                                        │
-│   Venue:     475/555 (85%)                                        │
+│   Year:      515/563 (91%)                                        │
+│   Authors:   548/563 (97%)                                        │
+│   Abstract:  542/563 (96%)                                        │
+│   Venue:     554/563 (98%)                                        │
 ╰───────────────────────────────────────────────────────────────────╯
 ```
 
@@ -272,7 +272,7 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
 |                 |                                                      |
 |                 v                                                      |
 |   +-----------------------------------------------------------------+ |
-|   |           Scholar MCP Server  (43 tools)                        | |
+|   |           Scholar MCP Server  (46 tools)                        | |
 |   |           Qoder <-> CLI bridge layer                            | |
 |   +------------------------------+----------------------------------+ |
 +==================================|====================================+
@@ -414,10 +414,10 @@ cd test && pytest                           # 运行 121 项自动化测试
   settings.json    Hooks 配置
   mcp.json         MCP Server 配置
 
-data/papers/       570 篇论文（每篇：paper.pdf + source.tar.gz）
+data/papers/       581 篇论文（每篇：paper.pdf + source.tar.gz）
 output/
-  parsed/          555 篇结构化 JSON（核心数据源，全局共享）
-  notes/           556 份阅读笔记 + 534 份质量评分 JSON（全局共享）
+  parsed/          563 篇结构化 JSON（核心数据源，全局共享）
+  notes/           564 份阅读笔记 + 542 份质量评分 JSON（全局共享）
   drafts/<project>/  综述、Related Work、报告（按项目隔离）
   bib/             BibTeX 文件
   experiments/     实验代码复现
@@ -445,7 +445,7 @@ scholar/           Python CLI 工具集（39 命令）
   graph_db.py      Neo4j 图谱操作
   rag.py           RAG 向量检索
   ...              其他领域模块
-scholar_mcp/       MCP Server（43 工具，Qoder 桥接层）
+scholar_mcp/       MCP Server（46 工具，Qoder 桥接层）
 test/              自动化测试套件（8 个文件，121 项测试）
   conftest.py      共享 fixtures
   test_config.py   配置路径与环境变量
@@ -475,18 +475,18 @@ plugin/            Qoder Plugin 分发版
 
 | 数据层 | 数量 |
 |--------|------|
-| 论文目录 | 570 |
-| TeX 解析 | 555 篇（97.4%） |
-| Sections | 16,344 |
-| Formulas | 6,776 |
-| Citations | 43,397 |
-| 阅读笔记 | 556 |
-| 质量评分 | 534 |
-| 领域分类 | 555 |
-| 年份覆盖 | 510/555 (91%) |
-| 作者覆盖 | 540/555 (97%) |
-| 摘要覆盖 | 534/555 (96%) |
-| Venue 覆盖 | 548/555 (98%) |
+| 论文目录 | 581 |
+| TeX 解析 | 563 篇（97.4%） |
+| Sections | 16,461 |
+| Formulas | 6,940 |
+| Citations | 43,682 |
+| 阅读笔记 | 564 |
+| 质量评分 | 542 |
+| 领域分类 | 563 |
+| 年份覆盖 | 515/563 (91%) |
+| 作者覆盖 | 548/563 (97%) |
+| 摘要覆盖 | 542/563 (96%) |
+| Venue 覆盖 | 554/563 (98%) |
 
 ### 领域分布
 

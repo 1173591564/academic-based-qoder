@@ -1,6 +1,6 @@
 # Scholar Studio Plugin
 
-> **本插件是"大脑"，还需要安装"身体"。** Plugin 提供 14 个 Skills + 4 个 Commands + MCP 配置，但实际执行依赖主仓库的 Python 后端和数据库。
+> **本插件是“大脑”，还需要安装“身体”。** Plugin 提供 15 个 Skills + 6 个 Commands + MCP 配置，但实际执行依赖主仓库的 Python 后端和数据库。
 
 ## 架构说明
 
@@ -51,11 +51,11 @@ python -m scholar bootstrap
 
 | 类型 | 数量 | 说明 |
 |------|------|------|
-| Skills | 14 | 8 原子 + 6 工作流 |
-| Commands | 4 | stats / find / paper / health |
-| Rules | 1 | Agent 角色定义 |
-| Hooks | 2 | 任务完成通知 + 危险命令拦截 |
-| MCP Server | 1 | Scholar MCP（41 工具） |
+| Skills | 15 | 8 原子 + 7 工作流 |
+| Commands | 6 | stats / find / paper / health / resume / sync |
+| Rules | 7 | identity/onboarding/pipelines/tools/memory-policy/academic/interest-capture |
+| Hooks | 3 | block-dangerous / log-conversation / task-done |
+| MCP Server | 1 | Scholar MCP（46 工具） |
 
 ## Skills 列表
 

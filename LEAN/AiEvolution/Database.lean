@@ -165,9 +165,9 @@ def Tacotron2 : Innovation := { id := "Tacotron2", line := ResearchLine.SpeechAu
 def EnCodec : Innovation := { id := "EnCodec", line := ResearchLine.SpeechAudio, core := false, year := 2022, properties := { scalability := 3, simplicity := 2, stability := 4 } }
 
 -- ── CodingLLM (3) ──
-def Copilot : Innovation := { id := "Copilot", line := ResearchLine.SelfSupervised, core := true, year := 2021, properties := { scalability := 4, simplicity := 3, stability := 4 } }
-def CodeLLaMA : Innovation := { id := "CodeLLaMA", line := ResearchLine.SelfSupervised, core := false, year := 2023, properties := { scalability := 4, simplicity := 3, stability := 4 } }
-def StarCoder : Innovation := { id := "StarCoder", line := ResearchLine.SelfSupervised, core := false, year := 2023, properties := { scalability := 4, simplicity := 3, stability := 4 } }
+def Copilot : Innovation := { id := "Copilot", line := ResearchLine.CodingLLM, core := true, year := 2021, properties := { scalability := 4, simplicity := 3, stability := 4 } }
+def CodeLLaMA : Innovation := { id := "CodeLLaMA", line := ResearchLine.CodingLLM, core := false, year := 2023, properties := { scalability := 4, simplicity := 3, stability := 4 } }
+def StarCoder : Innovation := { id := "StarCoder", line := ResearchLine.CodingLLM, core := false, year := 2023, properties := { scalability := 4, simplicity := 3, stability := 4 } }
 
 -- ===================================================================
 -- 417 Paper Records (generated from output/parsed/*.json)

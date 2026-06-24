@@ -253,6 +253,7 @@ class TeXParser:
                 "sections": self._extract_sections(all_content, macros),
                 "formulas": self._extract_formulas(all_content),
                 "citations": self._extract_citations(all_content),
+                "bibliography": self._extract_bibliography(all_content, tmpdir),
                 "tex_file_count": len(tex_files),
                 "main_tex_file": main_file.name,
             }
@@ -290,6 +291,7 @@ class TeXParser:
             "sections": self._extract_sections(all_content, macros),
             "formulas": self._extract_formulas(all_content),
             "citations": self._extract_citations(all_content),
+            "bibliography": self._extract_bibliography(all_content, dir_path),
             "tex_file_count": len(tex_files),
             "main_tex_file": main_file.name,
         }
@@ -313,6 +315,12 @@ class TeXParser:
                 tf.extractall(dest, filter="data")
         elif path_str.endswith(".zip"):
             with zipfile.ZipFile(archive_path, "r") as zf:
+                # Prevent Zip Slip: validate all entries stay within dest
+                dest_resolved = dest.resolve()
+                for member in zf.namelist():
+                    member_path = (dest / member).resolve()
+                    if not str(member_path).startswith(str(dest_resolved)):
+                        raise ValueError(f"Unsafe zip entry (path traversal): {member}")
                 zf.extractall(dest)
         else:
             raise ValueError(f"Unsupported archive format: {archive_path}")
@@ -1590,6 +1598,109 @@ class TeXParser:
             })
 
         return formulas
+
+    def _extract_bibliography(self, content: str, file_dir: Path = None) -> list[dict]:
+        """Extract structured bibliography entries with title/authors/year/doi.
+
+        Two sources:
+        1. .bib files (bibtexparser) — if file_dir available, scan for *.bib
+        2. \\bibitem entries in TeX content — regex parse
+
+        Returns: [{ref_key, title, authors, year, doi}, ...]
+        """
+        entries = []
+        seen_keys = set()
+
+        # Source 1: .bib files
+        if file_dir and file_dir.exists():
+            try:
+                import bibtexparser
+            except ImportError:
+                bibtexparser = None
+
+            if bibtexparser:
+                for bib_file in file_dir.rglob("*.bib"):
+                    try:
+                        raw = bib_file.read_text(encoding="utf-8", errors="ignore")
+                        db = bibtexparser.loads(raw)
+                        for entry in db.entries:
+                            key = entry.get("ID", "").strip()
+                            if not key or key in seen_keys:
+                                continue
+                            seen_keys.add(key)
+                            title = re.sub(r"[{}]", "", entry.get("title", "").strip())
+                            authors_raw = entry.get("author", "")
+                            authors = [a.strip() for a in re.split(r"\s+and\s+|,", authors_raw) if a.strip()]
+                            year = None
+                            year_str = entry.get("year", "")
+                            if year_str:
+                                m = re.search(r"\d{4}", year_str)
+                                if m:
+                                    year = int(m.group())
+                            doi = entry.get("doi", "").strip()
+                            if not doi:
+                                url = entry.get("url", "")
+                                m = re.search(r"doi\.org/(10\.\d+/[^\s]+)", url)
+                                if m:
+                                    doi = m.group(1)
+                            entries.append({
+                                "ref_key": key,
+                                "title": title,
+                                "authors": authors[:5],
+                                "year": year,
+                                "doi": doi,
+                            })
+                    except Exception:
+                        pass
+
+        # Source 2: \bibitem entries in TeX content
+        bib_match = re.search(
+            r"\\begin\{thebibliography\}.*?\n(.*?)(?:\\end\{thebibliography\}|$)",
+            content, re.DOTALL,
+        )
+        bib_text = bib_match.group(1) if bib_match else ""
+
+        if bib_text:
+            parts = re.split(r"\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}", bib_text)
+            for i in range(1, len(parts) - 1, 2):
+                key = parts[i].strip()
+                body = parts[i + 1] if i + 1 < len(parts) else ""
+
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                title = ""
+                title_match = re.search(r"\\bibinfo\{title\}\{([^}]+)\}", body)
+                if title_match:
+                    title = title_match.group(1)
+                else:
+                    lines = [l.strip() for l in body.strip().split("\n") if l.strip()]
+                    if lines:
+                        first = lines[0]
+                        first = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", first)
+                        first = re.sub(r"[{}\\]", "", first).strip()
+                        title = first[:200]
+
+                year = None
+                year_match = re.search(r"\b(19\d{2}|20\d{2})\b", body)
+                if year_match:
+                    year = int(year_match.group())
+
+                doi = ""
+                doi_match = re.search(r"doi[:\s]*\{?(10\.\d+/[^\s\}]+)", body, re.I)
+                if doi_match:
+                    doi = doi_match.group(1)
+
+                entries.append({
+                    "ref_key": key,
+                    "title": title.strip(),
+                    "authors": [],
+                    "year": year,
+                    "doi": doi,
+                })
+
+        return entries
 
     def _extract_citations(self, content: str) -> list[str]:
         refs = set()
