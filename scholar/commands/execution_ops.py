@@ -446,36 +446,115 @@ def _extract_metrics(stdout: str, ulid: str, mode: str, runtime: float) -> dict:
 
 
 def _extract_paper_metrics(paper_data: dict) -> list:
-    """Extract reported metrics from paper sections (Results/Experiments/Evaluation)."""
-    metrics = []
+    """Extract reported metrics from paper sections (Results/Experiments/Evaluation).
+
+    Enhanced extraction:
+    - Colon/equals format: accuracy: 85.2, loss = 0.34
+    - Sentence format: achieves accuracy of 92.3%, reaches F1 of 0.87
+    - Markdown table rows: | accuracy | 88.5% |
+    - ± notation: 85.2 ± 0.3 (takes main value)
+    - Range values: 85.2-87.3 (takes max for higher_better, min for lower_better)
+    - Multiple values: takes best (max for higher_better, min for lower_better)
+    - Normalization: percentage values >1 are divided by 100 for ratio metrics
+    - New metrics: EM, AUC, precision, recall
+    """
+    # Metrics that should be normalized to [0, 1] when value > 1
+    _normalize_metrics = {"accuracy", "f1_score", "map", "bleu", "rouge_l",
+                          "exact_match", "auc", "precision", "recall"}
+    _lower_better_metrics = {"loss", "perplexity"}
+
+    def _normalize(value: float, name: str) -> float:
+        if value > 1 and name in _normalize_metrics:
+            return value / 100.0
+        return value
+
+    def _mtype(name: str) -> str:
+        return "lower_better" if name in _lower_better_metrics else "higher_better"
+
+    # Regex patterns: (pattern, metric_name)
+    # Covers colon/equals format AND sentence format
     patterns = [
-        (r"(?:accuracy|acc)\s*[:=]\s*(\d+\.?\d*)\s*%?", "accuracy", "higher_better"),
-        (r"(?:f1[- ]?score|f1)\s*[:=]\s*(\d+\.?\d*)", "f1_score", "higher_better"),
-        (r"(?:bleu)\s*[:=]\s*(\d+\.?\d*)", "bleu", "higher_better"),
-        (r"(?:perplexity|ppl)\s*[:=]\s*(\d+\.?\d*)", "perplexity", "lower_better"),
-        (r"(?:rouge[- ]?l)\s*[:=]\s*(\d+\.?\d*)", "rouge_l", "higher_better"),
-        (r"(?:map|AP)\s*[:=]\s*(\d+\.?\d*)", "map", "higher_better"),
-        (r"\bloss\s*[:=]\s*(\d+\.?\d*)", "loss", "lower_better"),
+        # accuracy / acc
+        (r"(?:accuracy|acc)\s*[:=]\s*(\d+\.?\d*)\s*%?", "accuracy"),
+        (r"(?:accuracy|acc)\s*(?:of|is|was|reaches?|achieves?|obtains?|attains?)\s*(\d+\.?\d*)\s*%?", "accuracy"),
+        # F1 score
+        (r"(?:f1[- ]?score|f1)\s*[:=]\s*(\d+\.?\d*)", "f1_score"),
+        (r"(?:f1[- ]?score|f1)\s*(?:of|is|was|reaches?|achieves?)\s*(\d+\.?\d*)", "f1_score"),
+        # BLEU
+        (r"(?:bleu)\s*[:=]\s*(\d+\.?\d*)", "bleu"),
+        (r"(?:bleu)\s*(?:of|is|was|reaches?|achieves?)\s*(\d+\.?\d*)", "bleu"),
+        # Perplexity / PPL
+        (r"(?:perplexity|ppl)\s*[:=]\s*(\d+\.?\d*)", "perplexity"),
+        # ROUGE-L
+        (r"(?:rouge[- ]?l)\s*[:=]\s*(\d+\.?\d*)", "rouge_l"),
+        # MAP
+        (r"(?:map|mean\s+average\s+precision)\s*[:=]\s*(\d+\.?\d*)", "map"),
+        # Loss
+        (r"\bloss\s*[:=]\s*(\d+\.?\d*)", "loss"),
+        # Exact Match / EM
+        (r"(?:exact\s+match|em)\s*[:=]\s*(\d+\.?\d*)\s*%?", "exact_match"),
+        # AUC
+        (r"\bauc\s*[:=]\s*(\d+\.?\d*)", "auc"),
+        # Precision
+        (r"\bprecision\s*[:=]\s*(\d+\.?\d*)\s*%?", "precision"),
+        # Recall
+        (r"\brecall\s*[:=]\s*(\d+\.?\d*)\s*%?", "recall"),
     ]
-    # Focus on Results/Experiments/Evaluation sections
+
+    # Collect target text from Results/Experiments/Evaluation sections
     target_text = ""
     for s in paper_data.get("sections", []):
         heading = (s.get("heading") or "").lower()
-        if any(kw in heading for kw in ["result", "experiment", "evaluation", "performance"]):
+        if any(kw in heading for kw in ["result", "experiment", "evaluation", "performance", "main result"]):
             target_text += "\n" + s.get("content", "")
     # Also check abstract
     target_text += "\n" + (paper_data.get("abstract") or "")
 
-    for pattern, name, mtype in patterns:
-        matches = re.findall(pattern, target_text, re.IGNORECASE)
-        if matches:
+    metrics = []
+    seen_names = set()
+
+    # Phase 1: Parse markdown table rows (| metric | value |)
+    table_pattern = re.compile(r"\|\s*([a-zA-Z][\w\s-]*?)\s*\|\s*(\d+\.?\d*)\s*[%]?\s*\|")
+    name_map = {
+        "accuracy": "accuracy", "acc": "accuracy",
+        "f1": "f1_score", "f1 score": "f1_score", "f1-score": "f1_score",
+        "bleu": "bleu", "perplexity": "perplexity", "ppl": "perplexity",
+        "rouge-l": "rouge_l", "rouge l": "rouge_l", "map": "map",
+        "loss": "loss", "em": "exact_match", "exact match": "exact_match",
+        "auc": "auc", "precision": "precision", "recall": "recall",
+    }
+    for match in table_pattern.finditer(target_text):
+        metric_name_raw = match.group(1).strip().lower()
+        value_str = match.group(2)
+        mapped = name_map.get(metric_name_raw)
+        if mapped and mapped not in seen_names:
             try:
-                value = float(matches[-1])
-                if value > 1 and name in ("accuracy", "f1_score", "map"):
-                    value = value / 100.0
-                metrics.append({"name": name, "value": value, "type": mtype})
+                value = _normalize(float(value_str), mapped)
+                metrics.append({"name": mapped, "value": value, "type": _mtype(mapped)})
+                seen_names.add(mapped)
             except ValueError:
                 pass
+
+    # Phase 2: Regex extraction from prose
+    for pattern, name in patterns:
+        if name in seen_names:
+            continue  # Already found via table
+        matches = re.findall(pattern, target_text, re.IGNORECASE)
+        if matches:
+            values = []
+            for m in matches:
+                try:
+                    v = _normalize(float(m), name)
+                    values.append(v)
+                except ValueError:
+                    continue
+            if values:
+                # Take best value: max for higher_better, min for lower_better
+                mtype = _mtype(name)
+                best = max(values) if mtype == "higher_better" else min(values)
+                metrics.append({"name": name, "value": best, "type": mtype})
+                seen_names.add(name)
+
     return metrics
 
 

@@ -1,0 +1,181 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: dev
+nodes_managed: true
+exported_at: "2026-06-24T13:06:46Z"
+modules:
+    "":
+        dir_name: Scholar Studio 学术研究智能体编排平台
+        title: Scholar Studio 学术研究智能体编排平台
+        scope:
+            - .gitignore
+            - pyproject.toml
+            - pytest.ini
+            - requirements.txt
+        source_files: []
+        children:
+            - desktop_app
+            - lean_project
+            - plugin_system
+            - scholar_cli
+            - scholar_mcp
+            - scripts
+            - tests
+        depends_on: []
+        related_to: []
+    build_system:
+        dir_name: 混合构建系统与制品管理
+        title: 混合构建系统与制品管理
+        scope: []
+        source_files:
+            - pyproject.toml
+            - build_exe.py
+            - build_plugin.py
+            - scholar.spec
+            - infra/docker-compose.yml
+            - LEAN/lakefile.toml
+            - LEAN/.github/workflows/lean_action_ci.yml
+            - pytest.ini
+        children: []
+        depends_on: []
+        related_to: []
+    configuration_system:
+        dir_name: 基于环境变量与双模式路径解析的集中式配置管理
+        title: 基于环境变量与双模式路径解析的集中式配置管理
+        scope: []
+        source_files:
+            - scholar/config.py
+            - .env.example
+            - infra/docker-compose.yml
+            - pyproject.toml
+        children: []
+        depends_on: []
+        related_to: []
+    dependency_management:
+        dir_name: 混合依赖管理体系：Python (pip_setuptools) 与 Lean4 (Lake)_2
+        title: 混合依赖管理体系：Python (pip/setuptools) 与 Lean4 (Lake)
+        scope: []
+        source_files:
+            - pyproject.toml
+            - requirements.txt
+            - LEAN/lakefile.toml
+            - LEAN/lake-manifest.json
+            - LEAN/lean-toolchain
+            - scholar_studio.egg-info/requires.txt
+        children: []
+        depends_on: []
+        related_to: []
+    desktop_app:
+        dir_name: Scholar Studio 桌面应用壳层
+        title: Scholar Studio 桌面应用壳层
+        scope:
+            - desktop/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scholar_mcp
+    error_handling:
+        dir_name: 错误处理机制
+        title: 错误处理机制
+        scope: []
+        source_files:
+            - scholar_mcp/server.py
+            - scholar/tex_parser.py
+            - scholar/commands/core_ops.py
+            - scholar/_shared.py
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_style:
+        dir_name: 基于 Rich 与 Typer 的 CLI 终端交互风格
+        title: 基于 Rich 与 Typer 的 CLI 终端交互风格
+        scope: []
+        source_files:
+            - scholar/_shared.py
+            - scholar/commands/batch_ops.py
+            - build_exe.py
+            - scholar/cli.py
+        children: []
+        depends_on: []
+        related_to: []
+    lean_project:
+        dir_name: AI演进形式化验证系统
+        title: AI演进形式化验证系统
+        scope:
+            - LEAN/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    logging_system:
+        dir_name: 基于 Rich Console 的 CLI 交互输出与日志策略
+        title: 基于 Rich Console 的 CLI 交互输出与日志策略
+        scope: []
+        source_files:
+            - scholar/_shared.py
+            - scholar/cli.py
+            - scholar/commands/core_ops.py
+            - scholar/commands/paper_ops.py
+            - scholar/research_loop.py
+            - .qoder/hooks/log-conversation.ps1
+        children: []
+        depends_on: []
+        related_to: []
+    plugin_system:
+        dir_name: 学术研究智能体插件系统
+        title: 学术研究智能体插件系统
+        scope:
+            - plugin/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scholar_mcp
+    scholar_cli:
+        dir_name: 学术研究工作流 CLI 引擎
+        title: 学术研究工作流 CLI 引擎
+        scope:
+            - scholar/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scholar_mcp
+            - path: scripts
+            - path: tests
+    scholar_mcp:
+        dir_name: 学术知识库 MCP 服务层
+        title: 学术知识库 MCP 服务层
+        scope:
+            - scholar_mcp/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: desktop_app
+            - path: plugin_system
+            - path: scholar_cli
+            - path: tests
+    scripts:
+        dir_name: 构建、部署与运维自动化脚本
+        title: 构建、部署与运维自动化脚本
+        scope:
+            - scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scholar_cli
+    tests:
+        dir_name: Scholar Studio 集成与端到端测试套件
+        title: Scholar Studio 集成与端到端测试套件
+        scope:
+            - test/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scholar_cli
+            - path: scholar_mcp

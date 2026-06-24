@@ -198,6 +198,46 @@ def sync_database(apply: bool = False, paper_limit: int = 100, citation_limit: i
     }
 
 
+def _run_lake_build() -> dict:
+    """Run `lake build` in the LEAN directory.
+
+    Returns {success, stdout, stderr} or {success: False, error: ...}.
+    """
+    import subprocess
+    import shutil
+    import os
+
+    lean_dir = config.LEAN_DIR
+
+    # Find lake executable: check PATH, then elan bin directory
+    lake = shutil.which("lake")
+    if not lake:
+        elan_bin = Path.home() / ".elan" / "bin"
+        candidate = elan_bin / ("lake.exe" if os.name == "nt" else "lake")
+        if candidate.exists():
+            lake = str(candidate)
+    if not lake:
+        return {"success": False, "error": "lake executable not found (install elan or add ~/.elan/bin to PATH)"}
+
+    try:
+        result = subprocess.run(
+            [lake, "build"],
+            cwd=str(lean_dir),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        return {
+            "success": result.returncode == 0,
+            "stdout": result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout,
+            "stderr": result.stderr[-2000:] if len(result.stderr) > 2000 else result.stderr,
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "lake build timed out (300s)"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 # ===================================================================
 # E3: Theorem template generator
 # ===================================================================
@@ -303,6 +343,7 @@ def lean_sync_cmd(
     apply: bool = typer.Option(False, "--apply", help="Write changes to Database.lean"),
     paper_limit: int = typer.Option(100, "--max-papers", help="Max papers to include"),
     citation_limit: int = typer.Option(200, "--max-citations", help="Max citations to include"),
+    build: bool = typer.Option(False, "--build", help="Run lake build after sync (requires --apply)"),
 ):
     """Sync parsed papers to Lean4 Database.lean."""
     result = sync_database(apply=apply, paper_limit=paper_limit, citation_limit=citation_limit)
@@ -315,6 +356,20 @@ def lean_sync_cmd(
         console.print("[green]Written to Database.lean (backup saved as .bak)[/]")
     else:
         console.print("[yellow]Dry run. Use --apply to write.[/]")
+
+    if build:
+        if not apply:
+            console.print("[yellow]--build requires --apply. Skipping lake build.[/]")
+        else:
+            console.print("[cyan]Running lake build...[/]")
+            build_result = _run_lake_build()
+            if build_result["success"]:
+                console.print("[green]lake build succeeded[/]")
+                if build_result.get("stdout"):
+                    console.print(f"[dim]{build_result['stdout'][-500:]}[/]")
+            else:
+                error_msg = build_result.get("error", build_result.get("stderr", "unknown"))
+                console.print(f"[red]lake build failed: {error_msg}[/]")
 
 
 @app.command(name="lean-templates")
