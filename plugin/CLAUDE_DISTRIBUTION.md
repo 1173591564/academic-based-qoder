@@ -52,8 +52,7 @@ Scholar Studio 同时支持两种 AI IDE 后端：
 
 ## 双平台支持的代价
 
-- 维护两份同步的 rules/skills/commands/hooks
-- desktop EXE 需要检测并支持两个 CLI (`claude` / `qodercli`)
+- 同时支持 `claude` 和 `qodercli` 两个 CLI
 - MCP 配置可共用一份 (mcp.json 内容相同)
 
 ## 未来扩展
