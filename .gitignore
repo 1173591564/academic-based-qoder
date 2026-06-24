@@ -38,3 +38,6 @@ scholar-studio-*.zip
 # Environment
 .env
 .env.local
+
+# Qoder IDE auto-generated
+.qoder/repowiki/
