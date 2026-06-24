@@ -71,7 +71,7 @@ output/digests/            研究同步报告
 output/logs/               对话日志（按周轮转）
 output/research-interests.json  研究方向画像
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
-scholar/                   Python CLI 工具集（37 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，52 工具）
+scholar/                   Python CLI 工具集（42 命令）
+scholar_mcp/               MCP Server（CLI → Qoder 原生工具，55 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

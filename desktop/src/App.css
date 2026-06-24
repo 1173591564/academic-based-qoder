@@ -1534,3 +1534,31 @@ body {
 .metrics-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
 .value-ours { color: var(--accent); font-weight: 500; }
 .value-gap { font-size: 11px; }
+
+/* ============================================================ */
+/*  Visualization Buttons (MessageBubble)                         */
+/* ============================================================ */
+
+.viz-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.viz-btn {
+  padding: 2px 10px;
+  font-size: 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.viz-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}

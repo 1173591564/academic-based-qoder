@@ -445,6 +445,40 @@ def _extract_metrics(stdout: str, ulid: str, mode: str, runtime: float) -> dict:
     }
 
 
+def _extract_paper_metrics(paper_data: dict) -> list:
+    """Extract reported metrics from paper sections (Results/Experiments/Evaluation)."""
+    metrics = []
+    patterns = [
+        (r"(?:accuracy|acc)\s*[:=]\s*(\d+\.?\d*)\s*%?", "accuracy", "higher_better"),
+        (r"(?:f1[- ]?score|f1)\s*[:=]\s*(\d+\.?\d*)", "f1_score", "higher_better"),
+        (r"(?:bleu)\s*[:=]\s*(\d+\.?\d*)", "bleu", "higher_better"),
+        (r"(?:perplexity|ppl)\s*[:=]\s*(\d+\.?\d*)", "perplexity", "lower_better"),
+        (r"(?:rouge[- ]?l)\s*[:=]\s*(\d+\.?\d*)", "rouge_l", "higher_better"),
+        (r"(?:map|AP)\s*[:=]\s*(\d+\.?\d*)", "map", "higher_better"),
+        (r"\bloss\s*[:=]\s*(\d+\.?\d*)", "loss", "lower_better"),
+    ]
+    # Focus on Results/Experiments/Evaluation sections
+    target_text = ""
+    for s in paper_data.get("sections", []):
+        heading = (s.get("heading") or "").lower()
+        if any(kw in heading for kw in ["result", "experiment", "evaluation", "performance"]):
+            target_text += "\n" + s.get("content", "")
+    # Also check abstract
+    target_text += "\n" + (paper_data.get("abstract") or "")
+
+    for pattern, name, mtype in patterns:
+        matches = re.findall(pattern, target_text, re.IGNORECASE)
+        if matches:
+            try:
+                value = float(matches[-1])
+                if value > 1 and name in ("accuracy", "f1_score", "map"):
+                    value = value / 100.0
+                metrics.append({"name": name, "value": value, "type": mtype})
+            except ValueError:
+                pass
+    return metrics
+
+
 # ===================================================================
 # exp-run: Run experiment
 # ===================================================================
@@ -592,6 +626,13 @@ def exp_compare(
     ]
     if results:
         output_parts.append("\nMetrics:\n" + "\n".join(f"  {k}: {v}" for k, v in results.items()))
+
+    # Extract paper-reported metrics from sections
+    paper_metrics = _extract_paper_metrics(paper_data)
+    if paper_metrics:
+        output_parts.append("\n[bold]Paper-reported metrics:[/]")
+        for m in paper_metrics:
+            output_parts.append(f"  {m['name']}: {m['value']} ({m['type']})")
 
     if baseline_id:
         bl_ulid = resolve_id(baseline_id) or baseline_id

@@ -17,7 +17,8 @@ from .commands import rag_ops        # noqa: F401  rag-index, rag-search
 from .commands import batch_ops      # noqa: F401  auto-notes, quality-score, classify, bootstrap, batch-ingest, kb-update
 from .commands import research_ops   # noqa: F401  interests, research-sync, survey, landscape
 from .commands import execution_ops  # noqa: F401  compile-paper, exp-*, dataset-download
-from .commands import external_ops   # noqa: F401  arxiv-search, arxiv-download
+from .commands import external_ops  # noqa: F401  arxiv-search, arxiv-download
+from . import lean_sync          # noqa: F401  lean-sync, lean-templates
 
 
 def main():

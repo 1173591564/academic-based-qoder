@@ -1595,15 +1595,25 @@ def scholar_get_experiment_metrics(paper_id: str) -> str:
         paper_data = _load_parsed(ulid)
         paper_title = (paper_data or {}).get("title", ulid)
 
-        # Build comparison (our results vs placeholder for paper-reported)
-        # Paper-reported metrics would need manual extraction from sections
+        # Build comparison (our results vs paper-reported metrics)
+        try:
+            from scholar.commands.execution_ops import _extract_paper_metrics
+            paper_metrics = _extract_paper_metrics(paper_data or {})
+        except Exception:
+            paper_metrics = []
+        paper_metrics_by_name = {m["name"]: m["value"] for m in paper_metrics}
+
         comparison = []
         for m in our_metrics:
+            theirs = paper_metrics_by_name.get(m["name"])
+            gap = None
+            if theirs is not None:
+                gap = round(m["value"] - theirs, 4) if m.get("type") == "higher_better" else round(theirs - m["value"], 4)
             comparison.append({
                 "name": m["name"],
                 "ours": m["value"],
-                "theirs": None,  # TODO: extract from paper sections
-                "gap": None,
+                "theirs": theirs,
+                "gap": gap,
                 "type": m.get("type", ""),
             })
 

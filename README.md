@@ -1,6 +1,6 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **581 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 121 项自动化测试。
+基于 Qoder IDE 的学术研究引擎，管理 **581 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 223 项自动化测试。
 
 > **核心理念**：把 581 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills + Hooks 自动化完成调研→精读→对比→写作→追踪的全流程。
 
@@ -109,7 +109,7 @@ Bootstrap 按顺序执行 **9 步**，全程约 **40 分钟**：
 ### Step 6: 在 Qoder 中打开
 
 1. 用 Qoder 打开项目目录
-2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（46 个工具）
+2. Qoder 自动读取 `.qoder/mcp.json`，后台启动 **Scholar MCP Server**（55 个工具）
 3. 在对话框中直接开始使用
 
 ### Step 7: 验证一切正常
@@ -272,14 +272,14 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
 |                 |                                                      |
 |                 v                                                      |
 |   +-----------------------------------------------------------------+ |
-|   |           Scholar MCP Server  (52 tools)                        | |
+|   |           Scholar MCP Server  (55 tools)                        | |
 |   |           Qoder <-> CLI bridge layer                            | |
 |   +------------------------------+----------------------------------+ |
 +==================================|====================================+
                                    |  CLI commands
                                    v
 +---------------------------------------------------------------------+
-|                    scholar/ Python CLI  (39 commands)                |
+|                    scholar/ Python CLI  (42 commands)                |
 |                                                                      |
 |    cli.py (entry) <--- _shared.py (app / console / parser / _get_db)|
 |        |                                                             |
@@ -301,8 +301,8 @@ python -m scholar research-sync --category "..." --max 10  # 方向级同步
        |                            |                  |
        v                            v                  v
 +----------------+    +------------------+    +------------------+
-|  PostgreSQL    |    |      Neo4j       |    |  data/papers/    |
-|  + pgvector    |    |  Citation Graph  |    |  570 Papers      |
+|  PostgreSQL    |    |      Neo4j       |    |  data/papers/    | 581 Papers      |
+|  + pgvector    |    |  Citation Graph  |    |                  |
 |  port 5433     |    |  Concept Graph   |    |  (PDF + TeX)     |
 +----------------+    |  port 7474/7687  |    +------------------+
                       +------------------+
@@ -398,7 +398,7 @@ python -m scholar ingest <paper_id>         # 增量导入单篇
 python -m scholar arxiv-search "query"      # 搜索 arXiv
 
 # 测试
-cd test && pytest                           # 运行 245 项自动化测试
+cd test && pytest                           # 运行 223 项自动化测试
 ```
 
 ---
@@ -426,7 +426,7 @@ output/
   research-interests.json  研究方向画像
 
 LEAN/              Lean4 形式化验证（125 创新节点 + 7 定理）
-scholar/           Python CLI 工具集（39 命令）
+scholar/           Python CLI 工具集（42 命令）
   _shared.py       共享对象（app, console, parser, _get_db）
   cli.py           入口文件（导入 _shared + 命令模块）
   commands/        9 个命令模块（按功能分组，消除循环导入）
@@ -445,8 +445,8 @@ scholar/           Python CLI 工具集（39 命令）
   graph_db.py      Neo4j 图谱操作
   rag.py           RAG 向量检索
   ...              其他领域模块
-scholar_mcp/       MCP Server（46 工具，Qoder 桥接层）
-test/              自动化测试套件（8 个文件，121 项测试）
+scholar_mcp/       MCP Server（55 工具，Qoder 桥接层）
+test/              自动化测试套件（16 个文件，223 项测试）
   conftest.py      共享 fixtures
   test_config.py   配置路径与环境变量
   test_id_resolver.py  Hybrid ID 解析器
@@ -510,7 +510,7 @@ NeurIPS (129), ICLR (58), ICML (53), CVPR (39), IEEE (36), Science (35), ACL (27
 
 ## 自动化测试
 
-121 项测试覆盖从单元到端到端的全链路：
+223 项测试覆盖从单元到端到端的全链路：
 
 | 测试文件 | 测试数 | 覆盖范围 |
 |----------|--------|----------|
@@ -519,9 +519,17 @@ NeurIPS (129), ICLR (58), ICML (53), CVPR (39), IEEE (36), Science (35), ACL (27
 | `test_research_loop.py` | 16 | 兴趣 CRUD、日志分析、方向同步 |
 | `test_kb_update.py` | 10 | arXiv XML 解析、ULID 生成、批量入库 |
 | `test_db.py` | 11 | JSON 读写、目录操作、DB 连接检测 |
+| `test_db_pool.py` | 8 | 连接池、并发查询、超时处理 |
 | `test_cli.py` | 33 | 全部 CLI 命令 smoke test + 执行测试 |
 | `test_hooks.py` | 19 | 标签剥离、ISO 周号、transcript 解析 |
 | `test_e2e.py` | 8 | ingest pipeline + adaptive research loop |
+| `test_tex_parser.py` | 9 | TeX 解析、公式提取、章节分割 |
+| `test_graph_db.py` | 11 | Neo4j 图谱构建、查询、中心性 |
+| `test_cite_resolve.py` | 20 | DOI 匹配、标题模糊匹配、arXiv 回退 |
+| `test_exp_codegen.py` | 17 | 代码模板生成、公式提取、超参数 |
+| `test_mcp.py` | 18 | MCP 工具调用、JSON 返回、错误处理 |
+| `test_state.py` | 5 | SharedState 缓存、ID 解析 |
+| `test_workspace.py` | 14 | 工作区验证、文件树、对话持久化 |
 
 ```bash
 # 运行全部测试

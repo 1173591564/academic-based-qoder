@@ -31,6 +31,16 @@ import { KBDashboard } from "./KBDashboard";
 import { ExperimentMetrics } from "./ExperimentMetrics";
 import { Timeline } from "./Timeline";
 
+// MCP Bridge: call scholar MCP tools directly from the shell
+async function callScholarMcp(toolName: string, args: Record<string, unknown>): Promise<string> {
+  return await invoke<string>("call_scholar_mcp", {
+    toolName,
+    args: JSON.stringify(args),
+  });
+}
+
+type PreviewType = "text" | "citation_graph" | "paper_reader" | "quality_radar" | "kb_dashboard" | "experiment_metrics" | "timeline" | "markdown";
+
 export function ChatView({
   settings,
   onOpenSettings,
@@ -72,6 +82,41 @@ export function ChatView({
     userMsg: ChatMessage;
     text: string;
   } | null>(null);
+
+  // Route parsed JSON to the appropriate preview component type
+  const routeToComponent = (parsed: Record<string, unknown>): PreviewType => {
+    if (parsed.nodes && parsed.edges) return "citation_graph";
+    if (parsed.sections_toc || parsed.paper_id) return "paper_reader";
+    if (parsed.dimensions) return "quality_radar";
+    if (parsed.by_year || parsed.parsed !== undefined) return "kb_dashboard";
+    if (parsed.our_metrics || parsed.comparison) return "experiment_metrics";
+    if (parsed.years && Array.isArray(parsed.years)) return "timeline";
+    return "text";
+  };
+
+  // Visualize paper data by calling MCP tools directly from the shell
+  const handleVisualize = async (tool: string, paperId: string) => {
+    try {
+      setPreviewContent({ name: "加载中...", content: "" });
+      setPreviewType("text");
+      const result = await callScholarMcp(tool, { paper_id: paperId });
+      const parsed = JSON.parse(result);
+      const toolNames: Record<string, string> = {
+        scholar_get_citation_graph: "引用网络",
+        scholar_get_paper_card: "论文详情",
+        scholar_get_quality_radar: "质量评估",
+        scholar_get_experiment_metrics: "实验指标",
+        scholar_get_timeline: "时间线",
+        scholar_get_kb_dashboard: "知识库",
+      };
+      const name = toolNames[tool] || tool;
+      setPreviewContent({ name, content: JSON.stringify(parsed, null, 2) });
+      setPreviewType(routeToComponent(parsed));
+    } catch (e) {
+      setPreviewContent({ name: "错误", content: `可视化失败: ${e}` });
+      setPreviewType("text");
+    }
+  };
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -144,6 +189,24 @@ export function ChatView({
         return updated;
       });
       setLoading(false);
+
+      // Auto-detect structured JSON in assistant response
+      const lastMsg = messagesRef.current[messagesRef.current.length - 1];
+      if (lastMsg?.role === "assistant" && lastMsg.content) {
+        const jsonBlockMatch = lastMsg.content.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (jsonBlockMatch) {
+          try {
+            const parsed = JSON.parse(jsonBlockMatch[1]);
+            const detectedType = routeToComponent(parsed);
+            if (detectedType !== "text") {
+              setPreviewContent({ name: "检测结果", content: JSON.stringify(parsed, null, 2) });
+              setPreviewType(detectedType);
+            }
+          } catch {
+            // Not valid JSON, ignore
+          }
+        }
+      }
 
       const pending = pendingSaveRef.current;
       if (pending) {
@@ -285,21 +348,7 @@ export function ChatView({
       if (lowerName.endsWith(".json")) {
         try {
           const parsed = JSON.parse(content);
-          if (parsed.nodes && parsed.edges) {
-            setPreviewType("citation_graph");
-          } else if (parsed.sections_toc || parsed.paper_id) {
-            setPreviewType("paper_reader");
-          } else if (parsed.dimensions) {
-            setPreviewType("quality_radar");
-          } else if (parsed.by_year || parsed.parsed !== undefined) {
-            setPreviewType("kb_dashboard");
-          } else if (parsed.our_metrics || parsed.comparison) {
-            setPreviewType("experiment_metrics");
-          } else if (parsed.years && Array.isArray(parsed.years)) {
-            setPreviewType("timeline");
-          } else {
-            setPreviewType("text");
-          }
+          setPreviewType(routeToComponent(parsed));
         } catch {
           setPreviewType("text");
         }
@@ -460,7 +509,7 @@ export function ChatView({
             />
           ) : (
             messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble key={msg.id} message={msg} onVisualize={handleVisualize} />
             ))
           )}
           {loading &&

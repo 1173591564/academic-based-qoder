@@ -9,7 +9,7 @@ alwaysApply: true
 **Fallback**: Execute CLI commands via terminal.
 
 ## MCP Server (recommended)
-The scholar MCP server exposes 52 tools. Start it with:
+The scholar MCP server exposes 55 tools. Start it with:
 ```bash
 cd <project-root> && python -m scholar_mcp
 ```
@@ -101,6 +101,9 @@ python -m scholar exp-compare <paper_id>  # Compare results with paper metrics
 python -m scholar exp-setup <paper_id> [--conda|--docker]  # Set up experiment environment
 python -m scholar exp-debug <run_log.txt>  # Diagnose experiment failures
 python -m scholar dataset-download <name> [--source auto]  # Download datasets (HuggingFace)
+python -m scholar lean-sync [--apply] [--max-papers 100]  # Sync parsed papers → Lean4 Database.lean
+python -m scholar lean-templates [--output FILE]  # Generate Lean4 theorem templates
+python -m scholar exp-codegen <paper_id>  # Generate experiment code template from paper JSON
 ```
 
 ### Orchestration

@@ -11,7 +11,10 @@ import re
 from pathlib import Path
 from typing import Optional
 
+import typer
+
 from . import config
+from ._shared import app, console
 
 
 # ===================================================================
@@ -292,50 +295,45 @@ def generate_theorem_templates() -> str:
 
 
 # ===================================================================
-# CLI entry point
+# CLI commands (registered with shared app)
 # ===================================================================
 
+@app.command(name="lean-sync")
+def lean_sync_cmd(
+    apply: bool = typer.Option(False, "--apply", help="Write changes to Database.lean"),
+    paper_limit: int = typer.Option(100, "--max-papers", help="Max papers to include"),
+    citation_limit: int = typer.Option(200, "--max-citations", help="Max citations to include"),
+):
+    """Sync parsed papers to Lean4 Database.lean."""
+    result = sync_database(apply=apply, paper_limit=paper_limit, citation_limit=citation_limit)
+    if "error" in result:
+        console.print(f"[red]Error: {result['error']}[/]")
+        raise typer.Exit(1)
+    console.print(f"[green]Papers: {result['papers_count']}[/]")
+    console.print(f"[green]Citations: {result['citations_count']}[/]")
+    if apply:
+        console.print("[green]Written to Database.lean (backup saved as .bak)[/]")
+    else:
+        console.print("[yellow]Dry run. Use --apply to write.[/]")
+
+
+@app.command(name="lean-templates")
+def lean_templates_cmd(
+    output: str = typer.Option(None, "--output", "-o", help="Output file path"),
+):
+    """Generate Lean4 theorem templates for dominance relations."""
+    code = generate_theorem_templates()
+    if output:
+        Path(output).write_text(code, encoding="utf-8")
+        console.print(f"[green]Written to {output}[/]")
+    else:
+        out_path = config.LEAN_DIR / "AiEvolution" / "GeneratedTheorems.lean"
+        out_path.write_text(code, encoding="utf-8")
+        console.print(f"[green]Written to {out_path}[/]")
+
+
 def main():
-    import typer
-    from rich.console import Console
-    from rich.table import Table
-
-    console = Console()
-    app = typer.Typer(add_completion=False)
-
-    @app.command()
-    def sync(
-        apply: bool = typer.Option(False, "--apply", help="Write changes to Database.lean"),
-        paper_limit: int = typer.Option(100, "--max-papers", help="Max papers to include"),
-        citation_limit: int = typer.Option(200, "--max-citations", help="Max citations to include"),
-    ):
-        """Sync parsed papers to Lean4 Database.lean."""
-        result = sync_database(apply=apply, paper_limit=paper_limit, citation_limit=citation_limit)
-        if "error" in result:
-            console.print(f"[red]Error: {result['error']}[/]")
-            raise typer.Exit(1)
-
-        console.print(f"[green]Papers: {result['papers_count']}[/]")
-        console.print(f"[green]Citations: {result['citations_count']}[/]")
-        if apply:
-            console.print("[green]Written to Database.lean (backup saved as .bak)[/]")
-        else:
-            console.print("[yellow]Dry run. Use --apply to write.[/]")
-
-    @app.command()
-    def gen_theorems(
-        output: str = typer.Option(None, "--output", "-o", help="Output file path"),
-    ):
-        """Generate theorem templates for dominance relations."""
-        code = generate_theorem_templates()
-        if output:
-            Path(output).write_text(code, encoding="utf-8")
-            console.print(f"[green]Written to {output}[/]")
-        else:
-            out_path = config.LEAN_DIR / "AiEvolution" / "GeneratedTheorems.lean"
-            out_path.write_text(code, encoding="utf-8")
-            console.print(f"[green]Written to {out_path}[/]")
-
+    """Standalone entry point for python -m scholar.lean_sync"""
     app()
 
 
