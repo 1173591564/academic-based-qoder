@@ -740,13 +740,26 @@ async fn chat_send(
 
 #[tauri::command]
 fn read_file(path: String, work_dir: String) -> Result<String, String> {
+    // Security: reject path traversal attempts
+    if path.contains("..") {
+        return Err("路径不能包含 .. 穿越模式".to_string());
+    }
     let base = if work_dir.is_empty() { get_scholar_home() } else { work_dir };
-    let full_path = PathBuf::from(&base).join(&path);
-    let metadata = fs::metadata(&full_path).map_err(|e| e.to_string())?;
+    let base_path = PathBuf::from(&base);
+    let full_path = base_path.join(&path);
+
+    // Security: verify resolved path stays within base directory
+    let canonical_base = base_path.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_full = full_path.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_full.starts_with(&canonical_base) {
+        return Err("路径超出允许范围".to_string());
+    }
+
+    let metadata = fs::metadata(&canonical_full).map_err(|e| e.to_string())?;
     if metadata.len() > 1_000_000 {
         return Err("文件过大（>1MB），不支持预览".to_string());
     }
-    fs::read_to_string(&full_path).map_err(|e| e.to_string())
+    fs::read_to_string(&canonical_full).map_err(|e| e.to_string())
 }
 
 // ─── Health Check ───────────────────────────────────────────────
@@ -1310,21 +1323,31 @@ fn docker_toggle(service: String, work_dir: String, start: bool) -> Result<Strin
 
 #[tauri::command]
 fn call_scholar_mcp(tool_name: String, args: String) -> Result<String, String> {
+    // Security: validate tool_name to prevent Python code injection
+    if tool_name.is_empty() || !tool_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(format!("Invalid tool name: '{}'", tool_name));
+    }
+
     let scholar_home = get_scholar_home();
 
-    // Write args to temp file to avoid shell escaping issues
-    let tmp = std::env::temp_dir().join(format!("scholar_mcp_{}.json", std::process::id()));
+    // Use unique nonce to prevent temp file race condition between concurrent calls
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp = std::env::temp_dir().join(format!("scholar_mcp_{}_{nonce}.json", std::process::id()));
     fs::write(&tmp, &args).map_err(|e| e.to_string())?;
 
+    // Security: pass temp file path via sys.argv instead of string interpolation
     let script = format!(
-        "import json; from scholar_mcp.server import {tool}; args=json.load(open(r'{path}',encoding='utf-8')); print({tool}(**args))",
+        "import json,sys; from scholar_mcp.server import {tool}; args=json.load(open(sys.argv[1],encoding='utf-8')); print({tool}(**args))",
         tool = tool_name,
-        path = tmp.to_string_lossy()
     );
 
     let output = Command::new("python")
         .arg("-c")
         .arg(&script)
+        .arg(&tmp)
         .current_dir(&scholar_home)
         .env("PYTHONPATH", &scholar_home)
         .env("SCHOLAR_HOME", &scholar_home)

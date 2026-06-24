@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: configuration_system
+title: 配置系统：双模目录解析与环境变量分层加载
+scope: []
+source_files:
+    - scholar/config.py
+    - .env.example
+    - infra/docker-compose.yml
+    - pyproject.toml
+    - desktop/src-tauri/src/lib.rs
+depends_on: []
+related_to: []

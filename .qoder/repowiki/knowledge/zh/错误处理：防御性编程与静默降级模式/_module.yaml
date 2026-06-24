@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: error_handling
+title: 错误处理：防御性编程与静默降级模式
+scope: []
+source_files:
+    - scholar/_shared.py
+    - scholar/db.py
+    - scholar/graph_db.py
+    - scholar/rag.py
+    - scholar/kb_update.py
+    - scholar/commands/paper_ops.py
+    - scholar/commands/batch_ops.py
+    - scholar/commands/graph_ops.py
+depends_on: []
+related_to: []

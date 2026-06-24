@@ -181,6 +181,7 @@ def _openai_embedding(text: str) -> Optional[list[float]]:
 
 def store_chunks_pg(chunks: list[dict], embeddings: list[list[float]]):
     """Store chunks and embeddings in PostgreSQL pgvector (includes section field)."""
+    conn = None
     try:
         import psycopg2
         conn = psycopg2.connect(
@@ -211,13 +212,19 @@ def store_chunks_pg(chunks: list[dict], embeddings: list[list[float]]):
 
         conn.commit()
         cur.close()
-        conn.close()
     except Exception as e:
         print(f"PG store error: {e}")
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def create_hnsw_index():
     """Create HNSW index on chunks.embedding for fast approximate nearest neighbor search."""
+    conn = None
     try:
         import psycopg2
         conn = psycopg2.connect(
@@ -235,11 +242,16 @@ def create_hnsw_index():
             WITH (m = 16, ef_construction = 64)
         """)
         cur.close()
-        conn.close()
         return True
     except Exception as e:
         print(f"HNSW index creation error: {e}")
         return False
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _get_pg_connection():
@@ -264,6 +276,7 @@ def search_rag(query: str, limit: int = 10) -> list[dict]:
     if query_emb is None:
         return []
 
+    conn = None
     try:
         conn = _get_pg_connection()
         cur = conn.cursor()
@@ -287,10 +300,15 @@ def search_rag(query: str, limit: int = 10) -> list[dict]:
                 "similarity": float(row[3]),
             })
         cur.close()
-        conn.close()
         return results
     except Exception:
         return []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 # ===================================================================
@@ -315,6 +333,7 @@ class BM25Index:
 
     def build_from_pg(self, limit: int = 5000):
         """Load chunks from PostgreSQL and build BM25 index."""
+        conn = None
         try:
             conn = _get_pg_connection()
             cur = conn.cursor()
@@ -333,12 +352,17 @@ class BM25Index:
                 for t in unique_tokens:
                     self.df[t] += 1
             cur.close()
-            conn.close()
             self.N = len(self.docs)
             if self.N > 0:
                 self.avg_dl = sum(len(d["tokens"]) for d in self.docs) / self.N
         except Exception:
             pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def search(self, query: str, limit: int = 20) -> list[dict]:
         """BM25 search, returns scored documents."""
@@ -566,15 +590,21 @@ def index_single_paper(ulid: str, parsed_dir: Path = None) -> dict:
     data = json.loads(json_path.read_text(encoding="utf-8"))
 
     # Delete existing chunks
+    conn = None
     try:
         conn = _get_pg_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM chunks WHERE paper_id = %s", (ulid,))
         conn.commit()
         cur.close()
-        conn.close()
     except Exception:
         pass
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     chunks = chunk_paper(data)
     if not chunks:

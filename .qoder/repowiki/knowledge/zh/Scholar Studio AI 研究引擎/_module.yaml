@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: ""
+title: Scholar Studio AI 研究引擎
+scope:
+    - .gitignore
+    - pyproject.toml
+    - pytest.ini
+    - requirements.txt
+    - .github/
+    - .claude/
+source_files: []
+depends_on: []
+related_to: []

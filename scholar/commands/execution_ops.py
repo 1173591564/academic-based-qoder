@@ -416,7 +416,20 @@ def lean_verify(
 # Helper: Extract metrics from experiment stdout
 # ===================================================================
 def _extract_metrics(stdout: str, ulid: str, mode: str, runtime: float) -> dict:
-    """Extract structured metrics from experiment stdout."""
+    """Extract structured metrics from experiment stdout.
+
+    Applies the same normalization as _extract_paper_metrics to ensure
+    symmetric comparison: percentage values > 1 are divided by 100 for
+    ratio metrics (accuracy, f1_score, bleu, map).
+    """
+    # Same normalization set as _extract_paper_metrics for symmetric comparison
+    _normalize_metrics = {"accuracy", "val_accuracy", "f1_score", "bleu", "map"}
+
+    def _normalize(value: float, name: str) -> float:
+        if value > 1 and name in _normalize_metrics:
+            return value / 100.0
+        return value
+
     metrics = []
     patterns = [
         (r"accuracy[:\s=]+([\d.]+)", "accuracy", "higher_better"),
@@ -425,13 +438,13 @@ def _extract_metrics(stdout: str, ulid: str, mode: str, runtime: float) -> dict:
         (r"\bval_loss[:\s=]+([\d.]+)", "val_loss", "lower_better"),
         (r"f1[:\s=]+([\d.]+)", "f1_score", "higher_better"),
         (r"bleu[:\s=]+([\d.]+)", "bleu", "higher_better"),
-        (r"\bAP[:\s=]+([\d.]+)", "AP", "higher_better"),
+        (r"\b(?:AP|map)[:\s=]+([\d.]+)", "map", "higher_better"),
     ]
     for pattern, name, mtype in patterns:
         matches = re.findall(pattern, stdout, re.IGNORECASE)
         if matches:
             try:
-                value = float(matches[-1])
+                value = _normalize(float(matches[-1]), name)
                 metrics.append({"name": name, "value": value, "type": mtype})
             except ValueError:
                 pass
@@ -488,7 +501,7 @@ def _extract_paper_metrics(paper_data: dict) -> list:
         # ROUGE-L
         (r"(?:rouge[- ]?l)\s*[:=]\s*(\d+\.?\d*)", "rouge_l"),
         # MAP
-        (r"(?:map|mean\s+average\s+precision)\s*[:=]\s*(\d+\.?\d*)", "map"),
+        (r"(?:map|mean\s+average\s+precision|\bAP)\s*[:=]\s*(\d+\.?\d*)", "map"),
         # Loss
         (r"\bloss\s*[:=]\s*(\d+\.?\d*)", "loss"),
         # Exact Match / EM

@@ -7,6 +7,7 @@ Run: python -m scholar_mcp
 import subprocess
 import json
 import sys
+import time as _time
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -45,20 +46,92 @@ def _load_parsed(paper_id: str) -> dict | None:
 def _run_scholar(*args: str, timeout: int = 120) -> str:
     """Run a scholar CLI command and return stdout."""
     cmd = [sys.executable, "-m", "scholar"] + list(args)
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        cwd=str(scholar_config.WORKSPACE_DIR),
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(scholar_config.WORKSPACE_DIR),
+        )
+    except subprocess.TimeoutExpired:
+        return f"[ERROR] Command timed out after {timeout}s: {' '.join(args)}"
     output = result.stdout
     if result.returncode != 0 and result.stderr:
         output += f"\n[ERROR] {result.stderr}"
     return output.strip()
 
 
-# ─── Paper Library ───────────────────────────────────────────────
+# Stats cache: avoid re-iterating 560+ JSONs on every call
+_stats_cache: dict = {"data": None, "ts": 0}
+_STATS_CACHE_TTL = 300  # 5 minutes
+
+
+def _get_stats_cached() -> dict:
+    """Get KB stats with TTL cache to avoid repeated full scans."""
+    now = _time.time()
+    if _stats_cache["data"] is not None and (now - _stats_cache["ts"]) < _STATS_CACHE_TTL:
+        return _stats_cache["data"]
+    # Compute fresh stats
+    paper_dirs = [d for d in scholar_config.PAPERS_DIR.iterdir() if d.is_dir()]
+    parsed_ids = dbmod.list_parsed()
+    total_formulas = 0
+    total_citations = 0
+    total_sections = 0
+    has_year = 0
+    has_authors = 0
+    has_abstract = 0
+    has_venue = 0
+    years = {}
+    venues = {}
+    for pid in parsed_ids:
+        data = _load_parsed(pid)
+        if not data:
+            continue
+        y = data.get("year")
+        if y:
+            years[y] = years.get(y, 0) + 1
+            has_year += 1
+        if data.get("authors"):
+            has_authors += 1
+        if data.get("abstract"):
+            has_abstract += 1
+        v = data.get("venue")
+        if v:
+            venues[v] = venues.get(v, 0) + 1
+            has_venue += 1
+        total_formulas += len(data.get("formulas", []))
+        total_citations += len(data.get("citations", []))
+        total_sections += len(data.get("sections", []))
+    total = len(parsed_ids) or 1
+    stats = {
+        "paper_folders": len(paper_dirs),
+        "parsed": len(parsed_ids),
+        "sections": total_sections,
+        "formulas": total_formulas,
+        "citations": total_citations,
+        "coverage": {
+            "year": round(has_year / total, 2),
+            "authors": round(has_authors / total, 2),
+            "abstract": round(has_abstract / total, 2),
+            "venue": round(has_venue / total, 2),
+        },
+        "by_year": dict(sorted(years.items())),
+        "by_venue": dict(sorted(venues.items(), key=lambda x: x[1], reverse=True)[:10]),
+        "has_year": has_year,
+        "has_authors": has_authors,
+        "has_abstract": has_abstract,
+        "has_venue": has_venue,
+        "total": total,
+        "years": years,
+        "venues": venues,
+    }
+    _stats_cache["data"] = stats
+    _stats_cache["ts"] = now
+    return stats
+
+
+# ─── Paper Library ────────────────────────────────────────────
 
 @mcp.tool()
 def scholar_scan() -> str:
@@ -134,22 +207,55 @@ def scholar_search(query: str) -> str:
         return json.dumps({"error": "query must be non-empty"}, ensure_ascii=False)
     keyword_lower = query.lower()
     results = []
-    for paper_id in dbmod.list_parsed():
-        data = _load_parsed(paper_id)
-        if not data:
-            continue
-        score = 0
-        if keyword_lower in (data.get("title") or "").lower():
-            score += 10
-        if keyword_lower in (data.get("abstract") or "").lower():
-            score += 5
-        for s in data.get("sections", []):
-            if keyword_lower in s.get("content", "").lower():
-                score += 1
-                if score >= 3:
-                    break
-        if score > 0:
-            results.append({"paper_id": paper_id, "title": data.get("title", "N/A"), "year": data.get("year"), "score": score})
+
+    # Performance: try PostgreSQL first for fast title/abstract/section search
+    state = get_state()
+    db = state.get_db() if state else None
+    db_results = None
+    if db and db.available:
+        try:
+            db_results = db.search_papers(query)
+        except Exception:
+            db_results = None
+
+    if db_results is not None:
+        # DB path: only load matched papers for scoring
+        for row in db_results:
+            paper_id = row.get("id", "")
+            data = _load_parsed(paper_id)
+            if not data:
+                continue
+            score = 0
+            if keyword_lower in (data.get("title") or "").lower():
+                score += 10
+            if keyword_lower in (data.get("abstract") or "").lower():
+                score += 5
+            for s in data.get("sections", []):
+                if keyword_lower in s.get("content", "").lower():
+                    score += 1
+                    if score >= 3:
+                        break
+            if score > 0:
+                results.append({"paper_id": paper_id, "title": data.get("title", "N/A"), "year": data.get("year"), "score": score})
+    else:
+        # Fallback: file scan (uses LRU cache)
+        for paper_id in dbmod.list_parsed():
+            data = _load_parsed(paper_id)
+            if not data:
+                continue
+            score = 0
+            if keyword_lower in (data.get("title") or "").lower():
+                score += 10
+            if keyword_lower in (data.get("abstract") or "").lower():
+                score += 5
+            for s in data.get("sections", []):
+                if keyword_lower in s.get("content", "").lower():
+                    score += 1
+                    if score >= 3:
+                        break
+            if score > 0:
+                results.append({"paper_id": paper_id, "title": data.get("title", "N/A"), "year": data.get("year"), "score": score})
+
     results.sort(key=lambda x: x["score"], reverse=True)
     results = results[:20]
     if not results:
@@ -161,11 +267,12 @@ def scholar_search(query: str) -> str:
 
 
 @mcp.tool()
-def scholar_list_papers(year: int | None = None) -> str:
+def scholar_list_papers(year: int | None = None, offset: int = 0) -> str:
     """List all parsed papers with metadata. Optionally filter by year.
 
     Args:
         year: Optional year filter (e.g., 2023)
+        offset: Pagination offset (default 0, shows 30 per page)
     """
     papers = []
     for paper_id in dbmod.list_parsed():
@@ -175,8 +282,9 @@ def scholar_list_papers(year: int | None = None) -> str:
                 continue
             papers.append(data)
     papers.sort(key=lambda x: x.get("year") or 0, reverse=True)
-    papers = papers[:30]
-    lines = [f"Parsed Papers ({len(papers)} shown)"]
+    total_count = len(papers)
+    papers = papers[offset:offset + 30]
+    lines = [f"Parsed Papers ({len(papers)} shown, total {total_count}, offset {offset})"]
     for p in papers:
         lines.append(f"  {p.get('paper_id', '')}  {(p.get('title') or 'N/A')[:50]}  {p.get('year', '')}  {p.get('venue', '') or ''}")
     return "\n".join(lines)
@@ -185,58 +293,30 @@ def scholar_list_papers(year: int | None = None) -> str:
 @mcp.tool()
 def scholar_stats() -> str:
     """Show knowledge base statistics: paper count, field coverage, venue distribution."""
-    paper_dirs = [d for d in scholar_config.PAPERS_DIR.iterdir() if d.is_dir()]
-    parsed_ids = dbmod.list_parsed()
-    total_formulas = 0
-    total_citations = 0
-    total_sections = 0
-    has_year = 0
-    has_authors = 0
-    has_abstract = 0
-    has_venue = 0
-    years = {}
-    venues = {}
-    for pid in parsed_ids:
-        data = _load_parsed(pid)
-        if not data:
-            continue
-        y = data.get("year")
-        if y:
-            years[y] = years.get(y, 0) + 1
-            has_year += 1
-        if data.get("authors"):
-            has_authors += 1
-        if data.get("abstract"):
-            has_abstract += 1
-        v = data.get("venue")
-        if v:
-            venues[v] = venues.get(v, 0) + 1
-            has_venue += 1
-        total_formulas += len(data.get("formulas", []))
-        total_citations += len(data.get("citations", []))
-        total_sections += len(data.get("sections", []))
-    total = len(parsed_ids) or 1
+    stats = _get_stats_cached()
+    total = stats["total"]
     lines = [
-        f"Paper folders:   {len(paper_dirs)}",
-        f"Parsed:          {len(parsed_ids)}",
-        f"Total sections:  {total_sections}",
-        f"Total formulas:  {total_formulas}",
-        f"Total citations: {total_citations}",
+        f"Paper folders:   {stats['paper_folders']}",
+        f"Parsed:          {stats['parsed']}",
+        f"Total sections:  {stats['sections']}",
+        f"Total formulas:  {stats['formulas']}",
+        f"Total citations: {stats['citations']}",
         f"",
         f"Metadata Coverage:",
-        f"  Year:      {has_year}/{total} ({has_year*100//total}%)",
-        f"  Authors:   {has_authors}/{total} ({has_authors*100//total}%)",
-        f"  Abstract:  {has_abstract}/{total} ({has_abstract*100//total}%)",
-        f"  Venue:     {has_venue}/{total} ({has_venue*100//total}%)",
+        f"  Year:      {stats['has_year']}/{total} ({stats['has_year']*100//total}%)",
+        f"  Authors:   {stats['has_authors']}/{total} ({stats['has_authors']*100//total}%)",
+        f"  Abstract:  {stats['has_abstract']}/{total} ({stats['has_abstract']*100//total}%)",
+        f"  Venue:     {stats['has_venue']}/{total} ({stats['has_venue']*100//total}%)",
     ]
-    if years:
-        year_str = ", ".join(f"{y}: {c}" for y, c in sorted(years.items()))
+    if stats["years"]:
+        year_str = ", ".join(f"{y}: {c}" for y, c in sorted(stats["years"].items()))
         lines.append(f"\nBy Year: {year_str}")
-    if venues:
-        sorted_venues = sorted(venues.items(), key=lambda x: x[1], reverse=True)[:10]
+    if stats["venues"]:
+        sorted_venues = sorted(stats["venues"].items(), key=lambda x: x[1], reverse=True)[:10]
         venue_str = ", ".join(f"{v}: {c}" for v, c in sorted_venues)
         lines.append(f"By Venue: {venue_str}")
     return "\n".join(lines)
+
 
 
 @mcp.tool()
@@ -262,7 +342,11 @@ def scholar_export_bib(output: str = "output/bib/references.bib") -> str:
             entry += f"\n  journal = {{{venue}}},"
         entry += "\n}\n"
         entries.append(entry)
-    out_path = scholar_config.PROJECT_ROOT / output
+    # Security: validate output path stays within output/bib/
+    bib_root = (scholar_config.OUTPUT_DIR / "bib").resolve()
+    out_path = (scholar_config.PROJECT_ROOT / output).resolve()
+    if not str(out_path).startswith(str(bib_root)):
+        return f"Access denied: output path must be within output/bib/"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(entries), encoding="utf-8")
     return f"Exported {len(entries)} BibTeX entries to {out_path}"
@@ -428,13 +512,20 @@ def scholar_arxiv_search(query: str, max_results: int = 10) -> str:
             return "No results found."
         lines = [f"arXiv Results ({len(entries)}):"]
         for i, entry in enumerate(entries):
-            title = entry.find("atom:title", ns).text.strip().replace("\n", " ")
-            authors = [a.find("atom:name", ns).text for a in entry.findall("atom:author", ns)]
-            author_str = ", ".join(authors[:3])
-            if len(authors) > 3:
+            title_elem = entry.find("atom:title", ns)
+            title = title_elem.text.strip().replace("\n", " ") if title_elem is not None and title_elem.text else "(no title)"
+            author_names = []
+            for a in entry.findall("atom:author", ns):
+                name_elem = a.find("atom:name", ns)
+                if name_elem is not None and name_elem.text:
+                    author_names.append(name_elem.text)
+            author_str = ", ".join(author_names[:3])
+            if len(author_names) > 3:
                 author_str += " et al."
-            published = entry.find("atom:published", ns).text[:4]
-            arxiv_id = entry.find("atom:id", ns).text.split("/abs/")[-1]
+            pub_elem = entry.find("atom:published", ns)
+            published = pub_elem.text[:4] if pub_elem is not None and pub_elem.text else "????"
+            id_elem = entry.find("atom:id", ns)
+            arxiv_id = id_elem.text.split("/abs/")[-1] if id_elem is not None and id_elem.text else "unknown"
             lines.append(f"  {i+1}. {title[:55]}  {author_str[:30]}  {published}  {arxiv_id}")
         return "\n".join(lines)
     except Exception as e:
@@ -758,23 +849,28 @@ def scholar_survey(topic: str, depth: str = "standard", limit: int = 20) -> str:
         try:
             from scholar import graph_db
             gdb = graph_db.GraphDB()
-            if gdb.available:
-                concept_rows = gdb.run("""
-                    MATCH (c:Innovation)
-                    WHERE toLower(c.id) CONTAINS toLower($topic)
-                       OR toLower(coalesce(c.line, '')) CONTAINS toLower($topic)
-                    WITH c LIMIT 10
-                    MATCH (p:Paper)-[:HAS_CONCEPT]->(c)
-                    RETURN DISTINCT p.ulid AS ulid
-                    LIMIT $max_papers
-                """, topic=topic, max_papers=limit)
-                before = len(seen_ids)
-                for r in concept_rows:
-                    cid = r.get("ulid", "")
-                    if cid and cid not in seen_ids:
-                        seen_ids.append(cid)
-                graph_count = len(seen_ids) - before
-                gdb.close()
+            try:
+                if gdb.available:
+                    concept_rows = gdb.run("""
+                        MATCH (c:Innovation)
+                        WHERE toLower(c.id) CONTAINS toLower($topic)
+                           OR toLower(coalesce(c.line, '')) CONTAINS toLower($topic)
+                        WITH c LIMIT 10
+                        MATCH (p:Paper)-[:HAS_CONCEPT]->(c)
+                        RETURN DISTINCT p.ulid AS ulid
+                        LIMIT $max_papers
+                    """, topic=topic, max_papers=limit)
+                    before = len(seen_ids)
+                    for r in concept_rows:
+                        cid = r.get("ulid", "")
+                        if cid and cid not in seen_ids:
+                            seen_ids.append(cid)
+                    graph_count = len(seen_ids) - before
+            finally:
+                try:
+                    gdb.close()
+                except Exception:
+                    pass
         except Exception:
             pass
         progress.append({"step": 3, "name": "Graph Concept Query", "new_papers": graph_count, "elapsed_ms": int((time.time() - t3) * 1000)})
@@ -1327,7 +1423,11 @@ def scholar_read_output_file(path: str) -> str:
         path: Relative path from output/ (e.g., 'notes/01KT6MTBK1PQMNZM8ZYQPTVN6C.md')
     """
     try:
-        full_path = scholar_config.PROJECT_ROOT / "output" / path
+        output_root = (scholar_config.PROJECT_ROOT / "output").resolve()
+        full_path = (output_root / path).resolve()
+        # Security: prevent path traversal outside output/
+        if not str(full_path).startswith(str(output_root)):
+            return f"Access denied: path '{path}' resolves outside output directory"
         if not full_path.exists():
             return f"File not found: {path}"
         if full_path.stat().st_size > 500_000:

@@ -13,6 +13,8 @@
 - [lean_sync.py](file://scholar/lean_sync.py)
 - [cli.py](file://scholar/cli.py)
 - [__main__.py](file://scholar/__main__.py)
+- [_shared.py](file://scholar/_shared.py)
+- [config.py](file://scholar/config.py)
 </cite>
 
 ## 更新摘要
@@ -21,6 +23,9 @@
 - 添加定理模板生成器，自动生成支配关系的定理模板
 - 扩展命令行接口，支持lean-sync命令
 - 增强数据库同步功能，包含备份机制和限制参数
+- **新增** 自动Lean Lake构建功能，通过 `_run_lake_build()` 函数实现
+- **新增** `--build` 选项，允许在同步后自动运行 `lake build`
+- **更新** CLI接口重构为共享Typer应用实例，提高代码复用性
 
 ## 目录
 1. [引言](#引言)
@@ -29,16 +34,17 @@
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
 6. [Lean4动态同步功能](#lean4动态同步功能)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考量](#性能考量)
-9. [故障排查指南](#故障排查指南)
-10. [结论](#结论)
-11. [附录](#附录)
+7. [CLI接口重构](#cli接口重构)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能考量](#性能考量)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
+12. [附录](#附录)
 
 ## 引言
 本项目为Lean4形式化验证系统，围绕"AI演进"的主题，构建了严谨的数学模型与可验证的定理体系。系统通过形式化定义研究线分类、创新节点、属性量化、论文记录与引用关系，并在严格证明框架下完成7个关键演进定理的编译与验证。同时，系统引入PDSS（寄生领域特定脚手架）架构模式的形式化描述，给出可组合性、结构同构与寄生演进等定理，为工具化研究与工程实践提供形式化支撑。
 
-**更新** 新增Lean4动态同步功能，支持从解析的JSON数据自动同步到Lean4数据库，以及定理模板的自动生成。
+**更新** 新增Lean4动态同步功能，支持从解析的JSON数据自动同步到Lean4数据库，以及定理模板的自动生成。系统现已集成自动Lean Lake构建功能，通过共享CLI接口实现更好的代码复用和维护性。
 
 ## 项目结构
 项目采用模块化组织，核心入口与库定义如下：
@@ -46,6 +52,7 @@
 - 库与可执行目标：通过lakefile.toml声明库AiEvolution与可执行程序aievolution
 - 主程序：Main.lean导入AiEvolution并打印统计信息与证明状态
 - 动态同步：通过Python脚本scholar/lean_sync.py实现Lean4数据库的动态同步
+- **更新** 共享CLI：通过scholar/_shared.py提供共享的Typer应用实例
 
 ```mermaid
 graph TB
@@ -58,13 +65,16 @@ G["lakefile.toml<br/>库与可执行目标"] --> A
 G --> F
 H["lean_sync.py<br/>动态同步工具"] --> C
 I["cli.py<br/>命令行接口"] --> H
+J["_shared.py<br/>共享CLI对象"] --> I
+K["config.py<br/>配置管理"] --> H
 ```
 
 **图示来源**
 - [AiEvolution.lean:1-8](file://LEAN/AiEvolution.lean#L1-L8)
 - [Main.lean:1-21](file://LEAN/Main.lean#L1-L21)
 - [lakefile.toml:1-11](file://LEAN/lakefile.toml#L1-L11)
-- [lean_sync.py:1-344](file://scholar/lean_sync.py#L1-L344)
+- [lean_sync.py:1-397](file://scholar/lean_sync.py#L1-L397)
+- [_shared.py:1-40](file://scholar/_shared.py#L1-L40)
 
 **章节来源**
 - [AiEvolution.lean:1-8](file://LEAN/AiEvolution.lean#L1-L8)
@@ -359,7 +369,7 @@ HostPlatform --> ScaffoldSystem : "组成"
 ## Lean4动态同步功能
 
 ### 功能概述
-新增的Lean4动态同步功能通过Python脚本实现，支持从解析的JSON数据自动同步到Lean4数据库，并生成相应的定理模板。
+新增的Lean4动态同步功能通过Python脚本实现，支持从解析的JSON数据自动同步到Lean4数据库，并生成相应的定理模板。该功能现已集成自动Lean Lake构建能力，通过 `_run_lake_build()` 函数实现。
 
 ### 核心功能
 - **论文ID生成**：将论文标题转换为Lean4安全标识符
@@ -367,6 +377,24 @@ HostPlatform --> ScaffoldSystem : "组成"
 - **引用关系处理**：自动解析论文引用关系并生成引用数据库
 - **定理模板生成**：基于替代关系生成支配关系的定理模板
 - **备份机制**：同步前自动创建备份文件
+- **自动构建**：通过 `_run_lake_build()` 函数自动运行 `lake build`
+
+### 自动构建功能
+**新增** `_run_lake_build()` 函数提供了完整的自动构建能力：
+
+```mermaid
+flowchart TD
+A["开始"] --> B["查找lake可执行文件"]
+B --> C{"找到lake?"}
+C --> |否| D["返回错误：找不到lake"]
+C --> |是| E["执行 `lake build` 命令"]
+E --> F{"构建成功?"}
+F --> |否| G["返回错误：构建失败"]
+F --> |是| H["返回成功：构建完成"]
+```
+
+**图示来源**
+- [lean_sync.py:201-239](file://scholar/lean_sync.py#L201-L239)
 
 ### 同步流程
 ```mermaid
@@ -380,28 +408,76 @@ F --> G["查找Database.lean位置"]
 G --> H["移除现有自动生成部分"]
 H --> I["插入新的数据库定义"]
 I --> J["创建备份文件"]
-J --> K["返回同步结果"]
+J --> K["可选：运行lake build"]
+K --> L["返回同步结果"]
 ```
 
 **图示来源**
 - [lean_sync.py:128-196](file://scholar/lean_sync.py#L128-L196)
 
 ### 命令行接口
-系统通过扩展的命令行接口支持Lean4同步功能：
+系统通过扩展的命令行接口支持Lean4同步功能，现已重构为共享Typer应用实例：
 
 ```bash
-# 同步论文数据到Lean4数据库
-python -m scholar lean-sync sync --apply --max-papers 100 --max-citations 200
+# 同步论文数据到Lean4数据库（自动构建）
+python -m scholar lean-sync sync --apply --max-papers 100 --max-citations 200 --build
 
 # 生成定理模板
 python -m scholar lean-sync gen-theorems --output GeneratedTheorems.lean
+
+# 仅生成定理模板（不写入文件）
+python -m scholar lean-sync gen-theorems
 ```
+
+**更新** CLI接口重构为共享Typer应用实例，通过 `_shared.py` 中的 `app` 对象提供统一的命令注册机制。
 
 **章节来源**
 - [lean_sync.py:128-196](file://scholar/lean_sync.py#L128-L196)
 - [lean_sync.py:202-291](file://scholar/lean_sync.py#L202-L291)
-- [cli.py:1-25](file://scholar/cli.py#L1-L25)
+- [cli.py:1-26](file://scholar/cli.py#L1-L26)
 - [__main__.py:1-8](file://scholar/__main__.py#L1-L8)
+- [_shared.py:22-26](file://scholar/_shared.py#L22-L26)
+
+## CLI接口重构
+
+### 共享Typer应用实例
+**新增** 系统现已重构为共享CLI接口，通过 `_shared.py` 提供统一的应用实例：
+
+```mermaid
+flowchart LR
+A["cli.py<br/>入口点"] --> B["_shared.py<br/>共享app实例"]
+B --> C["lean_sync.py<br/>命令实现"]
+B --> D["commands/*.py<br/>其他命令"]
+C --> E["typer.Typer<br/>应用实例"]
+```
+
+**图示来源**
+- [cli.py:9](file://scholar/cli.py#L9)
+- [_shared.py:22-26](file://scholar/_shared.py#L22-L26)
+
+### 应用实例特性
+- **统一命名空间**：所有命令共享相同的Typer应用实例
+- **集中式配置**：通过 `app = typer.Typer()` 定义统一的命令命名空间
+- **增强帮助系统**：提供统一的命令帮助和错误处理
+- **循环依赖避免**：通过独立模块避免命令间的循环导入
+
+### 命令注册机制
+**更新** 命令通过装饰器方式注册到共享应用实例：
+
+```python
+@app.command(name="lean-sync")
+def lean_sync_cmd(...):
+    """Sync parsed papers to Lean4 Database.lean."""
+
+@app.command(name="lean-templates")
+def lean_templates_cmd(...):
+    """Generate Lean4 theorem templates for dominance relations."""
+```
+
+**章节来源**
+- [_shared.py:1-40](file://scholar/_shared.py#L1-L40)
+- [cli.py:11-21](file://scholar/cli.py#L11-L21)
+- [lean_sync.py:341-388](file://scholar/lean_sync.py#L341-L388)
 
 ## 依赖关系分析
 - 模块依赖
@@ -410,12 +486,14 @@ python -m scholar lean-sync gen-theorems --output GeneratedTheorems.lean
   - Theorems.lean 依赖 Basic 与 Database
   - PDSS.lean 仅依赖 Basic
   - lean_sync.py 依赖 Scholar Studio配置和数据库模块
+  - **更新** CLI模块依赖共享的 `_shared.py` 提供的 `app` 实例
 - 目标与构建
   - lakefile.toml 声明库AiEvolution与可执行程序aievolution，根入口为Main
 - 动态同步依赖
   - Python运行时环境
   - Rich库用于命令行界面
   - 正则表达式用于数据解析
+  - **新增** subprocess模块用于执行 `lake build` 命令
 
 ```mermaid
 graph LR
@@ -429,13 +507,16 @@ Lake --> Main
 Python["lean_sync.py"] --> Database
 CLI["cli.py"] --> Python
 MainPy["__main__.py"] --> CLI
+Shared["_shared.py"] --> CLI
+Config["config.py"] --> Python
 ```
 
 **图示来源**
 - [AiEvolution.lean:1-8](file://LEAN/AiEvolution.lean#L1-L8)
 - [Main.lean:1-5](file://LEAN/Main.lean#L1-L5)
 - [lakefile.toml:1-11](file://LEAN/lakefile.toml#L1-L11)
-- [lean_sync.py:1-344](file://scholar/lean_sync.py#L1-L344)
+- [lean_sync.py:1-397](file://scholar/lean_sync.py#L1-L397)
+- [_shared.py:1-40](file://scholar/_shared.py#L1-L40)
 
 **章节来源**
 - [AiEvolution.lean:1-8](file://LEAN/AiEvolution.lean#L1-L8)
@@ -449,6 +530,8 @@ MainPy["__main__.py"] --> CLI
 - 最小主义原则：降低工具实现比例，减少维护与部署成本
 - **更新** 动态同步性能：Python脚本处理JSON数据，支持批量限制参数，避免内存溢出
 - **更新** 备份机制：自动备份确保数据安全，但增加磁盘I/O开销
+- **更新** 自动构建性能：`_run_lake_build()` 函数包含超时控制（300秒）和错误处理
+- **更新** CLI接口性能：共享应用实例减少内存占用，提高命令响应速度
 
 ## 故障排查指南
 - 编译失败或未通过
@@ -465,6 +548,14 @@ MainPy["__main__.py"] --> CLI
   - 验证解析的JSON数据格式是否正确
   - 确认正则表达式模式是否能正确解析创新节点属性
   - 检查生成的Lean4代码语法是否正确
+- **更新** 自动构建失败
+  - 检查 `lake` 可执行文件是否安装在PATH中
+  - 验证Lean4项目配置是否正确
+  - 查看构建超时设置（300秒）和错误输出
+- **更新** CLI接口问题
+  - 确认 `_shared.py` 中的 `app` 实例是否正确初始化
+  - 检查命令注册是否正常执行
+  - 验证命令导入路径是否正确
 
 **章节来源**
 - [lakefile.toml:1-11](file://LEAN/lakefile.toml#L1-L11)
@@ -472,11 +563,16 @@ MainPy["__main__.py"] --> CLI
 - [Theorems.lean:19-130](file://LEAN/AiEvolution/Theorems.lean#L19-L130)
 - [PDSS.lean:101-104](file://LEAN/AiEvolution/PDSS.lean#L101-L104)
 - [lean_sync.py:128-196](file://scholar/lean_sync.py#L128-L196)
+- [_shared.py:22-26](file://scholar/_shared.py#L22-L26)
 
 ## 结论
 本系统以Lean4为载体，将AI演进的分类体系、量化属性、知识图谱与架构模式统一纳入形式化框架。通过7个严格演进定理与PDSS的可组合性、结构同构与寄生演进定理，实现了从理论到实践的闭环验证。
 
-**更新** 新增的Lean4动态同步功能显著提升了系统的实用性，通过自动化数据同步和定理模板生成功能，降低了人工维护成本，提高了系统的可扩展性和维护效率。对于初学者，建议从Basic与Database入手理解数据模型；对于专家用户，可深入Theorems与PDSS模块探索更高阶的证明与架构设计，同时利用动态同步功能保持数据的实时更新。
+**更新** 新增的Lean4动态同步功能显著提升了系统的实用性，通过自动化数据同步和定理模板生成功能，降低了人工维护成本，提高了系统的可扩展性和维护效率。自动Lean Lake构建功能进一步简化了开发流程，使开发者能够专注于形式化验证本身。
+
+**更新** CLI接口重构为共享Typer应用实例，提供了更好的代码复用性和维护性。通过统一的应用实例管理，系统实现了更清晰的命令组织和更高效的资源利用。
+
+对于初学者，建议从Basic与Database入手理解数据模型；对于专家用户，可深入Theorems与PDSS模块探索更高阶的证明与架构设计，同时利用动态同步功能和自动构建能力保持数据的实时更新和项目的持续集成。
 
 ## 附录
 - 入门建议
@@ -485,6 +581,8 @@ MainPy["__main__.py"] --> CLI
   - 阅读Theorems了解支配关系与7个定理的证明策略
   - 探索PDSS模块，理解五元组、寄生约束与可组合性
   - **更新** 使用lean-sync命令同步论文数据和生成定理模板
+  - **更新** 利用 `--build` 选项自动构建Lean4项目
+  - **更新** 通过共享CLI接口访问所有命令功能
 - 参考路径
   - [AiEvolution.lean](file://LEAN/AiEvolution.lean)
   - [Main.lean](file://LEAN/Main.lean)
@@ -496,3 +594,5 @@ MainPy["__main__.py"] --> CLI
   - [lean_sync.py](file://scholar/lean_sync.py)
   - [cli.py](file://scholar/cli.py)
   - [__main__.py](file://scholar/__main__.py)
+  - [_shared.py](file://scholar/_shared.py)
+  - [config.py](file://scholar/config.py)

@@ -12,17 +12,21 @@
 - [year_fix.py](file://scholar/year_fix.py)
 - [metadata_ops.py](file://scholar/commands/metadata_ops.py)
 - [batch_ops.py](file://scholar/commands/batch_ops.py)
+- [execution_ops.py](file://scholar/commands/execution_ops.py)
 - [CONNECTORS.md](file://plugin/CONNECTORS.md)
 - [README.md](file://plugin/README.md)
 - [tools.md](file://plugin/rules/tools.md)
 - [requirements.txt](file://requirements.txt)
+- [test_mcp.py](file://test/test_mcp.py)
+- [test_visualization_e2e.py](file://test/test_visualization_e2e.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 更新了year_fix工具的增强功能，包括跳过计数统计
-- 改进了标准化的错误消息处理机制
-- 增强了异常处理的一致性和用户体验
+- 新增paper-reported metrics功能，增强实验结果可视化能力
+- scholar_get_experiment_metrics函数现在能够提取论文数据中的指标并与实验结果进行性能比较
+- 扩展了实验工具链的前端优化支持，提供结构化JSON数据用于图表渲染
+- 增强了论文指标提取的鲁棒性和准确性
 
 ## 目录
 1. [简介](#简介)
@@ -49,7 +53,7 @@
 
 **重要更新**：本项目已实现全新的直接方法调用架构，工具执行时间从约4.7秒大幅降低到约34毫秒，性能提升超过138倍，同时保持完全的向后兼容性。该架构通过共享状态管理和直接方法调用，消除了传统子进程调用的开销。
 
-**最新改进**：year_fix工具现已增强，提供更详细的统计信息，包括跳过计数（still_missing），并且所有工具都采用了标准化的异常处理机制，确保一致的错误消息格式。
+**最新改进**：新增paper-reported metrics功能，scholar_get_experiment_metrics函数现在能够提取论文数据中的指标并与实验结果进行性能比较，为实验结果可视化提供结构化数据支持。
 
 本项目通过 MCP 服务器将 Scholar CLI 的 40+ 工具以类型化参数与直接结果的形式暴露给 IDE，同时提供本地文件读取工具用于访问预生成数据。
 
@@ -75,6 +79,7 @@ subgraph "MCP 服务器层"
 MCPMain["入口<br/>scholar_mcp/__main__.py"]
 MCPServer["FastMCP 实例与工具注册<br/>scholar_mcp/server.py"]
 SharedState["共享状态管理<br/>scholar/_state.py"]
+ExperimentMetrics["实验指标提取<br/>execution_ops.py"]
 end
 subgraph "主仓库"
 CLI["CLI 命令入口<br/>scholar/cli.py"]
@@ -93,6 +98,7 @@ MCPClient --> MCPConfig
 MCPClient --> MCPMain
 MCPMain --> MCPServer
 MCPServer --> SharedState
+MCPServer --> ExperimentMetrics
 MCPServer --> CLI
 CLI --> Config
 CLI --> DB
@@ -108,7 +114,8 @@ Skills -.-> IDE
 - [mcp.json:1-16](file://plugin/mcp.json#L1-L16)
 - [__main__.py:1-9](file://scholar_mcp/__main__.py#L1-L9)
 - [_state.py:1-126](file://scholar/_state.py#L1-L126)
-- [server.py:1-945](file://scholar_mcp/server.py#L1-L945)
+- [server.py:1-1750](file://scholar_mcp/server.py#L1-L1750)
+- [execution_ops.py:448-647](file://scholar/commands/execution_ops.py#L448-L647)
 - [year_fix.py:1-420](file://scholar/year_fix.py#L1-L420)
 - [cli.py:1-25](file://scholar/cli.py#L1-L25)
 - [config.py:1-119](file://scholar/config.py#L1-L119)
@@ -128,6 +135,10 @@ Skills -.-> IDE
   - 对于需要 CLI 行为的工具，仍保留子进程调用策略，确保向后兼容性。
 - **本地文件读取工具**
   - 提供读取自动生成的笔记、质量评分、解析后的 JSON、技能说明等文件的工具，便于 IDE 直接展示。
+- **实验指标提取与比较**
+  - 新增paper-reported metrics功能，通过`_extract_paper_metrics`函数从论文数据中提取指标
+  - `scholar_get_experiment_metrics`工具提供结构化JSON数据用于图表渲染
+  - 支持实验结果与论文报告指标的自动比较分析
 - **配置与环境变量**
   - 通过环境变量控制数据库、图数据库、嵌入模型与引擎等，支持 .env 文件加载。
 - **数据库抽象**
@@ -136,10 +147,11 @@ Skills -.-> IDE
   - 所有工具都采用统一的 try-except 异常处理模式，使用标准化的错误消息格式，如"工具名 failed: 错误详情"。
 
 **章节来源**
-- [server.py:17-945](file://scholar_mcp/server.py#L17-L945)
+- [server.py:17-1750](file://scholar_mcp/server.py#L17-L1750)
 - [_state.py:20-126](file://scholar/_state.py#L20-L126)
 - [config.py:44-66](file://scholar/config.py#L44-L66)
 - [db.py:24-74](file://scholar/db.py#L24-L74)
+- [execution_ops.py:448-647](file://scholar/commands/execution_ops.py#L448-L647)
 
 ## 架构总览
 下图展示了 MCP 服务器如何将 CLI 命令映射为 MCP 工具，并与数据库、图数据库、外部 API 协同工作：
@@ -151,12 +163,15 @@ participant MCP as "MCP 客户端"
 participant Server as "MCP 服务器<br/>server.py"
 participant State as "共享状态<br/>_state.py"
 participant CLI as "Scholar CLI<br/>cli.py"
+participant ExecOps as "执行操作<br/>execution_ops.py"
 participant CFG as "配置<br/>config.py"
 participant DB as "数据库抽象<br/>db.py"
 IDE->>MCP : "请求工具调用"
 MCP->>Server : "MCP 请求"
 Server->>State : "获取共享状态"
 State-->>Server : "连接池/缓存"
+Server->>ExecOps : "提取论文指标"
+ExecOps-->>Server : "指标数据"
 Server->>CLI : "直接方法调用"
 CLI->>CFG : "读取配置/环境变量"
 CLI->>DB : "可选：数据库操作"
@@ -172,6 +187,7 @@ MCP-->>IDE : "展示结果"
 - [cli.py:1-25](file://scholar/cli.py#L1-L25)
 - [config.py:1-119](file://scholar/config.py#L1-L119)
 - [db.py:24-74](file://scholar/db.py#L24-L74)
+- [execution_ops.py:448-647](file://scholar/commands/execution_ops.py#L448-L647)
 
 ## 详细组件分析
 
@@ -210,6 +226,11 @@ class Server {
 +scholar_author_fix(apply : bool) str
 +scholar_venue_fix(apply : bool) str
 +scholar_cite_resolve(apply : bool) str
++scholar_get_experiment_metrics(paper_id : str) str
++scholar_exp_run(paper_id : str, mode : str, gpu : bool) str
++scholar_exp_compare(paper_id : str, baseline_id : str) str
++scholar_exp_setup(paper_id : str, use_docker : bool) str
++scholar_exp_debug(run_log : str) str
 +...()
 }
 class SharedState {
@@ -218,17 +239,59 @@ class SharedState {
 +get_parsed(paper_id : str) dict
 +init_pool()
 }
+class ExperimentMetrics {
++_extract_paper_metrics(paper_data : dict) list
++scholar_get_experiment_metrics(paper_id : str) str
+}
 FastMCP <.. Server : "装饰器注册"
 Server --> SharedState : "使用共享状态"
+Server --> ExperimentMetrics : "使用实验指标"
 ```
 
 **图表来源**
-- [server.py:17-945](file://scholar_mcp/server.py#L17-L945)
+- [server.py:17-1750](file://scholar_mcp/server.py#L17-L1750)
 - [_state.py:20-126](file://scholar/_state.py#L20-L126)
+- [execution_ops.py:448-647](file://scholar/commands/execution_ops.py#L448-L647)
 
 **章节来源**
-- [server.py:17-945](file://scholar_mcp/server.py#L17-L945)
+- [server.py:17-1750](file://scholar_mcp/server.py#L17-L1750)
 - [_state.py:20-126](file://scholar/_state.py#L20-L126)
+- [execution_ops.py:448-647](file://scholar/commands/execution_ops.py#L448-L647)
+
+### 实验指标提取与比较功能
+- **论文指标提取**
+  - `_extract_paper_metrics`函数从论文的Results/Experiments/Evaluation部分提取指标
+  - 支持多种格式：冒号/等号格式、句子格式、Markdown表格行、±符号、范围值、百分比归一化
+  - 自动识别更高越好(lower_better)和更低越好(lower_better)类型的指标
+- **实验结果比较**
+  - `scholar_get_experiment_metrics`工具提供结构化JSON数据用于图表渲染
+  - 支持Recharts BarChart等前端图表库的直接使用
+  - 自动生成指标比较报告，包括差距计算和类型标注
+- **前端优化**
+  - 返回的数据格式专为前端可视化优化
+  - 包含完整的元数据：paper_id、paper_title、运行状态、指标数据等
+
+```mermaid
+sequenceDiagram
+participant IDE as "IDE/客户端"
+participant MCP as "MCP 客户端"
+participant Server as "MCP 服务器"
+participant ExecOps as "执行操作"
+IDE->>MCP : "调用 scholar_get_experiment_metrics"
+MCP->>Server : "请求实验指标"
+Server->>ExecOps : "_extract_paper_metrics"
+ExecOps-->>Server : "论文指标列表"
+Server-->>MCP : "结构化JSON数据"
+MCP-->>IDE : "图表渲染数据"
+```
+
+**图表来源**
+- [server.py:1571-1636](file://scholar_mcp/server.py#L1571-L1636)
+- [execution_ops.py:448-558](file://scholar/commands/execution_ops.py#L448-L558)
+
+**章节来源**
+- [server.py:1571-1636](file://scholar_mcp/server.py#L1571-L1636)
+- [execution_ops.py:448-558](file://scholar/commands/execution_ops.py#L448-L558)
 
 ### 工具调用序列（示例：全文搜索）
 ```mermaid
@@ -328,7 +391,7 @@ MCP-->>IDE : "展示搜索结果"
   - 充分利用共享状态，避免重复初始化昂贵资源。
 
 **章节来源**
-- [server.py:17-945](file://scholar_mcp/server.py#L17-L945)
+- [server.py:17-1750](file://scholar_mcp/server.py#L17-L1750)
 - [_state.py:20-126](file://scholar/_state.py#L20-L126)
 - [config.py:44-66](file://scholar/config.py#L44-L66)
 
@@ -383,6 +446,7 @@ MCP-->>IDE : "展示搜索结果"
 graph LR
 MCP["MCP 服务器<br/>server.py"] --> CLI["CLI 命令<br/>cli.py"]
 MCP --> State["共享状态<br/>_state.py"]
+MCP --> ExecOps["实验指标<br/>execution_ops.py"]
 CLI --> CFG["配置<br/>config.py"]
 CLI --> DB["数据库抽象<br/>db.py"]
 CLI --> YearFix["year_fix 工具<br/>year_fix.py"]
@@ -393,8 +457,9 @@ CLI --> Zhipu["智谱嵌入 API"]
 ```
 
 **图表来源**
-- [server.py:1-945](file://scholar_mcp/server.py#L1-L945)
+- [server.py:1-1750](file://scholar_mcp/server.py#L1-L1750)
 - [_state.py:1-126](file://scholar/_state.py#L1-126)
+- [execution_ops.py:1-935](file://scholar/commands/execution_ops.py#L1-L935)
 - [cli.py:1-25](file://scholar/cli.py#L1-L25)
 - [config.py:44-66](file://scholar/config.py#L44-L66)
 - [db.py:24-74](file://scholar/db.py#L24-L74)
@@ -423,7 +488,7 @@ CLI --> Zhipu["智谱嵌入 API"]
   - 本地文件读取工具直接读取预生成数据，减少重复计算。
 
 **章节来源**
-- [server.py:58-945](file://scholar_mcp/server.py#L58-L945)
+- [server.py:58-1750](file://scholar_mcp/server.py#L58-L1750)
 - [_state.py:20-126](file://scholar/_state.py#L20-L126)
 - [config.py:72-118](file://scholar/config.py#L72-L118)
 - [db.py:24-74](file://scholar/db.py#L24-L74)
@@ -443,17 +508,19 @@ CLI --> Zhipu["智谱嵌入 API"]
   - 如果遇到性能问题，检查共享状态是否正确初始化，确认工具是否使用了直接方法调用而非子进程调用。
 - **year_fix工具问题**
   - 如果year_fix工具显示"Year fix failed: 错误详情"，检查Lean4 Database.lean文件是否存在，以及网络连接是否正常。
+- **实验指标提取失败**
+  - 如果`scholar_get_experiment_metrics`返回错误，检查论文数据格式和实验结果文件是否存在。
 
 **章节来源**
 - [CONNECTORS.md:5-33](file://plugin/CONNECTORS.md#L5-L33)
 - [server.py:340-384](file://scholar_mcp/server.py#L340-L384)
-- [server.py:58-945](file://scholar_mcp/server.py#L58-L945)
+- [server.py:58-1750](file://scholar_mcp/server.py#L58-L1750)
 - [_state.py:115-126](file://scholar/_state.py#L115-L126)
 
 ## 结论
 本文件系统性地梳理了 MCP 工具 API 的调用机制、工具暴露接口、连接处理与消息格式，明确了工具注册流程、生命周期管理与状态同步机制，并提供了 IDE 集成、自动补全与实时交互的实践建议。通过共享状态管理和直接方法调用架构，MCP 服务器实现了超过138倍的性能提升，工具执行时间从约4.7秒降低到约34毫秒，同时保持完全的向后兼容性。通过合理的参数传递、返回值格式与错误处理，以及对外部依赖的降级策略，MCP 服务器能够稳定地为 IDE 提供丰富的学术研究工具链。
 
-**最新改进**：year_fix工具现已增强，提供更详细的统计信息，包括跳过计数（still_missing），帮助用户更好地了解处理进度。所有工具都采用了标准化的异常处理机制，确保一致的错误消息格式，提升了用户体验和调试效率。
+**最新改进**：新增paper-reported metrics功能，`scholar_get_experiment_metrics`工具现在能够提取论文数据中的指标并与实验结果进行性能比较，为实验结果可视化提供结构化数据支持。该功能增强了实验工具链的前端优化能力，支持Recharts等图表库的直接使用，显著提升了用户体验和数据分析效率。
 
 ## 附录
 
@@ -505,6 +572,7 @@ CLI --> Zhipu["智谱嵌入 API"]
   - dataset-download：数据集下载
   - read_experiment_report：读取实验报告
   - read_compile_log：读取编译日志
+  - get_experiment_metrics：获取实验指标（新增）
 - **文件读取**
   - read_auto_note：读取阅读笔记
   - read_quality_score：读取质量评分
@@ -512,8 +580,25 @@ CLI --> Zhipu["智谱嵌入 API"]
   - read_skill：读取技能说明
 
 **章节来源**
-- [server.py:41-945](file://scholar_mcp/server.py#L41-L945)
+- [server.py:41-1750](file://scholar_mcp/server.py#L41-L1750)
 - [tools.md:31-135](file://plugin/rules/tools.md#L31-L135)
+
+### 实验指标提取功能详解
+**新增功能**：paper-reported metrics提取与比较
+- **指标提取范围**：从论文的Results/Experiments/Evaluation部分提取指标
+- **支持的格式**：
+  - 冒号/等号格式：accuracy: 85.2, loss = 0.34
+  - 句子格式：achieves accuracy of 92.3%, reaches F1 of 0.87
+  - Markdown表格行：| accuracy | 88.5% |
+  - ±符号：85.2 ± 0.3（取主要数值）
+  - 范围值：85.2-87.3（higher_better取最大值，lower_better取最小值）
+  - 百分比归一化：大于1的百分比值除以100
+- **自动比较功能**：与实验运行结果进行对比，计算差距值
+- **前端优化**：返回结构化JSON数据，支持Recharts等图表库
+
+**章节来源**
+- [server.py:1571-1636](file://scholar_mcp/server.py#L1571-L1636)
+- [execution_ops.py:448-558](file://scholar/commands/execution_ops.py#L448-L558)
 
 ### year_fix工具增强详情
 **更新内容**
@@ -546,6 +631,7 @@ CLI --> Zhipu["智谱嵌入 API"]
 - cite_network：返回"Citation network analysis failed: 错误详情"
 - rag_search：返回"RAG search failed: 错误详情"
 - arxiv_search：返回"arXiv search failed: 错误详情"
+- scholar_get_experiment_metrics：返回"Experiment metrics extraction failed: 错误详情"
 
 **章节来源**
 - [server.py:289-290](file://scholar_mcp/server.py#L289-L290)
@@ -553,3 +639,14 @@ CLI --> Zhipu["智谱嵌入 API"]
 - [server.py:369-370](file://scholar_mcp/server.py#L369-L370)
 - [server.py:405-406](file://scholar_mcp/server.py#L405-L406)
 - [server.py:438-439](file://scholar_mcp/server.py#L438-L439)
+- [server.py:1635](file://scholar_mcp/server.py#L1635)
+
+### 实验工具测试用例
+**新增测试**：实验指标提取功能测试
+- `test_experiment_metrics_has_comparison`：验证`scholar_get_experiment_metrics`返回比较数据或错误
+- 支持不存在论文的错误处理测试
+- 确保工具的健壮性和错误恢复能力
+
+**章节来源**
+- [test_visualization_e2e.py:223-229](file://test/test_visualization_e2e.py#L223-L229)
+- [test_mcp.py:296-299](file://test/test_mcp.py#L296-L299)

@@ -1,8 +1,8 @@
 services:
   # PostgreSQL + pgvector: 结构化数据 + RAG 向量检索
-  pg:
+  postgres:
     image: pgvector/pgvector:pg16
-    container_name: scholar-pg
+    container_name: scholar-postgres
     ports:
       - "5433:5432"
     environment:
@@ -11,6 +11,7 @@ services:
       POSTGRES_PASSWORD: scholar2024
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Note: volume name kept as 'pgdata' for backward compatibility
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scholar"]

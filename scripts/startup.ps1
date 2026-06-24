@@ -69,7 +69,7 @@ while ($elapsed -lt $maxWait) {
     $pgOk = $false
     $neo4jOk = $false
 
-    $pgStatus = docker inspect --format="{{.State.Health.Status}}" scholar-pg 2>$null
+    $pgStatus = docker inspect --format="{{.State.Health.Status}}" scholar-postgres 2>$null
     if ($pgStatus -eq "healthy") { $pgOk = $true }
 
     $neo4jStatus = docker inspect --format="{{.State.Health.Status}}" scholar-neo4j 2>$null
@@ -92,8 +92,8 @@ if ($elapsed -ge $maxWait) {
 
 # 3. Quick status check
 Write-Host "`n[3/4] Knowledge base status:" -ForegroundColor Yellow
-$papers = docker exec scholar-pg psql -U scholar -d scholar -t -c "SELECT count(*) FROM papers;" 2>$null
-$chunks = docker exec scholar-pg psql -U scholar -d scholar -t -c "SELECT count(*) FROM chunks;" 2>$null
+$papers = docker exec scholar-postgres psql -U scholar -d scholar -t -c "SELECT count(*) FROM papers;" 2>$null
+$chunks = docker exec scholar-postgres psql -U scholar -d scholar -t -c "SELECT count(*) FROM chunks;" 2>$null
 $neo4jNodes = docker exec scholar-neo4j cypher-shell -u neo4j -p scholar2024 "MATCH (n) RETURN count(n);" 2>$null
 
 Write-Host "  PG papers:  $($papers.Trim())"

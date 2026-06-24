@@ -1,6 +1,6 @@
 # Scholar Studio — AI 学术研究助手
 
-基于 Qoder IDE 的学术研究引擎，管理 **581 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 279 项自动化测试。
+基于 Qoder IDE 的学术研究引擎，管理 **581 篇 AI 方向论文**，提供 RAG 语义检索、Neo4j 引用图谱、15 个学术 skills（8 原子 + 7 工作流）、Lean4 形式化验证、Adaptive Research Loop（自适应研究闭环）和 301 项自动化测试。
 
 > **核心理念**：把 581 篇论文的 TeX 源码变成可查询、可推理、可组合的学术数据层，然后通过 Qoder Agent + Skills + Hooks 自动化完成调研→精读→对比→写作→追踪的全流程。
 
@@ -398,7 +398,7 @@ python -m scholar ingest <paper_id>         # 增量导入单篇
 python -m scholar arxiv-search "query"      # 搜索 arXiv
 
 # 测试
-cd test && pytest                           # 运行 279 项自动化测试
+cd test && pytest                           # 运行 301 项自动化测试
 ```
 
 ---
@@ -446,7 +446,7 @@ scholar/           Python CLI 工具集（42 命令）
   rag.py           RAG 向量检索
   ...              其他领域模块
 scholar_mcp/       MCP Server（55 工具，Qoder 桥接层）
-test/              自动化测试套件（18 个文件，279 项测试）
+test/              自动化测试套件（18 个文件，301 项测试）
   conftest.py      共享 fixtures
   test_config.py   配置路径与环境变量
   test_id_resolver.py  Hybrid ID 解析器
@@ -510,7 +510,7 @@ NeurIPS (129), ICLR (58), ICML (53), CVPR (39), IEEE (36), Science (35), ACL (27
 
 ## 自动化测试
 
-279 项测试覆盖从单元到端到端的全链路：
+301 项测试覆盖从单元到端到端的全链路：
 
 | 测试文件 | 测试数 | 覆盖范围 |
 |----------|--------|----------|

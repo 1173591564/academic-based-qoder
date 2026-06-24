@@ -14,13 +14,17 @@ function App() {
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem("scholar-settings");
     if (!saved) return DEFAULT_SETTINGS;
-    const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-    const validCliIde = (v: string): v is Settings["cliIde"] =>
-      v === "claude-code" || v === "qoder-cli";
-    if (!validCliIde(parsed.cliIde)) {
-      parsed.cliIde = "claude-code";
+    try {
+      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      const validCliIde = (v: string): v is Settings["cliIde"] =>
+        v === "claude-code" || v === "qoder-cli";
+      if (!validCliIde(parsed.cliIde)) {
+        parsed.cliIde = "claude-code";
+      }
+      return parsed;
+    } catch {
+      return DEFAULT_SETTINGS;
     }
-    return parsed;
   });
 
   useEffect(() => {

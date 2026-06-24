@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: configuration_system
+title: 基于环境变量与双模式路径解析的集中式配置管理
+scope: []
+source_files:
+    - scholar/config.py
+    - .env.example
+    - infra/docker-compose.yml
+    - pyproject.toml
+depends_on: []
+related_to: []

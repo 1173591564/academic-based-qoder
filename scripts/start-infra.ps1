@@ -35,7 +35,7 @@ Write-Host " OK" -ForegroundColor Green
 Write-Host "[3/4] Waiting for PostgreSQL..." -NoNewline
 $pgReady = $false
 for ($i = 0; $i -lt 30; $i++) {
-    $result = docker exec scholar-pg pg_isready -U scholar 2>&1
+    $result = docker exec scholar-postgres pg_isready -U scholar 2>&1
     if ($result -match "accepting connections") {
         $pgReady = $true
         break

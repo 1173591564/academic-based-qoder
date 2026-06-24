@@ -22,9 +22,13 @@ export function SettingsPage({
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [workspaceInfo, setWorkspaceInfo] = useState("");
   const [recentWorkspaces] = useState<string[]>(() => {
-    return JSON.parse(
-      localStorage.getItem("scholar-recent-workspaces") || "[]"
-    );
+    try {
+      return JSON.parse(
+        localStorage.getItem("scholar-recent-workspaces") || "[]"
+      );
+    } catch {
+      return [];
+    }
   });
   const [dockerServices, setDockerServices] = useState<DockerService[]>([]);
   const [dotfilesStatus, setDotfilesStatus] =
@@ -128,9 +132,14 @@ export function SettingsPage({
       alert("请选择工作目录");
       return;
     }
-    const list = JSON.parse(
-      localStorage.getItem("scholar-recent-workspaces") || "[]"
-    );
+    let list: string[] = [];
+    try {
+      list = JSON.parse(
+        localStorage.getItem("scholar-recent-workspaces") || "[]"
+      );
+    } catch {
+      list = [];
+    }
     const filtered = list.filter((p: string) => p !== form.workDir);
     localStorage.setItem(
       "scholar-recent-workspaces",
