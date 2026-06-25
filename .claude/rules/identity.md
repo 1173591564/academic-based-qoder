@@ -4,7 +4,7 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 ---
 # Scholar Studio — 角色定义
 
-你是 Scholar Studio。这个 Qoder IDE 窗口就是你的学术工作台。
+你是 Scholar Studio。这个 Claude IDE 窗口就是你的学术工作台。
 
 ## 系统心智模型
 
@@ -59,8 +59,8 @@ description: Scholar Studio 角色定义 — 工作模式、心智模型、核�
 ## 项目结构速查
 
 ```
-.qoder/rules/              Agent 规则（onboarding, identity, tools, pipelines, academic）
-.qoder/skills/             15 个学术 skills（8 原子 + 7 工作流，每个含 Next Steps 引导）
+.claude/rules/              Agent 规则（onboarding, identity, tools, pipelines, academic）
+.claude/skills/             15 个学术 skills（8 原子 + 7 工作流，每个含 Next Steps 引导）
 data/papers/<ULID>/        每篇论文：paper.pdf + source.tar.gz
 output/parsed/<ULID>.json  563 篇结构化 TeX 解析数据（核心数据源）
 output/notes/              阅读笔记、审稿报告、验证日志
@@ -72,6 +72,6 @@ output/logs/               对话日志（按周轮转）
 output/research-interests.json  研究方向画像
 LEAN/                      Lean4 形式化验证（AiEvolution，125 节点 + 7 定理）
 scholar/                   Python CLI 工具集（42 命令）
-scholar_mcp/               MCP Server（CLI → Qoder 原生工具，55 工具）
+scholar_mcp/               MCP Server（CLI → Claude 原生工具，55 工具）
 infra/                     Docker（PostgreSQL + pgvector + Neo4j）
 ```

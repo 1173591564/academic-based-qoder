@@ -1,16 +1,38 @@
 # Scholar Studio — PreToolUse Hook: Block Dangerous Commands
 # Prevents destructive shell commands from executing
-# Exit code 1 = block, 0 = allow
+# Merged from .qoder (SQL/Docker) and .claude (system) versions
+# Exit code 2 = block, 0 = allow
 $ErrorActionPreference = "SilentlyContinue"
 
-# Read stdin for tool context
-$context = $input | Out-String
+param()
 
-# Dangerous command patterns
+# Read stdin as JSON for precise command extraction
+$raw = [Console]::In.ReadToEnd()
+if (-not $raw) { exit 0 }
+
+# Try JSON parse first, fall back to raw text matching
+$command = ""
+try {
+    $ctx = $raw | ConvertFrom-Json
+    $command = $ctx.tool_input.command
+} catch {
+    $command = $raw
+}
+if (-not $command) { exit 0 }
+
+# All dangerous command patterns (merged from both IDE versions)
 $dangerousPatterns = @(
+    # SQL operations
+    "(?i)DROP\s+(TABLE|DATABASE)",
+    "(?i)TRUNCATE\s+TABLE\s+(papers|sections|formulas|citations|chunks)",
+    # Docker operations
+    "(?i)docker\s+(rm|rmi)\s+.*--force\s+.*-f",
+    "(?i)docker\s+(rm|volume\s+rm|system\s+prune)",
+    # System destruction
     "rm\s+-rf\s+/",
     "rm\s+-rf\s+~",
     "rm\s+-rf\s+\*",
+    "rm\s+-rf",
     "del\s+/[fsq]\s+/[fsq]",
     "format\s+[c-z]:",
     "mkfs\.\w+",
@@ -18,43 +40,21 @@ $dangerousPatterns = @(
     ":\(\)\s*\{\s*:\|:&\s*\}\s*;:",  # fork bomb
     "Remove-Item\s+.*-Recurse\s+.*-Force\s+.*C:\\",
     "Remove-Item\s+.*-Recurse\s+.*-Force\s+.*~/",
+    # Git destructive operations
     "git\s+push\s+.*--force\s+.*main",
     "git\s+push\s+.*--force\s+.*master",
     "git\s+reset\s+--hard\s+HEAD~",
-    "docker\s+(rm|rmi)\s+.*--force\s+.*-f",
+    # Permission changes
     "chmod\s+-R\s+777\s+/"
 )
 
 foreach ($pattern in $dangerousPatterns) {
-    if ($context -match $pattern) {
-        Write-Output "BLOCKED: Dangerous command pattern detected."
-        Write-Output "Pattern: $pattern"
-        Write-Output "If this is intentional, bypass with --no-verify or ask the user."
-        exit 1
+    if ($command -match $pattern) {
+        [Console]::Error.WriteLine("Scholar Studio: Dangerous command blocked - $command")
+        [Console]::Error.WriteLine("Pattern: $pattern")
+        [Console]::Error.WriteLine("If this is intentional, bypass with --no-verify or ask the user.")
+        exit 2
     }
-}
-
-exit 0
-# Scholar Studio - 拦截危险命令
-# Hook event: PreToolUse, matcher: Bash
-# 阻止 DROP TABLE、TRUNCATE 等危险 SQL 和 Docker 操作
-
-param()
-$input_json = [Console]::In.ReadToEnd() | ConvertFrom-Json
-
-$command = $input_json.tool_input.command
-if (-not $command) { exit 0 }
-
-# 危险 SQL 操作
-if ($command -match '(?i)(DROP\s+(TABLE|DATABASE)|TRUNCATE\s+TABLE\s+(papers|sections|formulas|citations|chunks))') {
-    [Console]::Error.WriteLine("Scholar Studio: 危险 SQL 操作被拦截 - $command")
-    exit 2
-}
-
-# 危险的 Docker/系统操作
-if ($command -match '(?i)(docker\s+(rm|volume\s+rm|system\s+prune)|rm\s+-rf)') {
-    [Console]::Error.WriteLine("Scholar Studio: 危险系统操作被拦截 - $command")
-    exit 2
 }
 
 exit 0

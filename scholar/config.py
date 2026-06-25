@@ -35,6 +35,34 @@ SCHOLAR_HOME = _resolve_scholar_home()
 PROJECT_ROOT = SCHOLAR_HOME
 
 
+def _resolve_templates_dir() -> Path:
+    """确定 .scholar/ 模板源目录。
+
+    优先级：
+    1. 项目根目录 .scholar/（开发模式）
+    2. SCHOLAR_HOME/.scholar/（全局安装后 init 过的）
+    3. scholar/templates/（包内嵌副本，pip install 后）
+    """
+    # 开发模式：源码目录的 .scholar/
+    dev_scholar = PROJECT_ROOT / ".scholar"
+    if dev_scholar.exists():
+        return dev_scholar
+
+    # 全局模式：SCHOLAR_HOME/.scholar/
+    global_scholar = SCHOLAR_HOME / ".scholar"
+    if global_scholar.exists():
+        return global_scholar
+
+    # 包内嵌副本（pip install 后）
+    pkg_templates = Path(__file__).resolve().parent / "templates"
+    if pkg_templates.exists():
+        return pkg_templates
+
+    # fallback
+    return dev_scholar
+
+
+
 def _resolve_workspace_dir() -> Path:
     """Determine workspace directory (per-project output root).
 
@@ -113,12 +141,42 @@ for d in [PARSED_DIR, NOTES_DIR, DRAFTS_DIR, BIB_DIR, EXPERIMENTS_DIR, DATASETS_
 IS_FROZEN = getattr(sys, 'frozen', False)
 
 
+def _resolve_templates_dir() -> Path:
+    """确定 .scholar/ 模板源目录。
+
+    优先级：
+    1. 项目根目录 .scholar/（开发模式）
+    2. SCHOLAR_HOME/.scholar/（全局安装后 init 过的）
+    3. scholar/templates/（包内嵌副本，pip install 后）
+    """
+    # 开发模式：源码目录的 .scholar/
+    dev_scholar = PROJECT_ROOT / ".scholar"
+    if dev_scholar.exists():
+        return dev_scholar
+
+    # 全局模式：SCHOLAR_HOME/.scholar/
+    global_scholar = SCHOLAR_HOME / ".scholar"
+    if global_scholar.exists():
+        return global_scholar
+
+    # 包内嵌副本（pip install 后）
+    pkg_templates = Path(__file__).resolve().parent / "templates"
+    if pkg_templates.exists():
+        return pkg_templates
+
+    # fallback
+    return dev_scholar
+
+
+
 def init_scholar_home() -> dict:
     """初始化全局知识库目录结构。
 
     创建 ~/.scholar-studio/ 及所有子目录，生成 .env.example。
+    复制 IDE 配置模板（.scholar/）到全局目录。
     返回 {"created": [...], "already_exists": bool, "env_example": Path}
     """
+    import shutil as _shutil
     created: list[str] = []
     home = SCHOLAR_HOME
 
@@ -169,6 +227,16 @@ def init_scholar_home() -> dict:
         )
         created.append(str(env_example))
 
+    # 复制 IDE 配置模板到全局 .scholar/
+    templates_src = _resolve_templates_dir()
+    global_scholar = home / ".scholar"
+    if templates_src.exists() and not global_scholar.exists():
+        _shutil.copytree(
+            templates_src, global_scholar,
+            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'),
+        )
+        created.append(str(global_scholar))
+
     return {
         "home": str(home),
         "created": created,
@@ -177,16 +245,118 @@ def init_scholar_home() -> dict:
     }
 
 
-def init_workspace() -> dict:
-    """Initialize workspace directory structure (per-workspace outputs).
+def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
+    """Sync .scholar/ templates to .qoder/ and .claude/ in the given workspace.
 
-    Creates WORKSPACE_DIR/output/{drafts,notes,logs}.
-    Copies .qoder/ template (rules, skills, hooks, commands) from source.
-    Shared knowledge base (parsed/) stays in SCHOLAR_HOME.
+    This is the embedded sync logic (no external script dependency).
+    Returns list of newly created directory paths.
     """
     import shutil
     import json as _json
 
+    IDE_CONFIGS = {
+        "qoder": {"name": "Qoder", "dir": ".qoder", "entry_file": None},
+        "claude": {"name": "Claude", "dir": ".claude", "entry_file": "CLAUDE.md"},
+    }
+    DIRECT_COPY_DIRS = ["skills", "commands", "hooks"]
+    created = []
+
+    def _substitute(text: str, ide_name: str, ide_dir: str) -> str:
+        return text.replace("{IDE_NAME}", ide_name).replace("{IDE_DIR}", ide_dir)
+
+    for ide_key, ide_cfg in IDE_CONFIGS.items():
+        ide_name = ide_cfg["name"]
+        ide_dir_name = ide_cfg["dir"]
+        ide_target = ws / ide_dir_name
+        is_new = not ide_target.exists()
+
+        ide_target.mkdir(parents=True, exist_ok=True)
+
+        # 1. Direct copy: skills, commands, hooks
+        for subdir in DIRECT_COPY_DIRS:
+            src = scholar_source / subdir
+            if not src.exists():
+                continue
+            dst = ide_target / subdir
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+
+        # 2. Template copy: rules
+        rules_src = scholar_source / "rules"
+        if rules_src.exists():
+            rules_dst = ide_target / "rules"
+            if rules_dst.exists():
+                shutil.rmtree(rules_dst)
+            rules_dst.mkdir(parents=True)
+            for f in rules_src.rglob("*"):
+                if f.is_file():
+                    content = f.read_text(encoding="utf-8")
+                    templated = _substitute(content, ide_name, ide_dir_name)
+                    rel = f.relative_to(rules_src)
+                    out = rules_dst / rel
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_text(templated, encoding="utf-8")
+
+        # 3. Generate IDE entry point (CLAUDE.md for Claude)
+        entry_src = scholar_source / "IDE_ENTRY.md"
+        entry_file = ide_cfg.get("entry_file")
+        if entry_src.exists() and entry_file:
+            content = entry_src.read_text(encoding="utf-8")
+            templated = _substitute(content, ide_name, ide_dir_name)
+            (ide_target / entry_file).write_text(templated, encoding="utf-8")
+
+        # 4. Generate settings.json
+        settings_path = ide_target / "settings.json"
+        if not settings_path.exists():
+            settings = {
+                "hooks": {
+                    "Stop": [
+                        {"hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/task-done.ps1"}]},
+                        {"hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/log-conversation.ps1"}]},
+                    ],
+                    "PreToolUse": [
+                        {"matcher": "Bash", "hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/block-dangerous.ps1"}]},
+                    ],
+                    "PostToolUse": [
+                        {"matcher": "Write|Edit", "hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/verify-citations.ps1"}]},
+                    ],
+                }
+            }
+            settings_path.write_text(_json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        # 5. Generate mcp.json
+        mcp_path = ide_target / "mcp.json"
+        if not mcp_path.exists():
+            mcp_config = {
+                "mcpServers": {
+                    "scholar": {
+                        "command": "python",
+                        "args": ["-m", "scholar_mcp"],
+                        "cwd": str(ws),
+                        "env": {
+                            "SCHOLAR_HOME": str(ws),
+                            "SCHOLAR_WORKSPACE": str(ws),
+                            "PYTHONPATH": str(ws),
+                        }
+                    }
+                }
+            }
+            mcp_path.write_text(_json.dumps(mcp_config, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        if is_new:
+            created.append(str(ide_target))
+
+    return created
+
+
+def init_workspace() -> dict:
+    """Initialize workspace directory structure (per-workspace outputs).
+
+    Creates WORKSPACE_DIR/output/{drafts,notes,logs}.
+    Syncs IDE config (.qoder/ and .claude/) from .scholar/ shared source.
+    Shared knowledge base (parsed/) stays in SCHOLAR_HOME.
+    """
     created: list[str] = []
     ws = WORKSPACE_DIR
     dirs_to_create = [
@@ -199,30 +369,11 @@ def init_workspace() -> dict:
             d.mkdir(parents=True, exist_ok=True)
             created.append(str(d))
 
-    # Copy .qoder/ template from source directory (skip repowiki, plans, __pycache__)
-    qoder_source = Path(__file__).resolve().parent.parent / ".qoder"
-    qoder_target = ws / ".qoder"
-    if qoder_source.exists() and not qoder_target.exists():
-        shutil.copytree(
-            qoder_source, qoder_target,
-            ignore=shutil.ignore_patterns('repowiki', 'plans', '__pycache__', '*.log'),
-        )
-        created.append(str(qoder_target))
-
-        # Generate mcp.json with correct workspace paths
-        mcp_json = {
-            "mcpServers": {
-                "scholar": {
-                    "command": "python",
-                    "args": ["-m", "scholar_mcp"],
-                    "cwd": str(ws),
-                }
-            }
-        }
-        (qoder_target / "mcp.json").write_text(
-            _json.dumps(mcp_json, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+    # Sync IDE config from .scholar/ shared source (embedded, no external script)
+    scholar_source = _resolve_templates_dir()
+    if scholar_source.exists():
+        ide_created = _sync_ide_config(ws, scholar_source)
+        created.extend(ide_created)
 
     return {
         "workspace": str(ws),

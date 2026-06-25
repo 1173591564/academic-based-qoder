@@ -106,6 +106,87 @@ def init_workspace_cmd():
 
 
 # ===================================================================
+# doctor: Diagnose Scholar Studio configuration
+# ===================================================================
+@app.command()
+def doctor():
+    """Diagnose Scholar Studio configuration and IDE config consistency.
+
+    Checks: .scholar/ template source, .qoder/.claude/ sync status,
+    database connectivity, and MCP server reachability.
+    """
+    console.print("[cyan]Scholar Studio Doctor[/]\n")
+
+    # 1. Check .scholar/ template source
+    templates_dir = config._resolve_templates_dir()
+    if templates_dir.exists():
+        console.print("  [green][OK][/green] .scholar/ source: {0}".format(templates_dir))
+    else:
+        console.print("  [red][!!][/red] .scholar/ source: NOT FOUND")
+        console.print("       Run 'scholar init' to create global templates.")
+
+    # 2. Check IDE config sync status
+    import subprocess
+    import sys as _sys
+    sync_script = config.PROJECT_ROOT / "scripts" / "sync-ide-config.py"
+    if sync_script.exists():
+        try:
+            result = subprocess.run(
+                [_sys.executable, str(sync_script), "--check"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(config.PROJECT_ROOT),
+            )
+            if result.returncode == 0:
+                console.print("  [green][OK][/green] .qoder/ sync: consistent")
+                console.print("  [green][OK][/green] .claude/ sync: consistent")
+            else:
+                console.print("  [yellow][!!][/yellow] IDE config drift detected")
+                console.print("       Run 'python scripts/sync-ide-config.py' to sync.")
+        except Exception as e:
+            console.print("  [yellow][!!][/yellow] Sync check failed: {0}".format(e))
+    else:
+        console.print("  [dim][--][/dim] sync script not found (standalone install)")
+
+    # 3. Check database connectivity
+    try:
+        db = _get_db()
+        if db:
+            console.print("  [green][OK][/green] PostgreSQL connected ({0}:{1})".format(config.PG_HOST, config.PG_PORT))
+            db.close()
+        else:
+            console.print("  [yellow][!!][/yellow] PostgreSQL not available (start Docker?)")
+    except Exception as e:
+        console.print("  [yellow][!!][/yellow] PostgreSQL error: {0}".format(e))
+
+    try:
+        from .. import graph_db
+        gdb = graph_db.GraphDB()
+        if gdb.available:
+            console.print("  [green][OK][/green] Neo4j connected ({0})".format(config.NEO4J_URI))
+            gdb.close()
+        else:
+            console.print("  [yellow][!!][/yellow] Neo4j not available (start Docker?)")
+    except Exception as e:
+        console.print("  [yellow][!!][/yellow] Neo4j error: {0}".format(e))
+
+    # 4. Check MCP server
+    try:
+        import importlib
+        spec = importlib.util.find_spec("scholar_mcp")
+        if spec:
+            console.print("  [green][OK][/green] MCP server module: available")
+        else:
+            console.print("  [yellow][!!][/yellow] MCP server module: not found")
+    except Exception:
+        console.print("  [yellow][!!][/yellow] MCP server module: not found")
+
+    # Summary
+    mode = "frozen (.exe)" if config.IS_FROZEN else "development (source)"
+    console.print("\n[dim]Mode: {0} | Home: {1}[/dim]".format(mode, config.SCHOLAR_HOME))
+
+
+
+# ===================================================================
 # scan: Scan papers directory and show status
 # ===================================================================
 @app.command()

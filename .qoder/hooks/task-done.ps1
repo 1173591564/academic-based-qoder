@@ -1,10 +1,13 @@
 # Scholar Studio — Stop Hook: Task Done
-# Outputs completion statistics to the agent
+# Outputs completion statistics and shows Windows toast notification
+# Merged from statistics output + toast notification
+
 $ErrorActionPreference = "SilentlyContinue"
 
 $scholarHome = $env:SCHOLAR_HOME
 if (-not $scholarHome) { $scholarHome = (Get-Location).Path }
 
+# Output completion statistics
 $parsedDir = Join-Path $scholarHome "output\parsed"
 $parsedCount = 0
 if (Test-Path $parsedDir) {
@@ -24,18 +27,14 @@ if (Test-Path $draftsDir) {
 }
 
 Write-Output " Scholar Studio task complete. KB: $parsedCount papers | $notesCount notes | $draftsCount drafts."
-exit 0
-# Scholar Studio - Agent 任务完成通知
-# Hook event: Stop
-# 当 Agent 完成响应后弹出 Windows 通知
 
-param()
+# Show Windows toast notification
 try {
-    $input_json = [Console]::In.ReadToEnd()
-    if (-not $input_json) { exit 0 }
-    $ctx = $input_json | ConvertFrom-Json -ErrorAction Stop
+    $raw = [Console]::In.ReadToEnd()
+    if (-not $raw) { exit 0 }
+    $ctx = $raw | ConvertFrom-Json -ErrorAction Stop
 
-    # 官方要求: Stop hook 必须检查 stop_hook_active，为 true 时直接 exit 0 防止死循环
+    # Check stop_hook_active to prevent infinite loop
     if ($ctx.stop_hook_active -eq $true) { exit 0 }
 
     $message = $ctx.last_assistant_message
@@ -53,7 +52,7 @@ try {
     Start-Sleep -Milliseconds 200
     $notify.Dispose()
 } catch {
-    # 静默失败，不阻断 Stop 事件
+    # Silent failure, do not block Stop event
 }
 
 exit 0

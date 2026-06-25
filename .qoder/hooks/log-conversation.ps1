@@ -1,32 +1,6 @@
-# Scholar Studio — Stop Hook: Log Conversation
-# Appends a timestamped entry to the weekly conversation log
-$ErrorActionPreference = "SilentlyContinue"
-
-$scholarHome = $env:SCHOLAR_HOME
-if (-not $scholarHome) { $scholarHome = (Get-Location).Path }
-
-$logsDir = Join-Path $scholarHome "output\logs"
-New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
-
-# ISO week number
-$now = Get-Date
-$cal = [System.Globalization.CultureInfo]::InvariantCulture.Calendar
-$weekNum = $cal.GetWeekOfYear($now, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [System.DayOfWeek]::Monday)
-$logFile = Join-Path $logsDir "week-$($now.Year)-W$('{0:00}' -f $weekNum).jsonl"
-
-# Read stdin for context (tool output, conversation summary)
-$stdinText = $input | Out-String
-
-$entry = @{
-    timestamp = $now.ToString("o")
-    event = "task_complete"
-    context = $stdinText.Substring(0, [Math]::Min(500, $stdinText.Length))
-} | ConvertTo-Json -Compress
-
-Add-Content -Path $logFile -Value $entry
-exit 0
 # Scholar Studio - 对话日志采集（硬约束）
 # Hook event: Stop
+# IDE-agnostic: searches both .qoder and .claude cache directories
 
 param()
 
@@ -99,33 +73,39 @@ try {
         Diag "no cwd, using 'unknown' project"
     }
 
-    # Locate transcript — search ALL project directories (cross-project)
+    # Locate transcript — search ALL project directories across IDEs
     $transcriptPath = ""
     if ($ctx.transcript_path -and $ctx.transcript_path.Trim() -ne "" -and (Test-Path $ctx.transcript_path)) {
         $transcriptPath = $ctx.transcript_path
-        Diag "using Qoder transcript_path"
+        Diag "using transcript_path from hook context"
     }
 
     if (-not $transcriptPath -and $ctx.session_id) {
         $sid8 = $ctx.session_id.Substring(0, [Math]::Min(8, $ctx.session_id.Length))
-        $cacheBase = "{0}\.qoder\cache\projects" -f $env:USERPROFILE
-        # Search ALL project directories for this session (not just current project)
-        $projDirs = Get-ChildItem $cacheBase -Directory -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending
-        if ($projDirs -and $projDirs.Count -gt 0) {
-            foreach ($pd in $projDirs) {
-                $candidate = "{0}\conversation-history\{1}\{1}.jsonl" -f $pd.FullName, $sid8
-                Diag ("candidate: {0}" -f $candidate)
-                if (Test-Path $candidate) {
-                    $transcriptPath = $candidate
-                    Diag "transcript found in project: $($pd.Name)"
-                    break
+        # Search both .qoder and .claude cache directories (IDE-agnostic)
+        $cacheDirs = @(
+            "{0}\.qoder\cache\projects" -f $env:USERPROFILE,
+            "{0}\.claude\cache\projects" -f $env:USERPROFILE
+        )
+        foreach ($cacheBase in $cacheDirs) {
+            if (-not (Test-Path $cacheBase)) { continue }
+            Diag "searching cache: $cacheBase"
+            $projDirs = Get-ChildItem $cacheBase -Directory -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending
+            if ($projDirs -and $projDirs.Count -gt 0) {
+                foreach ($pd in $projDirs) {
+                    $candidate = "{0}\conversation-history\{1}\{1}.jsonl" -f $pd.FullName, $sid8
+                    Diag ("candidate: {0}" -f $candidate)
+                    if (Test-Path $candidate) {
+                        $transcriptPath = $candidate
+                        Diag "transcript found in: $($pd.FullName)"
+                        break
+                    }
                 }
             }
-            if (-not $transcriptPath) { Diag "transcript NOT found in any project dir (searched all)" }
-        } else {
-            Diag "no project dirs found in cache"
+            if ($transcriptPath) { break }
         }
+        if (-not $transcriptPath) { Diag "transcript NOT found in any IDE cache" }
     }
 
     # Helper: extract clean text from a transcript message line

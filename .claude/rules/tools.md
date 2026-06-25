@@ -13,7 +13,7 @@ The scholar MCP server exposes 55 tools. Start it with:
 ```bash
 cd <project-root> && python -m scholar_mcp
 ```
-Configure in Qoder Settings > MCP:
+Configure in Claude Settings > MCP:
 ```json
 {
   "mcpServers": {

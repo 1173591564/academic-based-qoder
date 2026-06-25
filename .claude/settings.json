@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -File .qoder/hooks/task-done.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -File .claude/hooks/task-done.ps1"
           }
         ]
       },
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -File .qoder/hooks/log-conversation.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -File .claude/hooks/log-conversation.ps1"
           }
         ]
       }
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -File .qoder/hooks/block-dangerous.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -File .claude/hooks/block-dangerous.ps1"
           }
         ]
       }
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -File .qoder/hooks/verify-citations.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -File .claude/hooks/verify-citations.ps1"
           }
         ]
       }

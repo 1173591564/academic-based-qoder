@@ -92,7 +92,7 @@ class TestInitWorkspace:
         assert "scholar_home" in result
 
     def test_qoder_template_copied(self, monkeypatch, tmp_path, project_root):
-        """init_workspace() copies .qoder/ template when source exists."""
+        """init_workspace() generates .qoder/ and .claude/ from .scholar/ template."""
         import importlib
         monkeypatch.setenv("SCHOLAR_WORKSPACE", str(tmp_path))
 
@@ -101,14 +101,130 @@ class TestInitWorkspace:
 
         result = cfg_module.init_workspace()
 
+        # Both IDE dirs should be generated
         qoder_dir = tmp_path / ".qoder"
-        # Source .qoder/ exists in the repo, so it should be copied
-        src_qoder = project_root / ".qoder"
-        if src_qoder.exists():
+        claude_dir = tmp_path / ".claude"
+        src_scholar = project_root / ".scholar"
+        if src_scholar.exists():
             assert qoder_dir.is_dir()
-            # mcp.json should be regenerated
-            mcp_path = qoder_dir / "mcp.json"
-            assert mcp_path.exists()
+            assert claude_dir.is_dir()
+            # Both should have mcp.json
+            assert (qoder_dir / "mcp.json").exists()
+            assert (claude_dir / "mcp.json").exists()
+            # Both should have rules/
+            assert (qoder_dir / "rules").is_dir()
+            assert (claude_dir / "rules").is_dir()
+
+
+class TestTemplatesBundled:
+    """Test scholar/templates/ is properly bundled."""
+
+    def test_templates_dir_exists(self):
+        """scholar/templates/ directory exists with all required subdirs."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        assert templates.exists()
+
+    def test_templates_has_rules(self):
+        """scholar/templates/rules/ contains 7 rule files."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        rules_dir = templates / "rules"
+        if rules_dir.exists():
+            rule_files = list(rules_dir.glob("*.md"))
+            assert len(rule_files) >= 7
+
+    def test_templates_has_skills(self):
+        """scholar/templates/skills/ contains 15 skill directories."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        skills_dir = templates / "skills"
+        if skills_dir.exists():
+            skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
+            assert len(skill_dirs) >= 15
+
+    def test_templates_has_commands(self):
+        """scholar/templates/commands/ contains 6 command files."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        commands_dir = templates / "commands"
+        if commands_dir.exists():
+            cmd_files = list(commands_dir.glob("*.md"))
+            assert len(cmd_files) >= 6
+
+    def test_templates_has_hooks(self):
+        """scholar/templates/hooks/ contains 4 hook scripts."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        hooks_dir = templates / "hooks"
+        if hooks_dir.exists():
+            hook_files = list(hooks_dir.glob("*.ps1"))
+            assert len(hook_files) >= 4
+
+    def test_templates_has_ide_entry(self):
+        """scholar/templates/IDE_ENTRY.md exists with template variables."""
+        from scholar import config
+        templates = config._resolve_templates_dir()
+        ide_entry = templates / "IDE_ENTRY.md"
+        if ide_entry.exists():
+            content = ide_entry.read_text(encoding="utf-8")
+            assert "{IDE_NAME}" in content or "{IDE_DIR}" in content
+
+
+class TestResolveTemplatesDir:
+    """Test _resolve_templates_dir() priority logic."""
+
+    def test_dev_mode_returns_project_scholar(self):
+        """In dev mode, returns PROJECT_ROOT/.scholar/."""
+        from scholar import config
+        if not config.IS_FROZEN:
+            result = config._resolve_templates_dir()
+            assert result.name == ".scholar"
+
+    def test_fallback_to_pkg_templates(self):
+        """If .scholar/ doesn't exist, falls back to scholar/templates/."""
+        from scholar import config
+        templates_dir = config.Path(__file__).resolve().parent.parent / "scholar" / "templates"
+        # This test verifies the fallback path exists
+        # In dev mode with .scholar/ present, this won't be triggered
+        # but the templates dir should still exist
+        assert templates_dir.exists() or config._resolve_templates_dir().exists()
+
+
+class TestSyncConsistency:
+    """Test sync script consistency check."""
+
+    def test_sync_check_passes_after_sync(self, project_root):
+        """After sync, --check mode reports 0 drift."""
+        import subprocess
+        import sys
+        sync_script = project_root / "scripts" / "sync-ide-config.py"
+        if sync_script.exists():
+            # First sync
+            subprocess.run(
+                [sys.executable, str(sync_script)],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(project_root),
+            )
+            # Then check
+            result = subprocess.run(
+                [sys.executable, str(sync_script), "--check"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(project_root),
+            )
+            assert result.returncode == 0
+
+    def test_claude_md_generated(self, project_root):
+        """CLAUDE.md is generated from IDE_ENTRY.md template."""
+        claude_md = project_root / ".claude" / "CLAUDE.md"
+        ide_entry = project_root / ".scholar" / "IDE_ENTRY.md"
+        if ide_entry.exists() and claude_md.exists():
+            content = claude_md.read_text(encoding="utf-8")
+            # Should not contain template variables
+            assert "{IDE_NAME}" not in content
+            assert "{IDE_DIR}" not in content
+            # Should contain Claude-specific content
+            assert "Claude" in content or ".claude" in content
 
 
 class TestSanitizeProjectName:

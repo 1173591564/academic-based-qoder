@@ -1,7 +1,7 @@
 """
 Scholar Studio MCP Server
 
-Exposes the scholar CLI as native MCP tools for Qoder IDE integration.
+IDE-agnostic academic research toolkit — exposes scholar CLI as MCP tools.
 Run: python -m scholar_mcp
 """
 import subprocess
@@ -1130,18 +1130,24 @@ def read_skill(skill_name: str) -> str:
     Args:
         skill_name: Skill name (e.g., 'paper-deep-dive', 'research-survey', 'cold-start')
     """
-    # Check .qoder/ first, then fallback to .claude/
-    path = PROJECT_ROOT / ".qoder" / "skills" / skill_name / "SKILL.md"
+    # Check .scholar/ shared source first, then fallback to any IDE directory
+    path = PROJECT_ROOT / ".scholar" / "skills" / skill_name / "SKILL.md"
     if not path.exists():
-        path = PROJECT_ROOT / ".claude" / "skills" / skill_name / "SKILL.md"
+        # Fallback: dynamically scan all IDE config directories
+        for ide_dir in PROJECT_ROOT.glob(".*/skills/"):
+            candidate = ide_dir / skill_name / "SKILL.md"
+            if candidate.exists():
+                path = candidate
+                break
     if not path.exists():
-        qoder_skills = PROJECT_ROOT / ".qoder" / "skills"
-        claude_skills = PROJECT_ROOT / ".claude" / "skills"
+        # Collect available skills from .scholar/ and all IDE directories
         available = set()
-        if qoder_skills.exists():
-            available.update(p.name for p in qoder_skills.iterdir() if p.is_dir())
-        if claude_skills.exists():
-            available.update(p.name for p in claude_skills.iterdir() if p.is_dir())
+        scholar_skills = PROJECT_ROOT / ".scholar" / "skills"
+        if scholar_skills.exists():
+            available.update(p.name for p in scholar_skills.iterdir() if p.is_dir())
+        for ide_dir in PROJECT_ROOT.glob(".*/skills/"):
+            if ide_dir.exists():
+                available.update(p.name for p in ide_dir.iterdir() if p.is_dir())
         return f"Skill '{skill_name}' not found. Available: {', '.join(sorted(available))}"
     return path.read_text(encoding="utf-8")
 

@@ -5,8 +5,8 @@
 ## 快速开始
 
 - **桌面 EXE**: `dist/scholar-studio/Scholar Studio.exe` — 开箱即用的 GUI 应用
-- **CLI**: `python -m scholar <command>` — 35+ 学术命令
-- **MCP 工具**: 46 个（35 直调领域模块 + 9 子进程 + 2 文件发现）
+- **CLI**: `python -m scholar <command>` — 44+ 学术命令
+- **MCP 工具**: 55 个（42 直调领域模块 + 11 子进程 + 2 文件发现）
 
 ## Skills 系统
 
@@ -21,7 +21,7 @@
 - kb-management — 知识库维护
 - adaptive-research — 自适应研究循环
 
-**原子（7）**：
+**原子（8）**：
 - paper-ingestion, math-verification, paper-recommendation
 - citation-network, research-gap, review-report
 - cold-start, experiment-code
@@ -30,7 +30,7 @@
 
 ## Rules
 
-完整规则在 `.claude/rules/`（Claude Code 自动加载）：
+完整规则在 `.claude/rules/`（Claude 自动加载）：
 - `identity.md` — 角色定义 + 系统心智模型
 - `onboarding.md` — 入门引导
 - `pipelines.md` — 15 个 skill 的触发关键词
