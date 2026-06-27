@@ -3,6 +3,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: scholar-postgres
+    restart: unless-stopped
     ports:
       - "5433:5432"
     environment:
@@ -23,6 +24,7 @@ services:
   neo4j:
     image: neo4j:5-community
     container_name: scholar-neo4j
+    restart: unless-stopped
     ports:
       - "7474:7474"   # Browser UI
       - "7687:7687"   # Bolt

@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 # ===================================================================
@@ -325,24 +326,23 @@ def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
             }
             settings_path.write_text(_json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        # 5. Generate mcp.json
+        # 5. Generate mcp.json (always overwrite to reflect correct paths)
         mcp_path = ide_target / "mcp.json"
-        if not mcp_path.exists():
-            mcp_config = {
-                "mcpServers": {
-                    "scholar": {
-                        "command": "python",
-                        "args": ["-m", "scholar_mcp"],
-                        "cwd": str(ws),
-                        "env": {
-                            "SCHOLAR_HOME": str(ws),
-                            "SCHOLAR_WORKSPACE": str(ws),
-                            "PYTHONPATH": str(ws),
-                        }
+        mcp_config = {
+            "mcpServers": {
+                "scholar": {
+                    "command": "python",
+                    "args": ["-m", "scholar_mcp"],
+                    "cwd": str(SCHOLAR_HOME),
+                    "env": {
+                        "SCHOLAR_HOME": str(SCHOLAR_HOME),
+                        "SCHOLAR_WORKSPACE": str(ws),
+                        "PYTHONPATH": str(SCHOLAR_HOME),
                     }
                 }
             }
-            mcp_path.write_text(_json.dumps(mcp_config, indent=2, ensure_ascii=False), encoding="utf-8")
+        }
+        mcp_path.write_text(_json.dumps(mcp_config, indent=2, ensure_ascii=False), encoding="utf-8")
 
         if is_new:
             created.append(str(ide_target))
@@ -350,15 +350,23 @@ def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
     return created
 
 
-def init_workspace() -> dict:
+def init_workspace(target_dir: Optional[str] = None) -> dict:
     """Initialize workspace directory structure (per-workspace outputs).
 
-    Creates WORKSPACE_DIR/output/{drafts,notes,logs}.
+    Creates <target>/output/{drafts,notes,logs}.
     Syncs IDE config (.qoder/ and .claude/) from .scholar/ shared source.
     Shared knowledge base (parsed/) stays in SCHOLAR_HOME.
+
+    Args:
+        target_dir: Target project directory. Defaults to WORKSPACE_DIR.
+                    When set, mcp.json will point SCHOLAR_WORKSPACE here
+                    while SCHOLAR_HOME remains at the paper data root.
     """
     created: list[str] = []
-    ws = WORKSPACE_DIR
+    if target_dir:
+        ws = Path(target_dir).resolve()
+    else:
+        ws = WORKSPACE_DIR
     dirs_to_create = [
         ws / "output" / "drafts",
         ws / "output" / "notes",
@@ -381,9 +389,9 @@ def init_workspace() -> dict:
         "created": created,
         "already_exists": len(created) == 0,
         "parsed_dir": str(PARSED_DIR),
-        "drafts_dir": str(DRAFTS_DIR),
-        "notes_dir": str(NOTES_DIR),
-        "logs_dir": str(LOGS_DIR),
+        "drafts_dir": str(ws / "output" / "drafts"),
+        "notes_dir": str(ws / "output" / "notes"),
+        "logs_dir": str(ws / "output" / "logs"),
     }
 
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索
