@@ -7,6 +7,7 @@ Scholar Studio — Configuration
 
 环境变量可通过 .env 文件或 SCHOLAR_HOME 覆盖。
 """
+
 import os
 import re
 import sys
@@ -18,18 +19,34 @@ from typing import Optional
 # 运行模式检测
 # ===================================================================
 
+
+def _is_source_tree() -> bool:
+    """检测是否从源码树（含 pip editable）运行。
+
+    源码树特征：scholar/ 的父目录下同时存在 .scholar/ 与 scholar_mcp/。
+    pip 非 editable 安装（site-packages）不满足该特征。
+    """
+    root = Path(__file__).resolve().parent.parent
+    return (root / ".scholar").exists() and (root / "scholar_mcp").exists()
+
+
 def _resolve_scholar_home() -> Path:
     """确定知识库根目录。
 
-    打包模式（frozen）: ~/.scholar-studio/（可通过 SCHOLAR_HOME 覆盖）
-    开发模式: 源码目录（scholar/ 的父目录）
+    SCHOLAR_HOME 环境变量始终最高优先。
+    打包模式（frozen）: ~/.scholar-studio/
+    开发模式（源码树 / pip editable）: 源码目录（scholar/ 的父目录）
+    pip 全局安装（非 editable）: ~/.scholar-studio/
     """
-    if getattr(sys, 'frozen', False):
-        # PyInstaller 打包：使用全局目录
-        return Path(os.getenv("SCHOLAR_HOME",
-                              str(Path.home() / ".scholar-studio")))
-    # 开发模式：源码目录
-    return Path(__file__).resolve().parent.parent
+    env = os.getenv("SCHOLAR_HOME")
+    if env:
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        return Path.home() / ".scholar-studio"
+    if _is_source_tree():
+        return Path(__file__).resolve().parent.parent
+    # pip 全局安装（site-packages）：全局模式
+    return Path.home() / ".scholar-studio"
 
 
 SCHOLAR_HOME = _resolve_scholar_home()
@@ -63,17 +80,16 @@ def _resolve_templates_dir() -> Path:
     return dev_scholar
 
 
-
 def _resolve_workspace_dir() -> Path:
     """Determine workspace directory (per-project output root).
 
-    Priority: SCHOLAR_WORKSPACE env var > frozen mode cwd > SCHOLAR_HOME
-    In dev mode, equals SCHOLAR_HOME (zero behavior change).
+    Priority: SCHOLAR_WORKSPACE env var > frozen/pip-global cwd > SCHOLAR_HOME
+    In dev mode (source tree / pip editable), equals SCHOLAR_HOME (zero behavior change).
     """
     ws = os.getenv("SCHOLAR_WORKSPACE")
     if ws:
         return Path(ws)
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False) or not _is_source_tree():
         return Path.cwd()
     return SCHOLAR_HOME
 
@@ -83,10 +99,11 @@ WORKSPACE_DIR = _resolve_workspace_dir()
 # 加载 .env（从 SCHOLAR_HOME 目录）
 try:
     from dotenv import load_dotenv
+
     _env_path = SCHOLAR_HOME / ".env"
     load_dotenv(_env_path, override=False)
     # 开发模式：若 SCHOLAR_HOME 与源码目录不同，也加载源码目录的 .env
-    if not getattr(sys, 'frozen', False):
+    if not getattr(sys, "frozen", False):
         _dev_env = Path(__file__).resolve().parent.parent / ".env"
         if _dev_env != _env_path and _dev_env.exists():
             load_dotenv(_dev_env, override=False)
@@ -99,8 +116,8 @@ PROJECT_NAME = os.getenv("SCHOLAR_PROJECT_NAME", PROJECT_ROOT.name)
 
 def sanitize_project_name(raw: str) -> str:
     """将原始项目名转为文件系统安全的短字符串。"""
-    name = re.sub(r'[^\w\-]', '_', raw.strip())
-    name = re.sub(r'_+', '_', name).strip('_')
+    name = re.sub(r"[^\w\-]", "_", raw.strip())
+    name = re.sub(r"_+", "_", name).strip("_")
     return name[:50] if name else "default"
 
 
@@ -116,6 +133,7 @@ def project_drafts_dir(project_name: str = PROJECT_NAME) -> Path:
     d = DRAFTS_DIR / sanitize_project_name(project_name)
     d.mkdir(parents=True, exist_ok=True)
     return d
+
 
 # Data directories
 PAPERS_DIR = PROJECT_ROOT / "data" / "papers"
@@ -135,39 +153,21 @@ LOGS_DIR = WORKSPACE_DIR / "output" / "logs"
 INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 
 # Ensure output directories exist (parents=True for fresh-clone safety)
-for d in [PARSED_DIR, NOTES_DIR, DRAFTS_DIR, BIB_DIR, EXPERIMENTS_DIR, DATASETS_DIR, PDFS_DIR, DIGESTS_DIR, LOGS_DIR]:
+for d in [
+    PARSED_DIR,
+    NOTES_DIR,
+    DRAFTS_DIR,
+    BIB_DIR,
+    EXPERIMENTS_DIR,
+    DATASETS_DIR,
+    PDFS_DIR,
+    DIGESTS_DIR,
+    LOGS_DIR,
+]:
     d.mkdir(parents=True, exist_ok=True)
 
 # Running mode flags
-IS_FROZEN = getattr(sys, 'frozen', False)
-
-
-def _resolve_templates_dir() -> Path:
-    """确定 .scholar/ 模板源目录。
-
-    优先级：
-    1. 项目根目录 .scholar/（开发模式）
-    2. SCHOLAR_HOME/.scholar/（全局安装后 init 过的）
-    3. scholar/templates/（包内嵌副本，pip install 后）
-    """
-    # 开发模式：源码目录的 .scholar/
-    dev_scholar = PROJECT_ROOT / ".scholar"
-    if dev_scholar.exists():
-        return dev_scholar
-
-    # 全局模式：SCHOLAR_HOME/.scholar/
-    global_scholar = SCHOLAR_HOME / ".scholar"
-    if global_scholar.exists():
-        return global_scholar
-
-    # 包内嵌副本（pip install 后）
-    pkg_templates = Path(__file__).resolve().parent / "templates"
-    if pkg_templates.exists():
-        return pkg_templates
-
-    # fallback
-    return dev_scholar
-
+IS_FROZEN = getattr(sys, "frozen", False)
 
 
 def init_scholar_home() -> dict:
@@ -178,6 +178,7 @@ def init_scholar_home() -> dict:
     返回 {"created": [...], "already_exists": bool, "env_example": Path}
     """
     import shutil as _shutil
+
     created: list[str] = []
     home = SCHOLAR_HOME
 
@@ -233,8 +234,9 @@ def init_scholar_home() -> dict:
     global_scholar = home / ".scholar"
     if templates_src.exists() and not global_scholar.exists():
         _shutil.copytree(
-            templates_src, global_scholar,
-            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'),
+            templates_src,
+            global_scholar,
+            ignore=_shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
         created.append(str(global_scholar))
 
@@ -313,18 +315,50 @@ def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
             settings = {
                 "hooks": {
                     "Stop": [
-                        {"hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/task-done.ps1"}]},
-                        {"hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/log-conversation.ps1"}]},
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/task-done.ps1",
+                                }
+                            ]
+                        },
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/log-conversation.ps1",
+                                }
+                            ]
+                        },
                     ],
                     "PreToolUse": [
-                        {"matcher": "Bash", "hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/block-dangerous.ps1"}]},
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/block-dangerous.ps1",
+                                }
+                            ],
+                        },
                     ],
                     "PostToolUse": [
-                        {"matcher": "Write|Edit", "hooks": [{"type": "command", "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/verify-citations.ps1"}]},
+                        {
+                            "matcher": "Write|Edit",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"powershell.exe -ExecutionPolicy Bypass -File {ide_dir_name}/hooks/verify-citations.ps1",
+                                }
+                            ],
+                        },
                     ],
                 }
             }
-            settings_path.write_text(_json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
+            settings_path.write_text(
+                _json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
 
         # 5. Generate mcp.json (always overwrite to reflect correct paths)
         mcp_path = ide_target / "mcp.json"
@@ -338,11 +372,13 @@ def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
                         "SCHOLAR_HOME": str(SCHOLAR_HOME),
                         "SCHOLAR_WORKSPACE": str(ws),
                         "PYTHONPATH": str(SCHOLAR_HOME),
-                    }
+                    },
                 }
             }
         }
-        mcp_path.write_text(_json.dumps(mcp_config, indent=2, ensure_ascii=False), encoding="utf-8")
+        mcp_path.write_text(
+            _json.dumps(mcp_config, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
         if is_new:
             created.append(str(ide_target))
@@ -394,6 +430,7 @@ def init_workspace(target_dir: Optional[str] = None) -> dict:
         "logs_dir": str(ws / "output" / "logs"),
     }
 
+
 # PostgreSQL + pgvector: 结构化存储 + RAG 向量检索
 # Note: defaults are for local Docker dev only; set .env for production
 PG_HOST = os.getenv("SCHOLAR_PG_HOST", "localhost")
@@ -423,7 +460,9 @@ LEAN_PROJECT_DIR = LEAN_DIR
 # ===================================================================
 # arXiv API 请求工具（带重试、超时、代理支持）
 # ===================================================================
-def arxiv_request(search_query: str, max_results: int = 10, sort_by: str = "relevance") -> str:
+def arxiv_request(
+    search_query: str, max_results: int = 10, sort_by: str = "relevance"
+) -> str:
     """发起 arXiv API 请求，支持重试和代理。
 
     参数:
