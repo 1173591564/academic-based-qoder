@@ -141,6 +141,25 @@ def _preflight(scholar_home: Path, python_cmd: str, plugin: Path):
     return problems
 
 
+def _ensure_rules(scholar_home: Path) -> list[str]:
+    """把包内 rules 模板（templates/dsh/rules/）落到 <scholar_home>/.scholar/rules/，
+    copy-if-missing——绝不覆盖用户自定义。返回动作列表。"""
+    actions = []
+    src_dir = Path(__file__).resolve().parent.parent / "templates" / "dsh" / "rules"
+    if not src_dir.exists():
+        return actions
+    dst_dir = Path(scholar_home) / ".scholar" / "rules"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for f in src_dir.iterdir():
+        if not f.is_file():
+            continue
+        dst = dst_dir / f.name
+        if not dst.exists():
+            shutil.copyfile(f, dst)
+            actions.append(f"rule installed: {dst.name}")
+    return actions
+
+
 def _write_segment(patch: Path, block: str) -> str:
     """幂等写入 >>> scholar <<< 段，返回动作描述。"""
     patch.parent.mkdir(parents=True, exist_ok=True)
@@ -226,6 +245,8 @@ def init_dsh(
 
     action = _write_segment(patch, block)
     console.print(f"[green][OK][/] {action} scholar block @ {patch}")
+    for r in _ensure_rules(scholar_home):
+        console.print(f"[green][OK][/] {r}")
     console.print("\n验证：")
     console.print('  dsh --profile headless "用 scholar 工具查一下知识库规模"')
     console.print("\n卸载：")
