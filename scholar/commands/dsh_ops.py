@@ -88,9 +88,76 @@ def _preset_base_template() -> Path:
     )
 
 
-def _build_patch_block(
-    scholar_home: Path, python_cmd: str, plugin_url: str, dev_tree: bool
+def _mcp_scholar_row(
+    python_cmd: str,
+    scholar_home: Path,
+    workspace: Path,
+    dev_tree: bool,
+    remote_url: str | None,
+    indent: str,
 ) -> str:
+    """mcp-scholar 插件行。remote_url 非空时走 streamable-http（服务器集中部署，
+    数据零分发），否则 stdio 本地子进程。indent 为行缩进前缀（patch 4 空格、
+    预设 0 空格）。"""
+    i = indent
+    if remote_url:
+        return f"""{i}- id: mcp-scholar
+{i}  name: '@deepseek-ai/dsh-mcp-client'
+{i}  config:
+{i}    serverName: scholar
+{i}    transport: streamable-http
+{i}    url: "{remote_url}"
+{i}    failOnStartupError: false
+"""
+    env_lines = [
+        f"{i}    env:",
+        f'{i}      SCHOLAR_HOME: "{_y(scholar_home)}"',
+        f'{i}      SCHOLAR_WORKSPACE: "{_y(workspace)}"',
+    ]
+    if dev_tree:
+        env_lines.append(f'{i}      PYTHONPATH: "{_y(scholar_home)}"')
+    return f"""{i}- id: mcp-scholar
+{i}  name: '@deepseek-ai/dsh-mcp-client'
+{i}  config:
+{i}    serverName: scholar
+{i}    transport: stdio
+{i}    command: "{_y(python_cmd)}"
+{i}    args: ['-m', 'scholar_mcp']
+{chr(10).join(env_lines)}
+{i}    failOnStartupError: false
+"""
+
+
+def _build_patch_block(
+    scholar_home: Path,
+    python_cmd: str,
+    plugin_url: str,
+    dev_tree: bool,
+    workspace: Path | None = None,
+    remote_url: str | None = None,
+) -> str:
+    if workspace is None:
+        workspace = scholar_home
+    if remote_url:
+        mcp_row = _mcp_scholar_row(
+            python_cmd, scholar_home, workspace, dev_tree, remote_url, "    "
+        )
+        skills_dir = Path(scholar_home) / ".scholar" / "skills"
+        return f"""{MARKER}
+- insert:
+{mcp_row.rstrip()}
+    - id: scholar-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: scholar
+        includeDefaultRoots: false
+        customSkillDirs:
+          - "{_y(skills_dir)}"
+    - id: scholar-native
+      name: {plugin_url}
+      config:
+        scholarHome: "{_y(scholar_home)}"
+{END_MARKER}"""
     env_lines = [
         "        env:",
         f'          SCHOLAR_HOME: "{_y(scholar_home)}"',
@@ -124,18 +191,23 @@ def _build_patch_block(
 {END_MARKER}"""
 
 
-def _preflight(scholar_home: Path, python_cmd: str, plugin: Path):
+def _preflight(scholar_home: Path, python_cmd: str, plugin: Path, remote: bool = False):
     problems = []
     skills_dir = Path(scholar_home) / ".scholar" / "skills"
     console.print(f"[preflight] python={python_cmd}")
     console.print(f"[preflight] SCHOLAR_HOME={scholar_home}")
-    try:
-        import importlib
+    if remote:
+        console.print("[preflight] 模式=remote（MCP over HTTP，本地无论文数据）")
+    else:
+        try:
+            import importlib
 
-        importlib.import_module("scholar_mcp")
-        console.print("[preflight] [OK] scholar_mcp 可导入（MCP server 将随 dsh 启动）")
-    except Exception as e:  # pragma: no cover
-        problems.append(f"scholar_mcp 不可导入: {e}")
+            importlib.import_module("scholar_mcp")
+            console.print(
+                "[preflight] [OK] scholar_mcp 可导入（MCP server 将随 dsh 启动）"
+            )
+        except Exception as e:  # pragma: no cover
+            problems.append(f"scholar_mcp 不可导入: {e}")
     if skills_dir.exists():
         n = len([d for d in skills_dir.iterdir() if not d.name.startswith(".")])
         console.print(f"[preflight] [OK] 技能目录: {n} 个技能 @ {skills_dir}")
@@ -186,29 +258,18 @@ def _build_preset_rows(
     python_cmd: str,
     plugin_url: str,
     dev_tree: bool,
+    remote_url: str | None = None,
 ) -> str:
     """预设组装的 scholar 段——结构与 headless patch 同构，两处差异：
     SCHOLAR_WORKSPACE 静态烘焙（预设组装每进程装载一次，cwd 语义失效）；
     结构与 standard 预设的裸 skill-filesystem 行保持一致（登记进分层
     registry，不发布进程级服务，无需 isolate realm）。"""
-    env_lines = [
-        "    env:",
-        f'      SCHOLAR_HOME: "{_y(scholar_home)}"',
-        f'      SCHOLAR_WORKSPACE: "{_y(workspace)}"',
-    ]
-    if dev_tree:
-        env_lines.append(f'      PYTHONPATH: "{_y(scholar_home)}"')
+    mcp_row = _mcp_scholar_row(
+        python_cmd, scholar_home, workspace, dev_tree, remote_url, ""
+    )
     skills_dir = Path(scholar_home) / ".scholar" / "skills"
     return f"""# ── scholar（由 `scholar init-dsh` 生成/刷新，勿手改）──────────────────────
-- id: mcp-scholar
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: scholar
-    transport: stdio
-    command: "{_y(python_cmd)}"
-    args: ['-m', 'scholar_mcp']
-{chr(10).join(env_lines)}
-    failOnStartupError: false
+{mcp_row.rstrip()}
 
 - id: scholar-skills
   name: '@deepseek-ai/dsh-skill-filesystem'
@@ -232,10 +293,18 @@ def _write_preset(
     python_cmd: str,
     plugin_url: str,
     dev_tree: bool,
+    remote_url: str | None = None,
 ) -> str:
     """写用户级 academic 预设（standard 基座 + scholar 段，整文件重写、幂等）。"""
     base = _preset_base_template().read_text(encoding="utf-8")
-    rows = _build_preset_rows(scholar_home, workspace, python_cmd, plugin_url, dev_tree)
+    rows = _build_preset_rows(
+        scholar_home,
+        workspace,
+        python_cmd,
+        plugin_url,
+        dev_tree,
+        remote_url=remote_url,
+    )
     pdir = _preset_dir(dsh_home)
     pdir.mkdir(parents=True, exist_ok=True)
     header = (
@@ -321,6 +390,13 @@ def init_dsh(
         "--plugin",
         help="scholar-native.mjs 路径（默认包内模板；开发时指向 examples）",
     ),
+    remote: str = typer.Option(
+        None,
+        "--remote",
+        help="服务器集中模式：scholar_mcp 的 streamable-http URL "
+        "（如 http://127.0.0.1:9845/mcp，经 SSH 隧道）。本地无论文数据、"
+        "无需 PG 凭据；服务器由管理员部署（scholar_mcp + 数据私有）",
+    ),
 ):
     """把 Scholar Studio 挂进 dsh（学术模式预设 + headless one-shot patch）。"""
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
@@ -336,14 +412,21 @@ def init_dsh(
         _remove_preset(dsh_home)
         return
 
-    problems = _preflight(scholar_home, py, plugin)
+    problems = _preflight(scholar_home, py, plugin, remote=bool(remote))
     if problems:
         console.print("\n[red]前置校验未通过:[/]")
         for p in problems:
             console.print(f"  - {p}")
         raise typer.Exit(1)
 
-    block = _build_patch_block(scholar_home, py, _plugin_url(plugin), dev_tree)
+    block = _build_patch_block(
+        scholar_home,
+        py,
+        _plugin_url(plugin),
+        dev_tree,
+        workspace=workspace,
+        remote_url=remote,
+    )
     if check:
         console.print(Panel(block, title=f"{patch} (preview)", border_style="cyan"))
         if patch.exists() and MARKER in patch.read_text(encoding="utf-8"):
@@ -355,7 +438,13 @@ def init_dsh(
     action = _write_segment(patch, block)
     console.print(f"[green][OK][/] {action} scholar block @ {patch}")
     pdir = _write_preset(
-        dsh_home, scholar_home, workspace, py, _plugin_url(plugin), dev_tree
+        dsh_home,
+        scholar_home,
+        workspace,
+        py,
+        _plugin_url(plugin),
+        dev_tree,
+        remote_url=remote,
     )
     console.print(f"[green][OK][/] academic preset written @ {pdir}")
     for r in _ensure_rules(scholar_home):
@@ -363,5 +452,8 @@ def init_dsh(
     console.print("\n验证：")
     console.print('  dsh --profile headless "用 scholar 工具查一下知识库规模"')
     console.print("  Web UI → 设置 → Agent 预设 → 自定义 →「学术模式」开新会话")
+    if remote:
+        console.print(f"\n[bold]remote 模式[/]：MCP 端点 = {remote}")
+        console.print("隧道示例：ssh -N -L 9845:127.0.0.1:9845 server-47")
     console.print("\n卸载：")
     console.print("  scholar init-dsh --uninstall")

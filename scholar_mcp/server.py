@@ -25,6 +25,7 @@ Run: python -m scholar_mcp
 import json
 import re
 import subprocess
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +38,8 @@ from scholar._state import init_shared_state, get_state  # noqa: F401 (re-export
 
 mcp = FastMCP(
     "Scholar Studio",
+    host=os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1"),
+    port=int(os.getenv("SCHOLAR_MCP_PORT", "8000")),
     instructions=(
         "Academic research toolkit over a local paper library (563+ AI papers). "
         "Reading ladder: search/vec-search for relevance → scholar_info for "
@@ -811,7 +814,14 @@ def scholar_interests(
 
 
 def main():
-    mcp.run()
+    """stdio 为默认（dsh 本地挂载）；streamable-http 供服务器集中部署
+    （队友 MCP over HTTP，数据与索引全部留在服务器，本地零论文数据）。
+    host/port 由 SCHOLAR_MCP_HOST / SCHOLAR_MCP_PORT 控制。"""
+    transport = os.getenv("SCHOLAR_MCP_TRANSPORT", "stdio")
+    if transport == "streamable-http":
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
 
 
 if __name__ == "__main__":

@@ -136,3 +136,46 @@ def test_remove_preset(tmp_path):
     dsh_ops._remove_preset(tmp_path)
     assert not pdir.exists()
     dsh_ops._remove_preset(tmp_path)  # 再删不报错
+
+
+# ── remote 模式（MCP over HTTP，数据零分发）────────────────────────────────
+
+
+def test_remote_rows_use_streamable_http():
+    row = dsh_ops._mcp_scholar_row(
+        "C:/py/python.exe",
+        ARGS["scholar_home"],
+        ARGS["workspace"],
+        False,
+        "http://127.0.0.1:9845/mcp",
+        "",
+    )
+    assert "streamable-http" in row and "url:" in row
+    assert "command" not in row and "SCHOLAR_HOME" not in row
+
+
+def test_write_preset_remote(tmp_path):
+    dsh_ops._write_preset(
+        tmp_path, **{**ARGS, "remote_url": "http://127.0.0.1:9845/mcp"}
+    )
+    comp = (tmp_path / ".agent-presets" / "academic" / "agent.cordis.yml").read_text(
+        encoding="utf-8"
+    )
+    scholar_seg = comp.split("scholar（由")[1]
+    assert "streamable-http" in scholar_seg
+    assert "stdio" not in scholar_seg
+    # 技能与人格插件仍本地（wheel 自带，与数据无关）
+    assert "scholar-skills" in scholar_seg and "scholar-native" in scholar_seg
+
+
+def test_build_patch_block_remote():
+    block = dsh_ops._build_patch_block(
+        ARGS["scholar_home"],
+        "C:/py/python.exe",
+        "file:///C:/pkg/scholar-native.mjs",
+        False,
+        workspace=ARGS["workspace"],
+        remote_url="http://127.0.0.1:9845/mcp",
+    )
+    assert "streamable-http" in block and "stdio" not in block
+    assert block.count(dsh_ops.MARKER) == 1
