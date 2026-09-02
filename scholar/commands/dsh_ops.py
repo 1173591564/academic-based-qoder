@@ -1,29 +1,39 @@
 """dsh_ops.py — dsh (deepseek-harness) 接入命令。
 
-`scholar init-dsh`：把 Scholar Studio 以三层原生插件（工具/技能/人格）挂进 dsh headless
-profile——wheel 自带插件模板（scholar/templates/dsh/），团队新成员装包后一条命令即完成接入，
-无需手动维护 cordis.patch.yml。
+`scholar init-dsh` 把 Scholar Studio 以原生插件挂进 dsh，双通道：
 
-写入 ~/.dsh/profiles/headless/cordis.patch.yml 的 >>> scholar <<< 段（幂等、可回滚，
-与其它实验段共存）：
-  1. mcp-scholar      dsh-mcp-client：stdio 挂 `python -m scholar_mcp`（55 工具）
-                      SCHOLAR_HOME=本 CLI 解析的知识库根；SCHOLAR_WORKSPACE=!!js process.cwd()
-                      （任意目录启动 dsh，该目录即工作区——全局挂载的核心机制）
-  2. scholar-skills   隔离 skill-filesystem 实例 → <SCHOLAR_HOME>/.scholar/skills（15 技能）
-  3. scholar-native   人格 + 文献环境注入插件（file:// 指向包内模板或 --plugin 指定）
+1. **用户级预设** ~/.dsh/.agent-presets/academic/（本命令的核心产物）
+   standard 预设全量行 + scholar 三层插件，Web UI「自定义」组直接出现
+   「学术模式」；preset.yml 仅 name/description/order 元数据，trust=user。
+2. **headless patch** ~/.dsh/profiles/headless/cordis.patch.yml 的 >>> scholar <<<
+   段——headless bundle 无 preset roster，CLI one-shot 只能走 profile patch
+   （与其它实验段共存，幂等可回滚）。
+
+三层插件（两通道同构）：
+  1. mcp-scholar      dsh-mcp-client：stdio 挂 `python -m scholar_mcp`（16 工具阅读阶梯）
+                      SCHOLAR_HOME=本 CLI 解析的知识库根；SCHOLAR_WORKSPACE=学术工作区
+                      （patch 用 !!js process.cwd() 随启动目录；预设按会话挂载、
+                      组装每进程只装载一次，cwd 语义失效——改为 init-dsh 时静态烘焙）
+  2. scholar-skills   skill-filesystem 实例 → <SCHOLAR_HOME>/.scholar/skills（15 技能）
+  3. scholar-native   dsh 原生 package：人格 + 文献环境注入
 
 用法：
   scholar init-dsh                # 安装/刷新（自动探测 dev/global 形态）
-  scholar init-dsh --check        # 前置校验 + 打印当前 patch 段
-  scholar init-dsh --uninstall    # 卸载（只删自己的段）
+  scholar init-dsh --check        # 前置校验 + 打印当前段
+  scholar init-dsh --uninstall    # 卸载（删 patch 段 + 预设目录）
 """
 
+import os
 import re
 import shutil
 import sys
+import ipaddress
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from urllib.parse import urlparse
 
 import typer
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 
@@ -34,6 +44,8 @@ console = Console()
 
 MARKER = "# >>> scholar"
 END_MARKER = "# <<< scholar"
+DEFAULT_REMOTE_TOKEN_REF = "SCHOLAR_REMOTE_TOKEN"
+_CREDENTIAL_REF = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _y(p) -> str:
@@ -44,13 +56,6 @@ def _patch_path(dsh_home: Path, profile: str) -> Path:
     return dsh_home / "profiles" / profile / "cordis.patch.yml"
 
 
-def _plugin_url(plugin: Path) -> str:
-    """file:// URL——保留非 ASCII 原文（dsh loader 已验证接受裸 Unicode 路径；
-    Path.as_uri() 的 percent-encoding 未验证，不用）。"""
-    p = _y(Path(plugin).resolve())
-    return ("file://" + p) if p.startswith("/") else ("file:///" + p)
-
-
 def _detect_dev_tree(scholar_home: Path) -> bool:
     """源码树（editable/源码运行）判定：scholar 包与 .scholar/ 同根。"""
     return (Path(scholar_home) / "scholar" / "__init__.py").exists() and (
@@ -58,19 +63,101 @@ def _detect_dev_tree(scholar_home: Path) -> bool:
     ).exists()
 
 
-def _plugin_template() -> Path:
-    """包内插件模板（dev 源码树与 pip 安装均在 templates/dsh/ 下）。"""
+def _preset_dir(dsh_home: Path) -> Path:
+    return dsh_home / ".agent-presets" / "academic"
+
+
+def _preset_base_template() -> Path:
+    """预设基座：dsh standard 预设的全量插件行（复制时点见文件头注释）。"""
     return (
         Path(__file__).resolve().parent.parent
         / "templates"
         / "dsh"
-        / "scholar-native.mjs"
+        / "preset"
+        / "base.agent.cordis.yml"
     )
 
 
-def _build_patch_block(
-    scholar_home: Path, python_cmd: str, plugin_url: str, dev_tree: bool
+def _mcp_scholar_row(
+    python_cmd: str,
+    scholar_home: Path,
+    workspace: Path,
+    dev_tree: bool,
+    remote_url: str | None,
+    indent: str,
+    token_ref: str | None = None,
 ) -> str:
+    """mcp-scholar 插件行。remote_url 非空时走 streamable-http（服务器集中部署，
+    数据零分发；token_ref 由 dsh credentials 服务逐请求解析），否则 stdio 本地子进程。
+    indent 为行缩进前缀（patch 4 空格、预设 0 空格）。"""
+    i = indent
+    if remote_url:
+        if token_ref is None:
+            raise ValueError("remote Scholar requires a Bearer credential reference")
+        bearer = f"{i}    bearerTokenEnv: {token_ref}\n"
+        return f"""{i}- id: mcp-scholar
+{i}  name: '@deepseek-ai/dsh-mcp-client'
+{i}  config:
+{i}    serverName: scholar
+{i}    transport: streamable-http
+{i}    url: "{remote_url}"
+{bearer}{i}    failOnStartupError: true
+"""
+    env_lines = [
+        f"{i}    env:",
+        f'{i}      SCHOLAR_HOME: "{_y(scholar_home)}"',
+        f'{i}      SCHOLAR_WORKSPACE: "{_y(workspace)}"',
+    ]
+    if dev_tree:
+        env_lines.append(f'{i}      PYTHONPATH: "{_y(scholar_home)}"')
+    return f"""{i}- id: mcp-scholar
+{i}  name: '@deepseek-ai/dsh-mcp-client'
+{i}  config:
+{i}    serverName: scholar
+{i}    transport: stdio
+{i}    command: "{_y(python_cmd)}"
+{i}    args: ['-m', 'scholar_mcp']
+{chr(10).join(env_lines)}
+{i}    failOnStartupError: true
+"""
+
+
+def _build_patch_block(
+    scholar_home: Path,
+    python_cmd: str,
+    dev_tree: bool,
+    workspace: Path | None = None,
+    remote_url: str | None = None,
+    token_ref: str | None = None,
+) -> str:
+    if workspace is None:
+        workspace = scholar_home
+    if remote_url:
+        mcp_row = _mcp_scholar_row(
+            python_cmd,
+            scholar_home,
+            workspace,
+            dev_tree,
+            remote_url,
+            "    ",
+            token_ref=token_ref,
+        )
+        skills_dir = Path(scholar_home) / ".scholar" / "skills"
+        return f"""{MARKER}
+- insert:
+{mcp_row.rstrip()}
+    - id: scholar-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: scholar
+        includeDefaultRoots: false
+        customSkillDirs:
+          - "{_y(skills_dir)}"
+    - id: scholar-native
+      name: '@deepseek-ai/dsh-scholar-native'
+      config:
+        scholarHome: "{_y(scholar_home)}"
+{END_MARKER}"""
     env_lines = [
         "        env:",
         f'          SCHOLAR_HOME: "{_y(scholar_home)}"',
@@ -89,7 +176,7 @@ def _build_patch_block(
         command: "{_y(python_cmd)}"
         args: ['-m', 'scholar_mcp']
 {chr(10).join(env_lines)}
-        failOnStartupError: false
+        failOnStartupError: true
     - id: scholar-skills
       name: '@deepseek-ai/dsh-skill-filesystem'
       config:
@@ -98,24 +185,29 @@ def _build_patch_block(
         customSkillDirs:
           - "{_y(skills_dir)}"
     - id: scholar-native
-      name: {plugin_url}
+      name: '@deepseek-ai/dsh-scholar-native'
       config:
         scholarHome: "{_y(scholar_home)}"
 {END_MARKER}"""
 
 
-def _preflight(scholar_home: Path, python_cmd: str, plugin: Path):
+def _preflight(scholar_home: Path, python_cmd: str, remote: bool = False):
     problems = []
     skills_dir = Path(scholar_home) / ".scholar" / "skills"
     console.print(f"[preflight] python={python_cmd}")
     console.print(f"[preflight] SCHOLAR_HOME={scholar_home}")
-    try:
-        import importlib
+    if remote:
+        console.print("[preflight] 模式=remote（MCP over HTTP，本地无论文数据）")
+    else:
+        try:
+            import importlib
 
-        importlib.import_module("scholar_mcp")
-        console.print("[preflight] [OK] scholar_mcp 可导入（MCP server 将随 dsh 启动）")
-    except Exception as e:  # pragma: no cover
-        problems.append(f"scholar_mcp 不可导入: {e}")
+            importlib.import_module("scholar_mcp")
+            console.print(
+                "[preflight] [OK] scholar_mcp 可导入（MCP server 将随 dsh 启动）"
+            )
+        except Exception as e:  # pragma: no cover
+            problems.append(f"scholar_mcp 不可导入: {e}")
     if skills_dir.exists():
         n = len([d for d in skills_dir.iterdir() if not d.name.startswith(".")])
         console.print(f"[preflight] [OK] 技能目录: {n} 个技能 @ {skills_dir}")
@@ -125,10 +217,6 @@ def _preflight(scholar_home: Path, python_cmd: str, plugin: Path):
         problems.append(
             f"技能目录不存在（先 scholar init 或 --scholar-home）: {skills_dir}"
         )
-    if plugin.exists():
-        console.print(f"[preflight] [OK] 插件模板: {plugin}")
-    else:
-        problems.append(f"插件模板缺失: {plugin}")
     parsed = Path(scholar_home) / "output" / "parsed"
     if parsed.exists():
         console.print(
@@ -158,6 +246,201 @@ def _ensure_rules(scholar_home: Path) -> list[str]:
             shutil.copyfile(f, dst)
             actions.append(f"rule installed: {dst.name}")
     return actions
+
+
+def _ensure_scholar_assets(
+    scholar_home: Path, *, include_runtime_dirs: bool = True
+) -> list[str]:
+    """Install missing packaged Scholar assets without replacing user files."""
+    actions = []
+    src_dir = Path(__file__).resolve().parent.parent / "templates"
+    dst_dir = Path(scholar_home) / ".scholar"
+    for src in src_dir.rglob("*"):
+        if not src.is_file() or "dsh" in src.relative_to(src_dir).parts:
+            continue
+        dst = dst_dir / src.relative_to(src_dir)
+        if dst.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+        actions.append(f"asset installed: {dst.relative_to(dst_dir)}")
+    if include_runtime_dirs:
+        for relative in (
+            Path("data/papers"),
+            Path("output/parsed"),
+            Path("output/notes"),
+            Path("output/drafts"),
+            Path("output/bib"),
+            Path("output/experiments"),
+            Path("output/datasets"),
+            Path("output/pdfs"),
+            Path("output/digests"),
+            Path("output/logs"),
+            Path("LEAN"),
+        ):
+            target = scholar_home / relative
+            if target.exists():
+                continue
+            target.mkdir(parents=True)
+            actions.append(f"directory created: {relative}")
+    return actions
+
+
+def _validated_remote_url(value: str) -> str:
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname or ""
+        port = parsed.port
+    except ValueError as error:
+        raise typer.BadParameter("remote MCP URL has an invalid port") from error
+    if not parsed.scheme or not hostname:
+        raise typer.BadParameter("remote MCP URL must be absolute")
+    if parsed.username is not None or parsed.password is not None:
+        raise typer.BadParameter("remote MCP URL must not contain userinfo")
+    if parsed.fragment:
+        raise typer.BadParameter("remote MCP URL must not contain a fragment")
+    if port is not None and not 1 <= port <= 65535:
+        raise typer.BadParameter("remote MCP URL has an invalid port")
+    if parsed.scheme == "https" and hostname:
+        return value
+    if parsed.scheme == "http":
+        try:
+            if ipaddress.ip_address(hostname).is_loopback:
+                return value
+        except ValueError:
+            pass
+    raise typer.BadParameter(
+        "remote MCP URL must use HTTPS, or HTTP on a numeric loopback address for an SSH tunnel"
+    )
+
+
+def _validated_credential_ref(value: str) -> str:
+    if not _CREDENTIAL_REF.fullmatch(value):
+        raise typer.BadParameter(
+            "token reference must be a POSIX environment-variable name"
+        )
+    return value
+
+
+def _store_credential(dsh_home: Path, ref: str, value: str) -> Path:
+    """Merge one value into the managed dsh credential document."""
+    if not value:
+        raise typer.BadParameter("Bearer token from stdin is empty")
+    directory = Path(dsh_home)
+    path = directory / ".credentials.yaml"
+    directory.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        directory.chmod(0o700)
+    document = {}
+    if path.exists():
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if loaded is not None and not isinstance(loaded, dict):
+            raise typer.BadParameter(f"credentials document is not a YAML mapping: {path}")
+        document = loaded or {}
+        if not all(
+            isinstance(key, str)
+            and _CREDENTIAL_REF.fullmatch(key)
+            and isinstance(item, str)
+            and item
+            for key, item in document.items()
+        ):
+            raise typer.BadParameter(f"credentials document contains an invalid entry: {path}")
+    document[ref] = value
+    with NamedTemporaryFile(
+        "w", encoding="utf-8", dir=directory, prefix=".credentials.", delete=False
+    ) as handle:
+        yaml.safe_dump(document, handle, allow_unicode=True, sort_keys=True)
+        temporary = Path(handle.name)
+    try:
+        if os.name != "nt":
+            temporary.chmod(0o600)
+        os.replace(temporary, path)
+        if os.name != "nt":
+            path.chmod(0o600)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path
+
+
+def _build_preset_rows(
+    scholar_home: Path,
+    workspace: Path,
+    python_cmd: str,
+    dev_tree: bool,
+    remote_url: str | None = None,
+    token_ref: str | None = None,
+) -> str:
+    """预设组装的 scholar 段——结构与 headless patch 同构，两处差异：
+    SCHOLAR_WORKSPACE 静态烘焙（预设组装每进程装载一次，cwd 语义失效）；
+    结构与 standard 预设的裸 skill-filesystem 行保持一致（登记进分层
+    registry，不发布进程级服务，无需 isolate realm）。"""
+    mcp_row = _mcp_scholar_row(
+        python_cmd,
+        scholar_home,
+        workspace,
+        dev_tree,
+        remote_url,
+        "",
+        token_ref=token_ref,
+    )
+    skills_dir = Path(scholar_home) / ".scholar" / "skills"
+    return f"""# ── scholar（由 `scholar init-dsh` 生成/刷新，勿手改）──────────────────────
+{mcp_row.rstrip()}
+
+- id: scholar-skills
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    providerName: scholar
+    includeDefaultRoots: false
+    customSkillDirs:
+      - "{_y(skills_dir)}"
+
+- id: scholar-native
+  name: '@deepseek-ai/dsh-scholar-native'
+  config:
+    scholarHome: "{_y(scholar_home)}"
+"""
+
+
+def _write_preset(
+    dsh_home: Path,
+    scholar_home: Path,
+    workspace: Path,
+    python_cmd: str,
+    dev_tree: bool,
+    remote_url: str | None = None,
+    token_ref: str | None = None,
+) -> str:
+    """写用户级 academic 预设（standard 基座 + scholar 段，整文件重写、幂等）。"""
+    base = _preset_base_template().read_text(encoding="utf-8")
+    rows = _build_preset_rows(
+        scholar_home,
+        workspace,
+        python_cmd,
+        dev_tree,
+        remote_url=remote_url,
+        token_ref=token_ref,
+    )
+    pdir = _preset_dir(dsh_home)
+    pdir.mkdir(parents=True, exist_ok=True)
+    header = (
+        "# The `academic` agent preset — generated by `scholar init-dsh`.\n"
+        "# Base: dsh `standard` preset rows (verbatim copy, refresh on init-dsh)\n"
+        "# + scholar rows appended below. Regenerated wholesale on every\n"
+        "# `scholar init-dsh`; hand edits will be lost.\n\n"
+    )
+    (pdir / "agent.cordis.yml").write_text(
+        header + base.rstrip() + "\n\n" + rows, encoding="utf-8"
+    )
+    meta = (
+        Path(__file__).resolve().parent.parent
+        / "templates"
+        / "dsh"
+        / "preset"
+        / "preset.yml"
+    )
+    shutil.copyfile(meta, pdir / "preset.yml")
+    return str(pdir)
 
 
 def _write_segment(patch: Path, block: str) -> str:
@@ -191,50 +474,91 @@ def _remove_segment(patch: Path):
     console.print(f"[uninstall] removed scholar block @ {patch}")
 
 
+def _remove_preset(dsh_home: Path):
+    pdir = _preset_dir(dsh_home)
+    if not pdir.exists():
+        return
+    shutil.rmtree(pdir)
+    console.print(f"[uninstall] removed preset dir @ {pdir}")
+
+
 @app.command()
 def init_dsh(
     uninstall: bool = typer.Option(
-        False, "--uninstall", help="移除 >>> scholar <<< 段"
+        False, "--uninstall", help="移除 >>> scholar <<< 段与 academic 预设目录"
     ),
     check: bool = typer.Option(False, "--check", help="仅校验并打印当前段，不写入"),
-    profile: str = typer.Option("headless", help="dsh profile（本期仅支持 headless）"),
+    profile: str = typer.Option("headless", help="dsh profile（CLI one-shot 用）"),
     dsh_home: Path = typer.Option(None, "--dsh-home", help="dsh 配置根（默认 ~/.dsh）"),
     scholar_home: Path = typer.Option(
         None, "--scholar-home", help="知识库根（默认本 CLI 解析值）"
     ),
+    workspace: Path = typer.Option(
+        None,
+        "--workspace",
+        help="学术工作区（论文/笔记根；默认当前目录；预设静态烘焙）",
+    ),
     python_cmd: Path = typer.Option(
         None, "--python", help="MCP server 解释器（默认本 CLI 的 sys.executable）"
     ),
-    plugin: Path = typer.Option(
+    remote: str = typer.Option(
         None,
-        "--plugin",
-        help="scholar-native.mjs 路径（默认包内模板；开发时指向 examples）",
+        "--remote",
+        help="服务器集中模式：scholar_mcp 的 streamable-http URL "
+        "（HTTPS，或 SSH 隧道 http://127.0.0.1:9845/mcp）。"
+        "本地无论文数据、无需 PG 凭据；服务器由管理员部署（scholar_mcp + 数据私有）",
+    ),
+    token_env: str = typer.Option(
+        DEFAULT_REMOTE_TOKEN_REF,
+        "--token-env",
+        help="dsh credentials 中保存 Bearer token 的引用名",
+    ),
+    token_stdin: bool = typer.Option(
+        False,
+        "--token-stdin",
+        help="从标准输入读取 Bearer token 并写入 dsh 的 owner-only credentials 文件",
     ),
 ):
-    """把 Scholar Studio 挂进 dsh（三层原生插件：55 工具 + 15 技能 + 学术人格）。"""
-    if profile != "headless":
-        console.print("[!] 本期仅支持 headless profile")
-        raise typer.Exit(2)
-
+    """把 Scholar Studio 挂进 dsh（学术模式预设 + headless one-shot patch）。"""
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
     scholar_home = Path(scholar_home) if scholar_home else Path(config.SCHOLAR_HOME)
+    workspace = Path(workspace) if workspace else Path.cwd()
     py = str(python_cmd) if python_cmd else sys.executable
-    plugin = Path(plugin) if plugin else _plugin_template()
     patch = _patch_path(dsh_home, profile)
     dev_tree = _detect_dev_tree(scholar_home)
 
     if uninstall:
         _remove_segment(patch)
+        _remove_preset(dsh_home)
         return
 
-    problems = _preflight(scholar_home, py, plugin)
+    remote = _validated_remote_url(remote) if remote else None
+    token_ref = _validated_credential_ref(token_env) if remote else None
+    if token_stdin and not remote:
+        raise typer.BadParameter("--token-stdin requires --remote")
+    if check and token_stdin:
+        raise typer.BadParameter("--check cannot store a credential")
+
+    if not check:
+        for action in _ensure_scholar_assets(
+            scholar_home, include_runtime_dirs=not bool(remote)
+        ):
+            console.print(f"[green][OK][/] {action}")
+    problems = _preflight(scholar_home, py, remote=bool(remote))
     if problems:
         console.print("\n[red]前置校验未通过:[/]")
         for p in problems:
             console.print(f"  - {p}")
         raise typer.Exit(1)
 
-    block = _build_patch_block(scholar_home, py, _plugin_url(plugin), dev_tree)
+    block = _build_patch_block(
+        scholar_home,
+        py,
+        dev_tree,
+        workspace=workspace,
+        remote_url=remote,
+        token_ref=token_ref,
+    )
     if check:
         console.print(Panel(block, title=f"{patch} (preview)", border_style="cyan"))
         if patch.exists() and MARKER in patch.read_text(encoding="utf-8"):
@@ -243,11 +567,58 @@ def init_dsh(
             console.print("[yellow]未安装（去掉 --check 执行写入）[/]")
         return
 
-    action = _write_segment(patch, block)
+    token_value = sys.stdin.readline().rstrip("\r\n") if token_stdin else None
+    patch_previous = patch.read_bytes() if patch.exists() else None
+    preset_dir = _preset_dir(dsh_home)
+    preset_previous = (
+        {
+            item.relative_to(preset_dir): item.read_bytes()
+            for item in preset_dir.rglob("*")
+            if item.is_file()
+        }
+        if preset_dir.exists()
+        else None
+    )
+    try:
+        action = _write_segment(patch, block)
+        pdir = _write_preset(
+            dsh_home,
+            scholar_home,
+            workspace,
+            py,
+            dev_tree,
+            remote_url=remote,
+            token_ref=token_ref,
+        )
+        rules_actions = _ensure_rules(scholar_home)
+        if token_value is not None:
+            _store_credential(dsh_home, token_ref, token_value)
+    except Exception:
+        if patch_previous is None:
+            patch.unlink(missing_ok=True)
+        else:
+            patch.parent.mkdir(parents=True, exist_ok=True)
+            patch.write_bytes(patch_previous)
+        shutil.rmtree(preset_dir, ignore_errors=True)
+        if preset_previous is not None:
+            for relative, content in preset_previous.items():
+                target = preset_dir / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+        raise
+
     console.print(f"[green][OK][/] {action} scholar block @ {patch}")
-    for r in _ensure_rules(scholar_home):
+    console.print(f"[green][OK][/] academic preset written @ {pdir}")
+    for r in rules_actions:
         console.print(f"[green][OK][/] {r}")
+    if token_value is not None:
+        console.print("[green][OK][/] Bearer credential stored")
     console.print("\n验证：")
     console.print('  dsh --profile headless "用 scholar 工具查一下知识库规模"')
+    console.print("  Web UI → 设置 → Agent 预设 → 自定义 →「学术模式」开新会话")
+    if remote:
+        console.print(f"\n[bold]remote 模式[/]：MCP 端点 = {remote}")
+        console.print("隧道模式示例：ssh -N -L 9845:127.0.0.1:9845 server-47")
+        console.print(f"Bearer 鉴权引用：{token_ref}")
     console.print("\n卸载：")
     console.print("  scholar init-dsh --uninstall")

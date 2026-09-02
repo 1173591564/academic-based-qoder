@@ -234,18 +234,11 @@ def ingest(
     # 6. Graph update + RAG reindex (best-effort)
     console.print("  [6/6] Updating graph + RAG...")
     try:
-        from .. import graph_db as gdb_mod
-        gdb = gdb_mod.GraphDB()
-        if gdb.available:
-            json_path = config.PARSED_DIR / f"{ulid}.json"
-            paper_data = json.loads(json_path.read_text(encoding="utf-8"))
-            gdb_mod.upsert_paper_node(gdb, paper_data)
-            gdb_mod.upsert_paper_citations(gdb, ulid, paper_data)
-            gdb_mod.upsert_paper_concepts(gdb, ulid, paper_data)
-            gdb.close()
-            console.print("  Graph updated")
-        else:
-            console.print("  [yellow]Neo4j unavailable, graph not updated[/]")
+        from .. import graph_mem
+        graph_mem.refresh()
+        console.print("  Graph cache refreshed")
+    except Exception as e:
+        console.print(f"  [yellow]Graph refresh skipped: {e}[/]")
     except Exception as e:
         console.print(f"  [yellow]Graph update skipped: {e}[/]")
 

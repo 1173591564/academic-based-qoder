@@ -7,6 +7,7 @@ Handles:
   3. Storing in PostgreSQL pgvector
   4. Semantic search
 """
+
 import json
 import re
 import os
@@ -21,6 +22,7 @@ from . import config
 # ===================================================================
 # Chunking
 # ===================================================================
+
 
 def chunk_paper(data: dict, max_chunk_size: int = 500) -> list[dict]:
     """
@@ -37,12 +39,14 @@ def chunk_paper(data: dict, max_chunk_size: int = 500) -> list[dict]:
 
     # Abstract chunk
     if data.get("abstract"):
-        chunks.append({
-            "paper_id": paper_id,
-            "section": "Abstract",
-            "content": f"[{title}] {data['abstract']}",
-            "type": "abstract",
-        })
+        chunks.append(
+            {
+                "paper_id": paper_id,
+                "section": "Abstract",
+                "content": f"[{title}] {data['abstract']}",
+                "type": "abstract",
+            }
+        )
 
     # Section chunks
     for section in data.get("sections", []):
@@ -60,35 +64,41 @@ def chunk_paper(data: dict, max_chunk_size: int = 500) -> list[dict]:
         for para in paragraphs:
             if len(current_chunk) + len(para) > max_chunk_size:
                 if current_chunk:
-                    chunks.append({
-                        "paper_id": paper_id,
-                        "section": heading,
-                        "content": f"[{title} > {heading}] {current_chunk}",
-                        "type": "section",
-                    })
+                    chunks.append(
+                        {
+                            "paper_id": paper_id,
+                            "section": heading,
+                            "content": f"[{title} > {heading}] {current_chunk}",
+                            "type": "section",
+                        }
+                    )
                 current_chunk = para
             else:
                 current_chunk += "\n\n" + para if current_chunk else para
 
         if current_chunk:
-            chunks.append({
-                "paper_id": paper_id,
-                "section": heading,
-                "content": f"[{title} > {heading}] {current_chunk}",
-                "type": "section",
-            })
+            chunks.append(
+                {
+                    "paper_id": paper_id,
+                    "section": heading,
+                    "content": f"[{title} > {heading}] {current_chunk}",
+                    "type": "section",
+                }
+            )
 
     # Formula chunks (formulas with surrounding context)
     for formula in data.get("formulas", []):
         latex = formula.get("latex", "")
         label = formula.get("label", "")
         if latex:
-            chunks.append({
-                "paper_id": paper_id,
-                "section": label or "Formula",
-                "content": f"[{title}] Formula: ${latex}$",
-                "type": "formula",
-            })
+            chunks.append(
+                {
+                    "paper_id": paper_id,
+                    "section": label or "Formula",
+                    "content": f"[{title}] Formula: ${latex}$",
+                    "type": "formula",
+                }
+            )
 
     return chunks
 
@@ -96,6 +106,7 @@ def chunk_paper(data: dict, max_chunk_size: int = 500) -> list[dict]:
 # ===================================================================
 # Embedding (智谱 API)
 # ===================================================================
+
 
 def get_embedding(text: str) -> Optional[list[float]]:
     """
@@ -125,10 +136,13 @@ def _zhipu_embedding(text: str) -> Optional[list[float]]:
 
     try:
         import urllib.request
-        payload = json.dumps({
-            "model": config.EMBEDDING_MODEL,
-            "input": text[:2000],  # 智谱 limit
-        }).encode("utf-8")
+
+        payload = json.dumps(
+            {
+                "model": config.EMBEDDING_MODEL,
+                "input": text[:2000],  # 智谱 limit
+            }
+        ).encode("utf-8")
 
         req = urllib.request.Request(
             "https://open.bigmodel.cn/api/paas/v4/embeddings",
@@ -144,6 +158,7 @@ def _zhipu_embedding(text: str) -> Optional[list[float]]:
             return result["data"][0]["embedding"]
     except Exception as e:
         import sys as _sys
+
         print(f"[rag] Zhipu embedding failed: {e}", file=_sys.stderr)
         return None
 
@@ -156,10 +171,13 @@ def _openai_embedding(text: str) -> Optional[list[float]]:
 
     try:
         import urllib.request
-        payload = json.dumps({
-            "model": "text-embedding-3-small",
-            "input": text[:8000],
-        }).encode("utf-8")
+
+        payload = json.dumps(
+            {
+                "model": "text-embedding-3-small",
+                "input": text[:8000],
+            }
+        ).encode("utf-8")
 
         req = urllib.request.Request(
             "https://api.openai.com/v1/embeddings",
@@ -175,6 +193,7 @@ def _openai_embedding(text: str) -> Optional[list[float]]:
             return result["data"][0]["embedding"]
     except Exception as e:
         import sys as _sys
+
         print(f"[rag] OpenAI embedding failed: {e}", file=_sys.stderr)
         return None
 
@@ -183,11 +202,13 @@ def _openai_embedding(text: str) -> Optional[list[float]]:
 # PostgreSQL pgvector storage
 # ===================================================================
 
+
 def store_chunks_pg(chunks: list[dict], embeddings: list[list[float]]):
     """Store chunks and embeddings in PostgreSQL pgvector (includes section field)."""
     conn = None
     try:
         import psycopg2
+
         conn = psycopg2.connect(
             host=config.PG_HOST,
             port=config.PG_PORT,
@@ -203,7 +224,9 @@ def store_chunks_pg(chunks: list[dict], embeddings: list[list[float]]):
             if emb is None:
                 continue
             emb_str = "[" + ",".join(str(x) for x in emb) + "]"
-            batch_data.append((chunk["paper_id"], chunk.get("section", ""), chunk["content"], emb_str))
+            batch_data.append(
+                (chunk["paper_id"], chunk.get("section", ""), chunk["content"], emb_str)
+            )
 
         if batch_data:
             cur.executemany(
@@ -231,6 +254,7 @@ def create_hnsw_index():
     conn = None
     try:
         import psycopg2
+
         conn = psycopg2.connect(
             host=config.PG_HOST,
             port=config.PG_PORT,
@@ -261,6 +285,7 @@ def create_hnsw_index():
 def _get_pg_connection():
     """Get a PostgreSQL connection."""
     import psycopg2
+
     return psycopg2.connect(
         host=config.PG_HOST,
         port=config.PG_PORT,
@@ -297,12 +322,14 @@ def search_rag(query: str, limit: int = 10) -> list[dict]:
         )
         results = []
         for row in cur.fetchall():
-            results.append({
-                "paper_id": row[0],
-                "content": row[1],
-                "section": row[2],
-                "similarity": float(row[3]),
-            })
+            results.append(
+                {
+                    "paper_id": row[0],
+                    "content": row[1],
+                    "section": row[2],
+                    "similarity": float(row[3]),
+                }
+            )
         cur.close()
         return results
     except Exception:
@@ -319,9 +346,10 @@ def search_rag(query: str, limit: int = 10) -> list[dict]:
 # BM25 keyword search (lightweight, no external dependency)
 # ===================================================================
 
+
 def _tokenize(text: str) -> list[str]:
     """Unicode-aware tokenizer: matches letters and digits from any language."""
-    return re.findall(r'[^\W_]+', text.lower(), re.UNICODE)
+    return re.findall(r"[^\W_]+", text.lower(), re.UNICODE)
 
 
 class BM25Index:
@@ -330,28 +358,38 @@ class BM25Index:
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         self.k1 = k1
         self.b = b
-        self.docs: list[dict] = []       # [{id, paper_id, content, section, tokens}]
+        self.docs: list[dict] = []  # [{id, paper_id, content, section, tokens}]
         self.avg_dl: float = 0
-        self.df: Counter = Counter()     # term -> doc frequency
+        self.df: Counter = Counter()  # term -> doc frequency
         self.N: int = 0
 
-    def build_from_pg(self, limit: int = 5000):
-        """Load chunks from PostgreSQL and build BM25 index."""
+    def build_from_pg(self, limit: Optional[int] = None):
+        """Load chunks from PostgreSQL and build BM25 index.
+
+        v0.2.0: default covers ALL chunks (was LIMIT 5000 = ~9% coverage);
+        memory cost ~20MB at 54k docs (content trimmed to 300 chars)."""
         conn = None
         try:
             conn = _get_pg_connection()
             cur = conn.cursor()
-            cur.execute(
-                "SELECT id, paper_id, content, section FROM chunks LIMIT %s",
-                (limit,),
-            )
+            if limit is None:
+                cur.execute("SELECT id, paper_id, content, section FROM chunks")
+            else:
+                cur.execute(
+                    "SELECT id, paper_id, content, section FROM chunks LIMIT %s",
+                    (limit,),
+                )
             for row in cur.fetchall():
                 tokens = _tokenize(row[2])
-                self.docs.append({
-                    "id": row[0], "paper_id": row[1],
-                    "content": row[2][:300], "section": row[3],
-                    "tokens": tokens,
-                })
+                self.docs.append(
+                    {
+                        "id": row[0],
+                        "paper_id": row[1],
+                        "content": row[2][:300],
+                        "section": row[3],
+                        "tokens": tokens,
+                    }
+                )
                 unique_tokens = set(tokens)
                 for t in unique_tokens:
                     self.df[t] += 1
@@ -384,15 +422,19 @@ class BM25Index:
                     continue
                 df = self.df.get(qt, 0)
                 idf = math.log((self.N - df + 0.5) / (df + 0.5) + 1)
-                norm_tf = (tf * (self.k1 + 1)) / (tf + self.k1 * (1 - self.b + self.b * dl / self.avg_dl))
+                norm_tf = (tf * (self.k1 + 1)) / (
+                    tf + self.k1 * (1 - self.b + self.b * dl / self.avg_dl)
+                )
                 score += idf * norm_tf
             if score > 0:
-                scores.append({
-                    "paper_id": doc["paper_id"],
-                    "content": doc["content"],
-                    "section": doc["section"] or "",
-                    "bm25_score": score,
-                })
+                scores.append(
+                    {
+                        "paper_id": doc["paper_id"],
+                        "content": doc["content"],
+                        "section": doc["section"] or "",
+                        "bm25_score": score,
+                    }
+                )
         scores.sort(key=lambda x: x["bm25_score"], reverse=True)
         return scores[:limit]
 
@@ -413,7 +455,10 @@ def _get_bm25() -> BM25Index:
 # Hybrid Search: Vector + BM25 + RRF fusion
 # ===================================================================
 
-def search_rag_hybrid(query: str, limit: int = 10, k_vector: int = 30, k_bm25: int = 30) -> list[dict]:
+
+def search_rag_hybrid(
+    query: str, limit: int = 10, k_vector: int = 30, k_bm25: int = 30
+) -> list[dict]:
     """
     Hybrid search combining vector similarity and BM25 keyword matching.
 
@@ -430,18 +475,30 @@ def search_rag_hybrid(query: str, limit: int = 10, k_vector: int = 30, k_bm25: i
     bm25_results = _get_bm25().search(query, limit=k_bm25)
 
     # RRF fusion: accumulate scores per paper_id
-    rrf_scores: dict[str, dict] = {}  # paper_id -> {score, content, section, vector_rank, bm25_rank}
+    rrf_scores: dict[
+        str, dict
+    ] = {}  # paper_id -> {score, content, section, vector_rank, bm25_rank}
 
     for rank, r in enumerate(vector_results):
         pid = r["paper_id"]
         if pid not in rrf_scores:
-            rrf_scores[pid] = {"paper_id": pid, "content": r["content"], "section": r["section"], "rrf": 0.0}
+            rrf_scores[pid] = {
+                "paper_id": pid,
+                "content": r["content"],
+                "section": r["section"],
+                "rrf": 0.0,
+            }
         rrf_scores[pid]["rrf"] += 1.0 / (k_rrf + rank + 1)
 
     for rank, r in enumerate(bm25_results):
         pid = r["paper_id"]
         if pid not in rrf_scores:
-            rrf_scores[pid] = {"paper_id": pid, "content": r["content"], "section": r["section"], "rrf": 0.0}
+            rrf_scores[pid] = {
+                "paper_id": pid,
+                "content": r["content"],
+                "section": r["section"],
+                "rrf": 0.0,
+            }
         rrf_scores[pid]["rrf"] += 1.0 / (k_rrf + rank + 1)
 
     results = sorted(rrf_scores.values(), key=lambda x: x["rrf"], reverse=True)
@@ -457,7 +514,10 @@ def search_rag_hybrid(query: str, limit: int = 10, k_vector: int = 30, k_bm25: i
 # Batch indexing
 # ===================================================================
 
-def _get_batch_embeddings(texts: list[str], provider: str = None) -> list[Optional[list[float]]]:
+
+def _get_batch_embeddings(
+    texts: list[str], provider: str = None
+) -> list[Optional[list[float]]]:
     """
     Get embeddings for a batch of texts.
 
@@ -474,12 +534,15 @@ def _get_batch_embeddings(texts: list[str], provider: str = None) -> list[Option
     if provider == "zhipu":
         try:
             import urllib.request
+
             # 智谱 allows up to ~30 texts per batch
             truncated = [t[:2000] for t in texts]
-            payload = json.dumps({
-                "model": config.EMBEDDING_MODEL,
-                "input": truncated,
-            }).encode("utf-8")
+            payload = json.dumps(
+                {
+                    "model": config.EMBEDDING_MODEL,
+                    "input": truncated,
+                }
+            ).encode("utf-8")
             req = urllib.request.Request(
                 "https://open.bigmodel.cn/api/paas/v4/embeddings",
                 data=payload,
@@ -530,6 +593,7 @@ def index_all_papers(parsed_dir: Path = None, batch_size: int = 30) -> dict:
     try:
         from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
         from rich.console import Console
+
         _console = Console()
         _has_rich = True
     except ImportError:
@@ -545,7 +609,7 @@ def index_all_papers(parsed_dir: Path = None, batch_size: int = 30) -> dict:
         ) as progress:
             task = progress.add_task("Embedding chunks...", total=total)
             for i in range(0, total, batch_size):
-                batch = all_chunks[i:i + batch_size]
+                batch = all_chunks[i : i + batch_size]
                 texts = [c["content"] for c in batch]
                 embeddings = _get_batch_embeddings(texts)
                 for emb in embeddings:
@@ -557,7 +621,7 @@ def index_all_papers(parsed_dir: Path = None, batch_size: int = 30) -> dict:
                 progress.update(task, advance=len(batch))
     else:
         for i in range(0, total, batch_size):
-            batch = all_chunks[i:i + batch_size]
+            batch = all_chunks[i : i + batch_size]
             texts = [c["content"] for c in batch]
             embeddings = _get_batch_embeddings(texts)
             for emb in embeddings:

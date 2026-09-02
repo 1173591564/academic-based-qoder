@@ -20,6 +20,7 @@ from .commands import research_ops  # noqa: F401  interests, research-sync, surv
 from .commands import execution_ops  # noqa: F401  compile-paper, exp-*, dataset-download
 from .commands import external_ops  # noqa: F401  arxiv-search, arxiv-download
 from .commands import dsh_ops  # noqa: F401  init-dsh
+from .commands import sync_ops  # noqa: F401  sync (v0.2.0 single maintenance command)
 from . import lean_sync  # noqa: F401  lean-sync, lean-templates
 
 

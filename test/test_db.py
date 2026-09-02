@@ -75,11 +75,10 @@ class TestFileOnlyOperations:
         assert loaded["title"] == "中文标题测试"
         assert loaded["abstract"] == "La résumé"
 
-    def test_save_parsed_fails_if_parent_missing(self, tmp_path, sample_paper_data):
-        """save_parsed uses exist_ok=True but not parents=True."""
+    def test_save_parsed_creates_missing_parents(self, tmp_path, sample_paper_data):
         parsed_dir = tmp_path / "nonexistent" / "parsed"
-        with pytest.raises(FileNotFoundError):
-            dbmod.save_parsed(sample_paper_data, parsed_dir=parsed_dir)
+        path = dbmod.save_parsed(sample_paper_data, parsed_dir=parsed_dir)
+        assert path.is_file()
 
 
 class TestDatabaseAvailability:

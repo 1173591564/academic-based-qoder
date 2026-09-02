@@ -5,11 +5,26 @@ Wraps psycopg2 for optional PostgreSQL storage.
 When DB is unavailable, falls back to file-only mode.
 """
 import json
+import re
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
 from . import config
+
+_PAPER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
+
+
+def parsed_path(paper_id: str, parsed_dir: Path = None) -> Path:
+    """Return the contained parsed JSON path for a safe paper identifier."""
+    if not isinstance(paper_id, str) or not _PAPER_ID_PATTERN.fullmatch(paper_id):
+        raise ValueError("invalid paper identifier")
+    root = Path(parsed_dir) if parsed_dir is not None else config.PARSED_DIR
+    resolved_root = root.resolve()
+    path = (resolved_root / f"{paper_id}.json").resolve()
+    if not path.is_relative_to(resolved_root):
+        raise ValueError("invalid paper identifier")
+    return path
 
 
 def _try_import_psycopg2():
@@ -286,8 +301,8 @@ def save_parsed(data: dict, parsed_dir: Path = None):
     """Save parsed paper data to a JSON file."""
     if parsed_dir is None:
         parsed_dir = config.PARSED_DIR
-    parsed_dir.mkdir(exist_ok=True)
-    out_path = parsed_dir / f"{data['paper_id']}.json"
+    parsed_dir.mkdir(parents=True, exist_ok=True)
+    out_path = parsed_path(data["paper_id"], parsed_dir)
     out_path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -297,11 +312,15 @@ def save_parsed(data: dict, parsed_dir: Path = None):
 
 def load_parsed(paper_id: str, parsed_dir: Path = None) -> Optional[dict]:
     """Load parsed paper data from JSON."""
-    if parsed_dir is None:
-        parsed_dir = config.PARSED_DIR
-    path = parsed_dir / f"{paper_id}.json"
+    try:
+        path = parsed_path(paper_id, parsed_dir)
+    except ValueError:
+        return None
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
     return None
 
 

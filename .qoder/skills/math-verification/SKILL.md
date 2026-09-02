@@ -69,7 +69,7 @@ python -m scholar lean-verify
 # 或验证单个定理
 python -m scholar lean-verify --theorem transformer_replaces_rnn
 
-# JSON 输出模式（供 MCP 工具调用）
+# JSON 输出模式
 python -m scholar lean-verify --json
 ```
 此命令会：
@@ -79,9 +79,7 @@ python -m scholar lean-verify --json
 4. 如果编译失败，解析 stderr 定位出错的定理和错误原因
 5. 输出结构化的验证报告
 
-也可以在 MCP 中调用：
-- `scholar_lean_verify` — 验证全部 7 个定理
-- `scholar_lean_verify(theorem="dpo_replaces_ppo")` — 验证指定定理
+（v0.2.0 起 lean-verify 属 CLI 维护面，不在 MCP 模型工具中；结果文件写入 output/notes/ 后可用 scholar_read_output_file 读取）
 
 ⚠️ **重要**：只有 `lake build` 返回 0 时才声称"已验证"。编译失败时，需分析错误信息。
 

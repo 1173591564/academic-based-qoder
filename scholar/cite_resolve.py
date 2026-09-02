@@ -13,6 +13,7 @@ but the bibliography entry provides the actual title.
 CLI: scholar cite-resolve [--limit N] [--dry-run]
 """
 import json
+import time
 import re
 import ast
 import hashlib
@@ -273,42 +274,46 @@ def resolve_via_arxiv(query: str, cache_dir: Path = None) -> Optional[dict]:
 # ===================================================================
 # Neo4j ExternalPaper node creation
 # ===================================================================
-
-def create_external_nodes(gdb, external_papers: list[dict]) -> int:
-    """Create ExternalPaper nodes in Neo4j for unresolved references."""
-    created = 0
-    for paper in external_papers:
-        ref_key = paper["ref_key"]
-        gdb.run("""
-            MERGE (e:ExternalPaper {ref_key: $ref_key})
-            SET e.title = $title,
-                e.year = $year,
-                e.arxiv_id = $arxiv_id,
-                e.authors = $authors
-        """, **{
-            "ref_key": ref_key,
-            "title": paper.get("title", ""),
-            "year": paper.get("year"),
-            "arxiv_id": paper.get("arxiv_id", ""),
-            "authors": ", ".join(paper.get("authors", [])[:5]),
-        })
-
-        from_ulid = paper.get("from_ulid")
-        if from_ulid:
-            gdb.run("""
-                MATCH (from:Paper {ulid: $from_ulid})
-                MATCH (to:ExternalPaper {ref_key: $ref_key})
-                MERGE (from)-[:CITES {ref_key: $ref_key, resolved: false}]->(to)
-            """, from_ulid=from_ulid, ref_key=ref_key)
-
-        created += 1
-
-    return created
-
-
-# ===================================================================
 # Main resolution pipeline (V2)
 # ===================================================================
+
+# ===================================================================
+# refs-resolved.json sidecar (replaces Neo4j ExternalPaper persistence)
+# ===================================================================
+
+def _sidecar_path() -> Path:
+    from .graph_mem import REFS_SIDECAR
+    return REFS_SIDECAR
+
+
+def merge_sidecar(resolved_map: dict, externals: list[dict]) -> None:
+    """Merge new resolutions into output/index/refs-resolved.json.
+
+    Format: {"refs": {ref_key: ulid}, "external": {ref_key: {title, year,
+    arxiv_id}}, "updatedAt": iso}. graph_mem consumes the "refs" section as
+    curated ref_key -> ULID edges.
+    """
+    path = _sidecar_path()
+    data = {"refs": {}, "external": {}}
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(existing, dict):
+            data["refs"] = existing.get("refs") or {}
+            data["external"] = existing.get("external") or {}
+    except Exception:
+        pass
+    data["refs"].update(resolved_map)
+    for p in externals:
+        data["external"][p["ref_key"]] = {
+            "title": p.get("title", ""),
+            "year": p.get("year"),
+            "arxiv_id": p.get("arxiv_id", ""),
+        }
+    data["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1),
+                    encoding="utf-8")
+
 
 def resolve_citations(parsed_dir: Path = None, limit: int = 200,
                       dry_run: bool = True) -> dict:
@@ -363,6 +368,7 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
                 all_refs[ref]["bib_entry"] = bib_lookup[ref]
 
     total_refs = len(all_refs)
+    resolved_map: dict[str, str] = {}
 
     # Step 3: Level 1 — DOI exact match
     resolved_doi = 0
@@ -375,6 +381,8 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
             match = match_via_doi(doi, internal_index)
             if match:
                 resolved_doi += 1
+                if match.get("ulid"):
+                    resolved_map[ref_key] = match["ulid"]
                 continue
         unresolved_after_l1[ref_key] = info
 
@@ -393,6 +401,8 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
         match = match_via_title(title, internal_index, threshold=85)
         if match:
             resolved_title += 1
+            if match.get("ulid"):
+                resolved_map[ref_key] = match["ulid"]
             continue
         unresolved_after_l2[ref_key] = info
 
@@ -417,17 +427,17 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
             result["from_ulid"] = info["from_ulids"][0] if info["from_ulids"] else None
             external_papers.append(result)
 
-    # Step 6: Create external nodes in Neo4j (if not dry run)
-    external_created = 0
-    if not dry_run and external_papers:
+    # Step 6: Persist resolutions to refs-resolved.json sidecar (graph_mem reads it)
+    sidecar_refs = 0
+    sidecar_external = 0
+    if not dry_run and (resolved_map or external_papers):
         try:
-            from . import graph_db as gdb_mod
-            gdb = gdb_mod.GraphDB()
-            if gdb.available:
-                external_created = create_external_nodes(gdb, external_papers)
-                gdb.close()
+            sidecar_refs = len(resolved_map)
+            sidecar_external = len(external_papers)
+            merge_sidecar(resolved_map, external_papers)
         except Exception:
-            pass
+            sidecar_refs = 0
+            sidecar_external = 0
 
     still_unresolved = len(unresolved_after_l2) - resolved_arxiv
 
@@ -439,7 +449,8 @@ def resolve_citations(parsed_dir: Path = None, limit: int = 200,
         "resolved_arxiv": resolved_arxiv,
         "resolved_total": resolved_doi + resolved_title + resolved_arxiv,
         "resolution_rate": f"{(resolved_doi + resolved_title + resolved_arxiv) / max(total_refs, 1) * 100:.1f}%",
-        "external_nodes_created": external_created,
+        "sidecar_refs": sidecar_refs,
+        "sidecar_external": sidecar_external,
         "still_unresolved": still_unresolved,
         "queried_arxiv": queried,
         "has_rapidfuzz": _HAS_RAPIDFUZZ,

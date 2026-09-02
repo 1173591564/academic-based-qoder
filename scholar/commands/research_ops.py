@@ -1,4 +1,5 @@
 """Research operations: interests, research-sync, survey, landscape."""
+
 import json
 import re
 import typer
@@ -38,7 +39,9 @@ def survey(
         console.print(f"  Found {len(seen_ids)} unique papers via hybrid search")
         rag_worked = True
     except Exception as e:
-        console.print(f"  [yellow]RAG unavailable ({e}), falling back to keyword search[/]")
+        console.print(
+            f"  [yellow]RAG unavailable ({e}), falling back to keyword search[/]"
+        )
 
     if not rag_worked:
         try:
@@ -64,26 +67,21 @@ def survey(
     # 2. Graph query for related concepts
     console.print("\n[bold]Step 2: Graph Concept Query[/]")
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            concept_rows = gdb.run("""
-                MATCH (c:Innovation)
-                WHERE toLower(c.id) CONTAINS toLower($topic)
-                   OR toLower(coalesce(c.line, '')) CONTAINS toLower($topic)
-                WITH c LIMIT 10
-                MATCH (p:Paper)-[:HAS_CONCEPT]->(c)
-                RETURN DISTINCT p.ulid AS ulid
-                LIMIT $max_papers
-            """, topic=topic, max_papers=limit)
-            concept_ids = [r.get("ulid", "") for r in concept_rows if r.get("ulid")]
-            for cid in concept_ids:
-                if cid and cid not in seen_ids:
-                    seen_ids.append(cid)
-            console.print(f"  {len(concept_ids)} papers from concept graph")
-            gdb.close()
-        else:
-            console.print("  [yellow]Neo4j not available, skipping graph query[/]")
+        from .. import graph_mem
+
+        gm = graph_mem.ensure_graph()
+        topic_low = topic.lower().replace("_", " ")
+        matched = {
+            c
+            for cs in gm.concepts.values()
+            for c in cs
+            if topic_low in c.lower() or topic_low in c.lower().replace("_", " ")
+        }
+        concept_ids = [u for u, cs in gm.concepts.items() if matched & cs][:limit]
+        for cid in concept_ids:
+            if cid and cid not in seen_ids:
+                seen_ids.append(cid)
+        console.print(f"  {len(concept_ids)} papers from concept graph")
     except Exception as e:
         console.print(f"  [yellow]Graph unavailable ({e})[/]")
 
@@ -118,18 +116,24 @@ def survey(
     # Output
     out_dir = config.project_drafts_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    safe_topic = re.sub(r'[^\w\-]', '_', topic)[:50]
+    safe_topic = re.sub(r"[^\w\-]", "_", topic)[:50]
     out_path = out_dir / f"survey_{safe_topic}.md"
 
     lines = [f"# Research Survey: {topic}\n"]
     lines.append(f"**Papers found:** {len(papers_data)}  ")
-    lines.append(f"**Domains:** {', '.join(f'{k}({v})' for k, v in sorted(tag_summary.items(), key=lambda x: -x[1]))}\n")
+    lines.append(
+        f"**Domains:** {', '.join(f'{k}({v})' for k, v in sorted(tag_summary.items(), key=lambda x: -x[1]))}\n"
+    )
 
     if by_year:
         lines.append("## Timeline\n")
         for y in sorted(by_year.keys()):
-            titles = [f"- {(p.get('title') or 'Untitled')[:80]}" for p in by_year[y][:5]]
-            lines.append(f"### {y} ({len(by_year[y])} papers)\n" + "\n".join(titles) + "\n")
+            titles = [
+                f"- {(p.get('title') or 'Untitled')[:80]}" for p in by_year[y][:5]
+            ]
+            lines.append(
+                f"### {y} ({len(by_year[y])} papers)\n" + "\n".join(titles) + "\n"
+            )
 
     lines.append("## Papers\n")
     for i, p in enumerate(papers_data, 1):
@@ -154,7 +158,9 @@ def survey(
 # ===================================================================
 @app.command()
 def landscape(
-    topic: str = typer.Argument(help="Research field or domain (e.g., NLP, RL, Safety)"),
+    topic: str = typer.Argument(
+        help="Research field or domain (e.g., NLP, RL, Safety)"
+    ),
 ):
     """Field landscape analysis: classify tags -> graph centrality -> year distribution -> key papers."""
     from .. import classify as cl
@@ -176,7 +182,9 @@ def landscape(
         for sd_name, sd_count in all_tags.get("sub_directions", {}).items():
             if topic.lower() in sd_name.lower():
                 matched_domain = sd_name
-                console.print(f"  Matched sub-direction: {matched_domain} ({sd_count} papers)")
+                console.print(
+                    f"  Matched sub-direction: {matched_domain} ({sd_count} papers)"
+                )
                 break
 
     # 2. Scan papers matching the topic
@@ -209,15 +217,13 @@ def landscape(
     # 4. Graph centrality
     console.print("\n[bold]Step 4: Key Papers (Centrality)[/]")
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            node_count = gdb.run("MATCH (p:Paper) RETURN count(p) AS c")[0]["c"]
-            edge_count = gdb.run("MATCH ()-[c:CITES]->() RETURN count(c) AS c")[0]["c"]
-            console.print(f"  Graph: {node_count} papers, {edge_count} citation edges")
-            gdb.close()
-        else:
-            console.print("  [yellow]Neo4j not available[/]")
+        from .. import graph_mem
+
+        gm = graph_mem.ensure_graph()
+        st = gm.stats()
+        console.print(
+            f"  Graph: {st['papers']} papers, {st['cites_edges']} citation edges"
+        )
     except Exception as e:
         console.print(f"  [yellow]Graph unavailable ({e})[/]")
 
@@ -234,7 +240,7 @@ def landscape(
     # Save report
     out_dir = config.project_drafts_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    safe_topic = re.sub(r'[^\w\-]', '_', topic)[:50]
+    safe_topic = re.sub(r"[^\w\-]", "_", topic)[:50]
     out_path = out_dir / f"landscape_{safe_topic}.md"
 
     lines = [f"# Landscape Analysis: {topic}\n"]
@@ -251,7 +257,9 @@ def landscape(
             lines.append(f"- Grade {g}: {grades[g]}")
 
     lines.append("\n## Key Papers\n")
-    sorted_papers = sorted(domain_papers, key=lambda p: p.get("quality", {}).get("total", 0), reverse=True)
+    sorted_papers = sorted(
+        domain_papers, key=lambda p: p.get("quality", {}).get("total", 0), reverse=True
+    )
     for i, p in enumerate(sorted_papers[:20], 1):
         title = (p.get("title") or "Untitled")[:80]
         year = p.get("year", "?")
@@ -267,13 +275,27 @@ def landscape(
 # ===================================================================
 @app.command()
 def interests(
-    action: str = typer.Argument("list", help="Action: list, add, remove, logs, mark-analyzed"),
-    keywords: str = typer.Option("", "--keywords", help="Comma-separated keywords (for add)"),
+    action: str = typer.Argument(
+        "list", help="Action: list, add, remove, logs, mark-analyzed"
+    ),
+    keywords: str = typer.Option(
+        "", "--keywords", help="Comma-separated keywords (for add)"
+    ),
     category: str = typer.Option("general", "--category", help="Interest category"),
-    max_results: int = typer.Option(10, "--max", help="Max results per search (for add)"),
-    week: str = typer.Option("", "--week", help="Week ID like 2026-W24 (for mark-analyzed)"),
-    interests_found: int = typer.Option(0, "--found", help="Number of interests found (for mark-analyzed)"),
-    project: str = typer.Option("", "--project", help="Project name (for mark-analyzed, empty = current project)"),
+    max_results: int = typer.Option(
+        10, "--max", help="Max results per search (for add)"
+    ),
+    week: str = typer.Option(
+        "", "--week", help="Week ID like 2026-W24 (for mark-analyzed)"
+    ),
+    interests_found: int = typer.Option(
+        0, "--found", help="Number of interests found (for mark-analyzed)"
+    ),
+    project: str = typer.Option(
+        "",
+        "--project",
+        help="Project name (for mark-analyzed, empty = current project)",
+    ),
 ):
     """Manage research interests and conversation log analysis."""
     from .. import research_loop as rl
@@ -281,7 +303,9 @@ def interests(
     if action == "list":
         data = rl.load_interests()
         if not data["interests"]:
-            console.print("[yellow]No interests yet. Use: interests add --keywords \"...\" --category \"...\"[/]")
+            console.print(
+                '[yellow]No interests yet. Use: interests add --keywords "..." --category "..."[/]'
+            )
             return
         rows = []
         for i, item in enumerate(data["interests"], 1):
@@ -290,21 +314,32 @@ def interests(
                 f"   Keywords: {item['keywords']}\n"
                 f"   Searches: {item.get('search_count', 0)} | Last: {item.get('last_searched', 'never')}"
             )
-        console.print(Panel("\n".join(rows), title=f"Research Interests ({len(data['interests'])} directions)"))
+        console.print(
+            Panel(
+                "\n".join(rows),
+                title=f"Research Interests ({len(data['interests'])} directions)",
+            )
+        )
 
     elif action == "add":
         if not keywords:
-            console.print("[red]Please provide --keywords \"...\"[/]")
+            console.print('[red]Please provide --keywords "..."[/]')
             return
         data = rl.add_interest(keywords, category, max_results)
-        console.print(f"[green]OK[/green] Added direction [bold]{category}[/bold]: {keywords}")
+        console.print(
+            f"[green]OK[/green] Added direction [bold]{category}[/bold]: {keywords}"
+        )
 
     elif action == "remove":
         _, removed = rl.remove_interest(category)
         if removed:
-            console.print(f"[green]OK[/green] Removed direction [bold]{category}[/bold]")
+            console.print(
+                f"[green]OK[/green] Removed direction [bold]{category}[/bold]"
+            )
         else:
-            console.print(f"[yellow]!![/yellow] Direction [bold]{category}[/bold] not found")
+            console.print(
+                f"[yellow]!![/yellow] Direction [bold]{category}[/bold] not found"
+            )
 
     elif action == "logs":
         all_logs = rl.get_unanalyzed_logs()
@@ -315,25 +350,30 @@ def interests(
             week_id = path.stem.replace("week-", "")
             display_lines = []
             for e in entries[:40]:
-                ts_str = e.get('ts', '?')
-                role = e.get('role', '')
-                text = e.get('text', '')
-                if role == 'user':
-                    display_lines.append(f"  [{ts_str}] [bold cyan]Q:[/bold cyan] {text[:120]}")
-                elif role == 'assistant':
-                    display_lines.append(f"  [{ts_str}] [bold green]A:[/bold green] {text[:120]}")
+                ts_str = e.get("ts", "?")
+                role = e.get("role", "")
+                text = e.get("text", "")
+                if role == "user":
+                    display_lines.append(
+                        f"  [{ts_str}] [bold cyan]Q:[/bold cyan] {text[:120]}"
+                    )
+                elif role == "assistant":
+                    display_lines.append(
+                        f"  [{ts_str}] [bold green]A:[/bold green] {text[:120]}"
+                    )
                 else:
                     display_lines.append(f"  [{ts_str}] {text[:120]}")
             total = len(entries)
-            user_count = sum(1 for e in entries if e.get('role') == 'user')
-            asst_count = sum(1 for e in entries if e.get('role') == 'assistant')
+            user_count = sum(1 for e in entries if e.get("role") == "user")
+            asst_count = sum(1 for e in entries if e.get("role") == "assistant")
             old_count = total - user_count - asst_count
             proj_label = proj_name if proj_name != "_legacy" else "(legacy)"
             summary = (
                 f"Project: [bold magenta]{proj_label}[/bold magenta]\n"
                 f"Week: [bold]{week_id}[/bold]\n"
                 f"Entries: {total} ({user_count} user, {asst_count} assistant"
-                + (f", {old_count} legacy" if old_count > 0 else "") + ")\n\n"
+                + (f", {old_count} legacy" if old_count > 0 else "")
+                + ")\n\n"
                 + "\n".join(display_lines)
                 + (f"\n  ... and {total - 40} more" if total > 40 else "")
             )
@@ -353,7 +393,8 @@ def interests(
             console.print("    Generate logs through conversation first")
             return
         entry_count = sum(
-            1 for line in week_file.read_text(encoding="utf-8").strip().splitlines()
+            1
+            for line in week_file.read_text(encoding="utf-8").strip().splitlines()
             if line.strip()
         )
         if entry_count == 0:
@@ -361,15 +402,21 @@ def interests(
             return
         rl.mark_week_analyzed(week, interests_found, entry_count, project=project)
         proj_label = f" [{project}]" if project else ""
-        console.print(f"[green]OK[/green] Marked {week}{proj_label} as analyzed ({entry_count} entries)")
+        console.print(
+            f"[green]OK[/green] Marked {week}{proj_label} as analyzed ({entry_count} entries)"
+        )
 
     else:
-        console.print(f"[red]Unknown action: {action}. Available: list, add, remove, logs, mark-analyzed[/]")
+        console.print(
+            f"[red]Unknown action: {action}. Available: list, add, remove, logs, mark-analyzed[/]"
+        )
 
 
 @app.command(name="research-sync")
 def research_sync(
-    category: str = typer.Option("", "--category", help="Sync specific direction (empty = all)"),
+    category: str = typer.Option(
+        "", "--category", help="Sync specific direction (empty = all)"
+    ),
     max_results: int = typer.Option(10, "--max", help="Max papers per keyword"),
 ):
     """Search arXiv for research directions and ingest papers."""
@@ -379,25 +426,33 @@ def research_sync(
 
     if category:
         result = rl.sync_direction(category, max_results=max_results)
-        console.print(Panel(
-            f"Direction: [bold]{result['category']}[/bold]\n"
-            f"Downloaded: {result['downloaded']}\n"
-            f"Ingested:   {result['ingested']}\n"
-            f"Errors:     [red]{len(result['errors'])}[/]",
-            title="Research Sync Result",
-        ))
+        console.print(
+            Panel(
+                f"Direction: [bold]{result['category']}[/bold]\n"
+                f"Downloaded: {result['downloaded']}\n"
+                f"Ingested:   {result['ingested']}\n"
+                f"Errors:     [red]{len(result['errors'])}[/]",
+                title="Research Sync Result",
+            )
+        )
         for p in result.get("papers", []):
-            console.print(f"  - {p.get('title', '?')[:60]} ({p.get('year', '?')}) -> {p.get('ulid', '?')[:8]}")
+            console.print(
+                f"  - {p.get('title', '?')[:60]} ({p.get('year', '?')}) -> {p.get('ulid', '?')[:8]}"
+            )
     else:
         result = rl.sync_all_directions(max_results=max_results)
         if "message" in result:
             console.print(f"[yellow]{result['message']}[/]")
             return
-        console.print(Panel(
-            f"Directions: {result['total_categories']}\n"
-            f"Total papers: {result['total_papers']}",
-            title="Research Sync -- All Directions",
-        ))
+        console.print(
+            Panel(
+                f"Directions: {result['total_categories']}\n"
+                f"Total papers: {result['total_papers']}",
+                title="Research Sync -- All Directions",
+            )
+        )
         for r in result["results"]:
             status = "[green]OK[/green]" if not r["errors"] else "[red]x[/red]"
-            console.print(f"  {status} {r['category']}: {r['downloaded']} downloaded, {r['ingested']} ingested")
+            console.print(
+                f"  {status} {r['category']}: {r['downloaded']} downloaded, {r['ingested']} ingested"
+            )

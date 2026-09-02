@@ -11,6 +11,12 @@ from .. import config
 from .. import db as dbmod
 
 
+def _runtime_mode() -> str:
+    if config.IS_FROZEN:
+        return "frozen (.exe)"
+    return "development (source)" if config.IS_SOURCE_TREE else "installed package"
+
+
 # ===================================================================
 # init: Initialize global knowledge base
 # ===================================================================
@@ -55,17 +61,13 @@ def init():
         console.print("  [yellow][!!][/yellow] PostgreSQL error: {0}".format(e))
 
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            console.print("  [green][OK][/green] Neo4j connected ({0})".format(config.NEO4J_URI))
-            gdb.close()
-        else:
-            console.print("  [yellow][!!][/yellow] Neo4j not available (start Docker?)")
+        from .. import graph_mem
+        gm = graph_mem.ensure_graph()
+        console.print("  [green][OK][/green] Graph cache ({0} papers)".format(len(gm.papers)))
     except Exception as e:
-        console.print("  [yellow][!!][/yellow] Neo4j error: {0}".format(e))
+        console.print("  [yellow][!!][/yellow] Graph: {0}".format(e))
 
-    mode = "frozen (.exe)" if config.IS_FROZEN else "development (source)"
+    mode = _runtime_mode()
     console.print("\n[dim]Mode: {0} | Home: {1}[/dim]".format(mode, home))
 
 
@@ -168,15 +170,11 @@ def doctor():
         console.print("  [yellow][!!][/yellow] PostgreSQL error: {0}".format(e))
 
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            console.print("  [green][OK][/green] Neo4j connected ({0})".format(config.NEO4J_URI))
-            gdb.close()
-        else:
-            console.print("  [yellow][!!][/yellow] Neo4j not available (start Docker?)")
+        from .. import graph_mem
+        gm = graph_mem.ensure_graph()
+        console.print("  [green][OK][/green] Graph cache ({0} papers)".format(len(gm.papers)))
     except Exception as e:
-        console.print("  [yellow][!!][/yellow] Neo4j error: {0}".format(e))
+        console.print("  [yellow][!!][/yellow] Graph: {0}".format(e))
 
     # 4. Check MCP server
     try:
@@ -190,7 +188,7 @@ def doctor():
         console.print("  [yellow][!!][/yellow] MCP server module: not found")
 
     # Summary
-    mode = "frozen (.exe)" if config.IS_FROZEN else "development (source)"
+    mode = _runtime_mode()
     console.print("\n[dim]Mode: {0} | Home: {1}[/dim]".format(mode, config.SCHOLAR_HOME))
 
 
@@ -201,7 +199,7 @@ def doctor():
 @app.command()
 def scan():
     """Scan all papers and show parsing status."""
-    paper_dirs = sorted(config.PAPERS_DIR.iterdir())
+    paper_dirs = sorted(config.PAPERS_DIR.iterdir()) if config.PAPERS_DIR.exists() else []
     paper_dirs = [d for d in paper_dirs if d.is_dir()]
 
     parsed_ids = set(dbmod.list_parsed())
@@ -495,7 +493,11 @@ def stats(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Show knowledge base statistics."""
-    paper_dirs = [d for d in config.PAPERS_DIR.iterdir() if d.is_dir()]
+    paper_dirs = (
+        [d for d in config.PAPERS_DIR.iterdir() if d.is_dir()]
+        if config.PAPERS_DIR.exists()
+        else []
+    )
     parsed_ids = dbmod.list_parsed()
 
     database = _get_db()

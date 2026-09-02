@@ -152,22 +152,12 @@ DIGESTS_DIR = OUTPUT_DIR / "digests"
 LOGS_DIR = WORKSPACE_DIR / "output" / "logs"
 INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 
-# Ensure output directories exist (parents=True for fresh-clone safety)
-for d in [
-    PARSED_DIR,
-    NOTES_DIR,
-    DRAFTS_DIR,
-    BIB_DIR,
-    EXPERIMENTS_DIR,
-    DATASETS_DIR,
-    PDFS_DIR,
-    DIGESTS_DIR,
-    LOGS_DIR,
-]:
-    d.mkdir(parents=True, exist_ok=True)
-
 # Running mode flags
 IS_FROZEN = getattr(sys, "frozen", False)
+IS_SOURCE_TREE = (
+    (Path(__file__).resolve().parent.parent / "pyproject.toml").is_file()
+    and (Path(__file__).resolve().parent.parent / ".git").exists()
+)
 
 
 def init_scholar_home() -> dict:
@@ -214,10 +204,6 @@ def init_scholar_home() -> dict:
             "SCHOLAR_PG_NAME=scholar\n"
             "SCHOLAR_PG_USER=scholar\n"
             "SCHOLAR_PG_PASS=scholar2024\n\n"
-            "# Neo4j\n"
-            "SCHOLAR_NEO4J_URI=bolt://localhost:7687\n"
-            "SCHOLAR_NEO4J_USER=neo4j\n"
-            "SCHOLAR_NEO4J_PASS=scholar2024\n\n"
             "# RAG Embedding (智谱 API)\n"
             "SCHOLAR_EMBEDDING_PROVIDER=zhipu\n"
             "SCHOLAR_EMBEDDING_MODEL=embedding-2\n"
@@ -438,11 +424,6 @@ PG_PORT = int(os.getenv("SCHOLAR_PG_PORT", "5433"))
 PG_NAME = os.getenv("SCHOLAR_PG_NAME", "scholar")
 PG_USER = os.getenv("SCHOLAR_PG_USER", "scholar")
 PG_PASS = os.getenv("SCHOLAR_PG_PASS", "scholar2024")
-
-# Neo4j: 概念图谱 + 引用网络
-NEO4J_URI = os.getenv("SCHOLAR_NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("SCHOLAR_NEO4J_USER", "neo4j")
-NEO4J_PASS = os.getenv("SCHOLAR_NEO4J_PASS", "scholar2024")
 
 # RAG Embedding (智谱 API)
 EMBEDDING_PROVIDER = os.getenv("SCHOLAR_EMBEDDING_PROVIDER", "zhipu")
