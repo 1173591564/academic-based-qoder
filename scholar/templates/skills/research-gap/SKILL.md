@@ -43,7 +43,7 @@ python -m scholar classify <ULID>  # 确认论文所属方向
 - **盲区缺口**：没有任何论文提到但逻辑上应该存在的方向
 
 ### Step 4: 引用网络辅助分析
-如果 Neo4j 可用：
+使用内存引用与概念图谱：
 ```bash
 python -m scholar graph-query <概念>
 python -m scholar cite-network
@@ -54,11 +54,11 @@ python -m scholar cite-network
 - 哪些引用链断裂了？（A→B 缺少中间环节）
 
 ### Step 5: 概念演化分析
-检查 Neo4j 中的替代关系：
+检查图谱中的替代关系：
 ```bash
 python -m scholar graph-stats
 ```
-查询 REPLACES 边：`MATCH (a)-[:REPLACES]->(b) RETURN a.id, b.id`
+结合 `graph-stats` 与 `graph-query` 分析 REPLACES 关系
 已知的替代模式（如 Transformer replaces RNN）暗示：
 - 被替代技术中哪些方面仍未被充分解决？
 - 当前技术（如 Transformer）自身的局限性是什么？

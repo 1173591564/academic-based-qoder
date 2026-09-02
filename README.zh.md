@@ -4,6 +4,12 @@
 
 Scholar Studio 是 Python 学术研究引擎，提供 48-command CLI、16-tool MCP server、15 个本地 research skill、lexical 与 semantic retrieval、内存 citation/concept graph、论文解析、学术写作支持、实验辅助与可选 Lean4 synchronization。
 
+## 架构
+
+DeepSeek Harness 是独立的 client 与用户交互层。本仓库只承载 backend：`scholar/` 负责学术与 data-plane 逻辑，`scholar_mcp/` 负责 MCP adapter，`services/` 定义 deployable ownership，`infra/` 分离 Scholar 与未来 Proxy Hub 的部署资产。
+
+第一阶段保留 authenticated DSH-to-Scholar direct path。第二阶段在本仓库新增独立 Proxy Hub control plane，不把 tenant policy 放进 Scholar，也不把 Hub code 放进 DSH。详见[架构图](docs/architecture.md)与[最小 Proxy Hub 接口](docs/proxy-hub.md)。
+
 ## 安装
 
 Scholar Studio 需要 Python 3.10 或更高版本。
@@ -100,6 +106,7 @@ Semantic search 会将 provider、database 与 index unavailable 分别报告，
 
 ```sh
 python -m pip install -e '.[dev]'
+docker compose -f infra/scholar/compose.yml up -d
 pytest -q
 python -m pip wheel . --no-deps -w dist
 ```
@@ -108,4 +115,4 @@ Tests 覆盖 path containment、malformed paper data、graph/index invalidation�
 
 ## 阶段边界
 
-第一阶段是 direct authenticated client-to-Scholar-server product。Multi-tenant authorization、team policy、quota、centralized audit 与 corpus isolation 延期到独立 Proxy Hub。
+第一阶段是 direct authenticated client-to-Scholar-server product。Multi-tenant authorization、team policy、quota、centralized audit 与 corpus isolation 延期到 Proxy Hub control plane。

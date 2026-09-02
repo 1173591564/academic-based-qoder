@@ -57,7 +57,7 @@ try {
 
 # 1. Start Docker containers
 Write-Host "`n[1/4] Starting Docker containers..." -ForegroundColor Yellow
-Push-Location "$ROOT\infra"
+Push-Location "$ROOT\infra\scholar"
 docker compose up -d
 Pop-Location
 

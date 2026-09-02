@@ -78,7 +78,7 @@ python -m scholar info <ULID>
 
 ## 注意事项
 - 批量解析时逐篇处理，失败的跳过不影响整体
-- 如果 Neo4j 和 PostgreSQL 已启动（`cd infra && docker compose up -d`），解析结果会同时写入数据库
+- 解析结果先写入本地 JSON；运行 `scholar sync` 后同步到可用的 PostgreSQL
 - 缺少 TeX 源码（只有 PDF）的论文无法解析，跳过即可
 
 ## Next Steps

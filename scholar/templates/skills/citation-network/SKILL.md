@@ -15,7 +15,7 @@ output_contract:
 当用户说"分析引用网络"、"引用关系"、"领域脉络"、"谁引用了谁"、"桥接论文"时执行此流程。
 
 ## 前置条件
-Neo4j 已启动：`cd infra && docker compose up -d neo4j`
+引用网络数据可从 parsed corpus 构建
 引用网络已构建：`python -m scholar graph-build`
 
 ## 流程
@@ -43,7 +43,7 @@ python -m scholar cite-network <ULID>
 - **引用深度**：最长引用链有多长？
 
 ### Step 3: 概念关联分析
-如果 Neo4j 概念图谱已构建：
+使用内存概念图谱：
 ```bash
 python -m scholar graph-query <概念ID>
 ```
@@ -95,7 +95,7 @@ python -m scholar list-papers --year <Y>
 ## 注意事项
 - 引用网络的质量取决于解析的 citations 字段覆盖率
 - 部分论文引用的是库外论文（to_paper 为 null），需结合 arXiv 补充
-- 如果 Neo4j 未启动，可以用 `citations` 字段手动分析，但功能受限
+- 图谱由 parsed corpus 与 sidecar 数据在本地构建，不依赖外部图数据库
 
 ## Next Steps
 

@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent
 $ProjectRoot = Split-Path $ScriptDir -Parent
-$ComposeFile = Join-Path $ProjectRoot "infra\docker-compose.yml"
+$ComposeFile = Join-Path $ProjectRoot "infra\scholar\compose.yml"
 
 Write-Host "Scholar Studio — Infrastructure Startup" -ForegroundColor Cyan
 Write-Host ""
