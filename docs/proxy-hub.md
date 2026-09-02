@@ -1,6 +1,6 @@
 # Proxy Hub Minimum Interface
 
-Proxy Hub is a backend control-plane service in this repository. It authenticates users, resolves their tenant, enforces policy, routes MCP traffic to a Scholar backend, and records attribution. It does not contain research or corpus logic.
+Proxy Hub is a control-plane product in this repository. Its backend authenticates users, resolves their tenant, enforces policy, routes MCP traffic to a Scholar backend, and records attribution. Its separate administration frontend manages that state through `/v1/admin/`; it never contains research or corpus logic. See [the console design](proxy-hub-console.md).
 
 ## Public API
 
@@ -69,12 +69,14 @@ Raw research questions are not stored by default.
 - Policy evaluation failure denies the request.
 - Backend unavailability fails the MCP request; DSH startup remains fail closed when initial synchronization cannot complete.
 - Audit failure rejects write-capable tools. Read-tool behavior requires an explicit product decision before implementation.
-- Public routes never redirect.
+- DSH session and MCP routes never redirect.
 
-## Private administration
+## Administration and operations
 
-The Hub exposes private liveness and readiness. Readiness requires at least one healthy Scholar backend for every tenant currently eligible for routing. Scholar exposes its own private readiness with corpus version, parsed-paper count, vector/chunk counts, graph build timestamp, and synchronization timestamp.
+The same-origin administration console is served under `/console/` and calls only `/v1/admin/`. Browser sessions, DSH capabilities, and Scholar service credentials are separate credential classes. The management API and page-level role model are specified in [the console design](proxy-hub-console.md).
+
+The Hub also exposes private liveness and readiness. Readiness requires at least one healthy Scholar backend for every tenant currently eligible for routing. Scholar exposes its own private readiness with corpus version, parsed-paper count, vector/chunk counts, graph build timestamp, and synchronization timestamp.
 
 ## Deferred capabilities
 
-Team administration CRUD, delegation, impersonation, OAuth UI, billing, per-document ACLs, Memory proxying, response caching, tool rewriting, and Hub-specific MCP tools are not part of the first implementation.
+Delegation, impersonation, a custom identity-provider UI, billing, per-document ACLs, Memory proxying, response caching, tool rewriting, and Hub-specific MCP tools are not part of the first implementation.
