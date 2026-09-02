@@ -1,0 +1,74 @@
+name: scholar-proxy-hub
+
+services:
+  control-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: proxy_hub
+      POSTGRES_USER: proxy_hub
+      POSTGRES_PASSWORD: ${PROXY_HUB_DATABASE_PASSWORD:?Set PROXY_HUB_DATABASE_PASSWORD}
+    volumes:
+      - control-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proxy_hub -d proxy_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: services/proxy-hub/backend/Dockerfile
+    restart: "no"
+    environment: &api-environment
+      PROXY_HUB_ENVIRONMENT: ${PROXY_HUB_ENVIRONMENT:-development}
+      PROXY_HUB_DATABASE_URL: postgresql+psycopg://proxy_hub:${PROXY_HUB_DATABASE_PASSWORD}@control-db:5432/proxy_hub
+      PROXY_HUB_PUBLIC_ORIGIN: ${PROXY_HUB_PUBLIC_ORIGIN:-http://localhost:8080}
+      PROXY_HUB_OIDC_ISSUER_URL: ${PROXY_HUB_OIDC_ISSUER_URL:?Set PROXY_HUB_OIDC_ISSUER_URL}
+      PROXY_HUB_OIDC_CLIENT_ID: ${PROXY_HUB_OIDC_CLIENT_ID:?Set PROXY_HUB_OIDC_CLIENT_ID}
+      PROXY_HUB_OIDC_CLIENT_SECRET: ${PROXY_HUB_OIDC_CLIENT_SECRET:?Set PROXY_HUB_OIDC_CLIENT_SECRET}
+      PROXY_HUB_BOOTSTRAP_PLATFORM_ADMIN_SUBJECTS: ${PROXY_HUB_BOOTSTRAP_PLATFORM_ADMIN_SUBJECTS:-}
+    depends_on:
+      control-db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: services/proxy-hub/backend/Dockerfile
+    restart: unless-stopped
+    environment: *api-environment
+    depends_on:
+      control-db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/private/health/ready', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ../..
+      dockerfile: services/proxy-hub/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${PROXY_HUB_PORT:-8080}:8080"
+
+volumes:
+  control-db-data:

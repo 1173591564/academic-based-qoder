@@ -1,10 +1,12 @@
 # Proxy Hub
 
-This directory reserves the Phase Two control-plane product. Runtime code is intentionally not present until the Scholar backend prerequisites and interface decisions in `docs/proxy-hub.md` and `docs/proxy-hub-console.md` are complete.
+This directory contains the first runnable Proxy Hub control-plane slice.
 
-- `backend/` will contain the Python ASGI gateway and administration API.
-- `frontend/` will contain the TypeScript operator administration console.
+- `backend/` contains the FastAPI administration service, OIDC browser sessions, tenant-scoped RBAC, append-only audit records, SQLAlchemy models, and Alembic migrations.
+- `frontend/` contains the React and TypeScript operator console served at `/console/`.
 
-The Hub backend will own user/session authentication, team-to-tenant resolution, tool policy, quotas, backend routing with MCP session affinity, backend credential brokerage, and append-only audit attribution. The frontend will manage those resources only through the administration API.
+The implemented slice supports operator login, overview health, tenant listing, platform-administrator tenant creation, ETag-protected tenant updates, and explicit loading, empty, denied, and unavailable states. The remaining team, policy, quota, Scholar routing, DSH capability, and MCP gateway surfaces remain defined in `docs/proxy-hub.md` and `docs/proxy-hub-console.md`.
 
 Neither side will own corpus parsing, graph or vector queries, embeddings, research workflows, or the DSH user interface.
+
+Local deployment instructions are in `infra/proxy-hub/README.md`.
