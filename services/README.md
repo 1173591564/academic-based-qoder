@@ -6,4 +6,4 @@ This repository is the backend workspace for the academic product. Service direc
 - `proxy-hub/backend/`: the Phase Two authentication, policy, routing, quota, audit, and administration API.
 - `proxy-hub/frontend/`: the operator-facing web administration console.
 
-DeepSeek Harness is maintained in its own repository as the client/user-facing plane.
+DeepSeek Harness is maintained and distributed from its own repository as the user client. Its academic mode consumes these services but is not the Proxy Hub administration frontend.
