@@ -1,13 +1,31 @@
 # Proxy Hub infrastructure
 
-Proxy Hub deployment assets will live here once the interfaces in `docs/proxy-hub.md` and `docs/proxy-hub-console.md` are implemented.
+The local deployment starts an isolated PostgreSQL control database, a one-shot Alembic migrator, the FastAPI control-plane service, and an Nginx-served React console.
 
-The target deployment provides:
+## Start locally
 
-- one HTTPS origin for `/console/`, `/v1/session`, `/v1/mcp/`, and `/v1/admin/`;
-- a control-plane PostgreSQL database isolated from Scholar databases;
-- deployment secret-manager integration for identity-provider and Scholar credentials;
-- private health, metrics, migration, backup, and restore access;
-- independently configurable retention for audit and operational data.
+Register an OIDC client whose callback is `http://localhost:8080/auth/callback`, copy `.env.example` to `.env`, replace its placeholder values, then run:
+
+```sh
+docker compose --env-file infra/proxy-hub/.env \
+  -f infra/proxy-hub/compose.yml up --build
+```
+
+Open `http://localhost:8080/console/`. The subject named by `PROXY_HUB_BOOTSTRAP_PLATFORM_ADMIN_SUBJECTS` receives the initial `platform_admin` role on its first successful OIDC callback.
+
+The Nginx ingress exposes `/console/`, `/auth/*`, and `/v1/*`. Private health routes and PostgreSQL are available only on the Compose network.
+
+## Operations
+
+Apply migrations as a one-shot operation before replacing API instances:
+
+```sh
+docker compose --env-file infra/proxy-hub/.env \
+  -f infra/proxy-hub/compose.yml run --rm migrate
+```
+
+Back up the control plane with `pg_dump` and restore only into an empty, access-controlled control-plane PostgreSQL instance. Audit rows are append-only application records and must use retention and backup policies independent from operational logs.
+
+Production deployments must terminate HTTPS at the same origin, set `PROXY_HUB_ENVIRONMENT=production`, inject the OIDC client secret through the deployment secret facility, keep `/private/*` inaccessible from public ingress, and run migrations as a separate release operation. The local Compose file is not a high-availability production topology.
 
 Scholar database credentials, corpus volumes, parsing jobs, and vector-index assets must not be added to this directory.

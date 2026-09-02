@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, dev]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, dev]
 
 jobs:
   test:
@@ -42,3 +42,76 @@ jobs:
       - name: Verify MCP import
         run: |
           python -c "from scholar_mcp.server import mcp; print('MCP server OK')"
+
+  proxy-hub-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Proxy Hub backend
+        run: pip install -e "services/proxy-hub/backend[dev]"
+
+      - name: Check backend
+        working-directory: services/proxy-hub/backend
+        run: |
+          ruff check .
+          ruff format --check .
+          mypy proxy_hub
+          pytest
+
+      - name: Exercise migrations
+        working-directory: services/proxy-hub/backend
+        env:
+          PROXY_HUB_ENVIRONMENT: test
+          PROXY_HUB_DATABASE_URL: sqlite:///migration-test.db
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+  proxy-hub-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19"
+          cache: npm
+          cache-dependency-path: services/proxy-hub/frontend/package-lock.json
+
+      - name: Install Proxy Hub frontend
+        working-directory: services/proxy-hub/frontend
+        run: npm ci
+
+      - name: Check frontend
+        working-directory: services/proxy-hub/frontend
+        run: |
+          npm test
+          npm run typecheck
+          npm run build
+          npm audit --audit-level=high
+
+      - name: Validate local deployment
+        env:
+          PROXY_HUB_DATABASE_PASSWORD: ci-password
+          PROXY_HUB_PORT: "18080"
+          PROXY_HUB_OIDC_ISSUER_URL: https://identity.example.test
+          PROXY_HUB_OIDC_CLIENT_ID: ci-client
+          PROXY_HUB_OIDC_CLIENT_SECRET: ci-secret
+        run: |
+          cleanup() {
+            docker compose -f infra/proxy-hub/compose.yml down -v
+          }
+          trap cleanup EXIT
+          docker compose -f infra/proxy-hub/compose.yml config --quiet
+          docker compose -f infra/proxy-hub/compose.yml up --build -d --wait
+          test "$(curl -sS -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:18080/console/)" = 200
+          test "$(curl -sS -o /tmp/proxy-hub-auth.json -w '%{http_code}' \
+            http://127.0.0.1:18080/v1/admin/me)" = 401
+          python -c "import json; assert json.load(open('/tmp/proxy-hub-auth.json'))['error']['code'] == 'browser_session_required'"

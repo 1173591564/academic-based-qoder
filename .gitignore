@@ -43,3 +43,7 @@ scholar-studio-*.zip
 .qoder/repowiki/
 
 .pytest_cache/
+
+# JavaScript
+node_modules/
+*.tsbuildinfo
