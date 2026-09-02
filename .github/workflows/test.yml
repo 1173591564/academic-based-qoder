@@ -26,6 +26,9 @@ jobs:
           pip install -e ".[dev]"
           pip install rapidfuzz bibtexparser
 
+      - name: Initialize Scholar runtime directories
+        run: python -m scholar init
+
       - name: Run tests
         run: |
           python -m pytest test/ -v --tb=short
