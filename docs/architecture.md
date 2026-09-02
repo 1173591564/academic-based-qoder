@@ -6,15 +6,15 @@ The academic product is split across two repositories rather than duplicated int
 
 ```text
 deepseek-harness                         academic-based-qoder
-client / user-facing plane              backend / server plane
-├── agent and session runtime            ├── scholar/             research engine
-├── local dashboard and questions        ├── scholar_mcp/         MCP adapter and transport
-├── local skills and prompt assembly     ├── services/            deployable service ownership
-├── MCP client and credential refs       ├── infra/               service-specific deployment
-└── no corpus or tenant policy           └── docs/                backend architecture and APIs
+distributed user client                 server product
+├── agent and session runtime            ├── scholar/             academic data plane
+├── academic workflows and skills        ├── scholar_mcp/         MCP adapter and transport
+├── academic plugins and dashboard       ├── services/            Scholar and Proxy Hub services
+├── MCP client and credential refs       ├── infra/               server deployment
+└── no corpus or admin policy            └── docs/                architecture and APIs
 ```
 
-DeepSeek Harness is the end-user frontend/client plane even when its primary interface is a CLI or local dashboard. This repository owns the server workspace, including the separate Proxy Hub administration frontend used by operators. Scholar corpus operations, database migrations, indexes, and server deployment stay here.
+DeepSeek Harness is the independently distributed user client, not the server product's web frontend. Its academic mode packages the user-facing academic workflows, skills, plugins, local dashboard, and MCP integration. This repository owns the server product, including the Scholar data plane, Proxy Hub backend, and separate Proxy Hub administration frontend used by operators.
 
 ## Current Phase One
 
