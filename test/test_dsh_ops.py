@@ -154,6 +154,29 @@ def test_remote_rows_use_streamable_http():
     assert "command" not in row and "SCHOLAR_HOME" not in row
 
 
+def test_remote_rows_with_token():
+    row = dsh_ops._mcp_scholar_row(
+        "C:/py/python.exe",
+        ARGS["scholar_home"],
+        ARGS["workspace"],
+        False,
+        "http://47.0.0.2:9845/mcp",
+        "",
+        token="abc123",
+    )
+    assert 'Authorization: "Bearer abc123"' in row
+    # 无 token 时不该出现 headers
+    row2 = dsh_ops._mcp_scholar_row(
+        "C:/py/python.exe",
+        ARGS["scholar_home"],
+        ARGS["workspace"],
+        False,
+        "http://47.0.0.2:9845/mcp",
+        "",
+    )
+    assert "headers" not in row2
+
+
 def test_write_preset_remote(tmp_path):
     dsh_ops._write_preset(
         tmp_path, **{**ARGS, "remote_url": "http://127.0.0.1:9845/mcp"}

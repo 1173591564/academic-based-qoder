@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scholar-studio"
-version = "0.2.2"
-description = "AI Academic Research Engine --鐠佺儤鏋冪憴锝嗙€介妴浣虹叀鐠囧棗娴樼拫渚库偓涓稟G 濡偓缁鳖潿鈧礁顒熼張顖氬晸娴ｆ粌鍙忓ù浣衡柤"
+version = "0.2.3"
+description = "AI Academic Research Engine --论文解析、知识图谱、RAG 检索、学术写作全流程"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 readme = "README.md"

@@ -813,15 +813,47 @@ def scholar_interests(
     )
 
 
+def _bearer_token_middleware(token: str):
+    """Bearer token 鉴权中间件（公网部署用）。SSH 隧道模式不设
+    SCHOLAR_MCP_TOKEN，行为不变。"""
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+
+    expected = f"Bearer {token}"
+
+    class _Auth(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.headers.get("authorization", "") != expected:
+                return JSONResponse({"error": "unauthorized"}, status_code=401)
+            return await call_next(request)
+
+    return _Auth
+
+
 def main():
     """stdio 为默认（dsh 本地挂载）；streamable-http 供服务器集中部署
     （队友 MCP over HTTP，数据与索引全部留在服务器，本地零论文数据）。
-    host/port 由 SCHOLAR_MCP_HOST / SCHOLAR_MCP_PORT 控制。"""
+    host/port 由 SCHOLAR_MCP_HOST / SCHOLAR_MCP_PORT 控制；
+    SCHOLAR_MCP_TOKEN 设置后强制 Bearer 鉴权（公网模式）。"""
     transport = os.getenv("SCHOLAR_MCP_TRANSPORT", "stdio")
-    if transport == "streamable-http":
-        mcp.run(transport="streamable-http")
-    else:
+    if transport != "streamable-http":
         mcp.run()
+        return
+
+    token = os.getenv("SCHOLAR_MCP_TOKEN", "")
+    if not token:
+        mcp.run(transport="streamable-http")
+        return
+
+    app = mcp.streamable_http_app()
+    app.add_middleware(_bearer_token_middleware(token))
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1"),
+        port=int(os.getenv("SCHOLAR_MCP_PORT", "8000")),
+    )
 
 
 if __name__ == "__main__":

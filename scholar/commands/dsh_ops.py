@@ -95,19 +95,23 @@ def _mcp_scholar_row(
     dev_tree: bool,
     remote_url: str | None,
     indent: str,
+    token: str | None = None,
 ) -> str:
     """mcp-scholar 插件行。remote_url 非空时走 streamable-http（服务器集中部署，
-    数据零分发），否则 stdio 本地子进程。indent 为行缩进前缀（patch 4 空格、
-    预设 0 空格）。"""
+    数据零分发；token 非空时附 Bearer 鉴权头），否则 stdio 本地子进程。
+    indent 为行缩进前缀（patch 4 空格、预设 0 空格）。"""
     i = indent
     if remote_url:
+        headers = ""
+        if token:
+            headers = f'{i}    headers:\n{i}      Authorization: "Bearer {token}"\n'
         return f"""{i}- id: mcp-scholar
 {i}  name: '@deepseek-ai/dsh-mcp-client'
 {i}  config:
 {i}    serverName: scholar
 {i}    transport: streamable-http
 {i}    url: "{remote_url}"
-{i}    failOnStartupError: false
+{headers}{i}    failOnStartupError: false
 """
     env_lines = [
         f"{i}    env:",
@@ -135,12 +139,19 @@ def _build_patch_block(
     dev_tree: bool,
     workspace: Path | None = None,
     remote_url: str | None = None,
+    token: str | None = None,
 ) -> str:
     if workspace is None:
         workspace = scholar_home
     if remote_url:
         mcp_row = _mcp_scholar_row(
-            python_cmd, scholar_home, workspace, dev_tree, remote_url, "    "
+            python_cmd,
+            scholar_home,
+            workspace,
+            dev_tree,
+            remote_url,
+            "    ",
+            token=token,
         )
         skills_dir = Path(scholar_home) / ".scholar" / "skills"
         return f"""{MARKER}
@@ -259,13 +270,20 @@ def _build_preset_rows(
     plugin_url: str,
     dev_tree: bool,
     remote_url: str | None = None,
+    token: str | None = None,
 ) -> str:
     """预设组装的 scholar 段——结构与 headless patch 同构，两处差异：
     SCHOLAR_WORKSPACE 静态烘焙（预设组装每进程装载一次，cwd 语义失效）；
     结构与 standard 预设的裸 skill-filesystem 行保持一致（登记进分层
     registry，不发布进程级服务，无需 isolate realm）。"""
     mcp_row = _mcp_scholar_row(
-        python_cmd, scholar_home, workspace, dev_tree, remote_url, ""
+        python_cmd,
+        scholar_home,
+        workspace,
+        dev_tree,
+        remote_url,
+        "",
+        token=token,
     )
     skills_dir = Path(scholar_home) / ".scholar" / "skills"
     return f"""# ── scholar（由 `scholar init-dsh` 生成/刷新，勿手改）──────────────────────
@@ -294,6 +312,7 @@ def _write_preset(
     plugin_url: str,
     dev_tree: bool,
     remote_url: str | None = None,
+    token: str | None = None,
 ) -> str:
     """写用户级 academic 预设（standard 基座 + scholar 段，整文件重写、幂等）。"""
     base = _preset_base_template().read_text(encoding="utf-8")
@@ -304,6 +323,7 @@ def _write_preset(
         plugin_url,
         dev_tree,
         remote_url=remote_url,
+        token=token,
     )
     pdir = _preset_dir(dsh_home)
     pdir.mkdir(parents=True, exist_ok=True)
@@ -394,8 +414,13 @@ def init_dsh(
         None,
         "--remote",
         help="服务器集中模式：scholar_mcp 的 streamable-http URL "
-        "（如 http://127.0.0.1:9845/mcp，经 SSH 隧道）。本地无论文数据、"
-        "无需 PG 凭据；服务器由管理员部署（scholar_mcp + 数据私有）",
+        "（如 http://<服务器IP>:9845/mcp 或隧道 http://127.0.0.1:9845/mcp）。"
+        "本地无论文数据、无需 PG 凭据；服务器由管理员部署（scholar_mcp + 数据私有）",
+    ),
+    token: str = typer.Option(
+        None,
+        "--token",
+        help="服务器 Bearer token（管理员私发；服务器设了 SCHOLAR_MCP_TOKEN 时必填）",
     ),
 ):
     """把 Scholar Studio 挂进 dsh（学术模式预设 + headless one-shot patch）。"""
@@ -426,6 +451,7 @@ def init_dsh(
         dev_tree,
         workspace=workspace,
         remote_url=remote,
+        token=token,
     )
     if check:
         console.print(Panel(block, title=f"{patch} (preview)", border_style="cyan"))
@@ -445,6 +471,7 @@ def init_dsh(
         _plugin_url(plugin),
         dev_tree,
         remote_url=remote,
+        token=token,
     )
     console.print(f"[green][OK][/] academic preset written @ {pdir}")
     for r in _ensure_rules(scholar_home):
@@ -454,6 +481,8 @@ def init_dsh(
     console.print("  Web UI → 设置 → Agent 预设 → 自定义 →「学术模式」开新会话")
     if remote:
         console.print(f"\n[bold]remote 模式[/]：MCP 端点 = {remote}")
-        console.print("隧道示例：ssh -N -L 9845:127.0.0.1:9845 server-47")
+        console.print("隧道模式示例：ssh -N -L 9845:127.0.0.1:9845 server-47")
+        if token:
+            console.print("Bearer 鉴权已配置（token 写入本地预设/patch，勿外传）")
     console.print("\n卸载：")
     console.print("  scholar init-dsh --uninstall")
