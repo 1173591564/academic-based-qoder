@@ -1,11 +1,11 @@
-[build-system]
+﻿[build-system]
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "scholar-studio"
-version = "0.2.0"
-description = "AI Academic Research Engine --论文解析、知识图谱、RAG 检索、学术写作全流程"
+version = "0.2.1"
+description = "AI Academic Research Engine --璁烘枃瑙ｆ瀽銆佺煡璇嗗浘璋便€丷AG 妫€绱€佸鏈啓浣滃叏娴佺▼"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 readme = "README.md"
