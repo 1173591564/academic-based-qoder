@@ -7,12 +7,90 @@ utilities, helpers. Maintenance tools live in the CLI and are not tested here.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
 
 REAL_3DGS = "01KT6MTARQMB6JVJNZA9PJVTS2"  # 3D Gaussian Splatting (2023)
 REAL_BERT = "01KT6MTBK1PQMNZM8ZYQPTVN6C"  # BERT
+
+
+@pytest.fixture(autouse=True)
+def hermetic_corpus(tmp_path, monkeypatch):
+    from scholar import config, graph_mem
+    from scholar.id_resolver import get_resolver
+
+    parsed = tmp_path / "output" / "parsed"
+    parsed.mkdir(parents=True)
+    papers = [
+        {
+            "paper_id": REAL_3DGS,
+            "title": "3D Gaussian Splatting Optimization",
+            "authors": ["Fixture Author"],
+            "year": 2023,
+            "venue": "FixtureConf",
+            "abstract": (
+                "Gaussian splatting optimization renders radiance fields efficiently "
+                "with differentiable training."
+            ),
+            "sections": [
+                {
+                    "heading": heading,
+                    "level": 1,
+                    "content": f"{heading} fixture content " + ("detail " * 30),
+                }
+                for heading in [
+                    "Introduction",
+                    "Related Work",
+                    "Training Overview",
+                    "Training Data",
+                    "Method",
+                    "Evaluation",
+                    "Limitations",
+                    "Optimization",
+                ]
+            ],
+            "citations": ["BERT Pre-training of Deep Bidirectional Transformers"],
+            "tags": {"methods": ["Gaussian Splatting"]},
+        },
+        {
+            "paper_id": REAL_BERT,
+            "title": "BERT Pre-training of Deep Bidirectional Transformers",
+            "authors": ["Fixture Author"],
+            "year": 2019,
+            "venue": "FixtureConf",
+            "abstract": "Transformer attention pre-training for language understanding.",
+            "sections": [
+                {
+                    "heading": "Transformer",
+                    "level": 1,
+                    "content": "Transformer fixture content " + ("detail " * 30),
+                }
+            ],
+            "citations": [],
+            "tags": {"methods": ["Transformer"]},
+        },
+    ]
+    for paper in papers:
+        (parsed / f"{paper['paper_id']}.json").write_text(
+            json.dumps(paper), encoding="utf-8"
+        )
+    output = tmp_path / "output"
+    index = output / "index"
+    monkeypatch.setattr(config, "PARSED_DIR", parsed)
+    monkeypatch.setattr(config, "OUTPUT_DIR", output)
+    monkeypatch.setattr(config, "INTERESTS_FILE", output / "research-interests.json")
+    monkeypatch.setattr(graph_mem, "INDEX_DIR", index)
+    monkeypatch.setattr(graph_mem, "GRAPH_CACHE", index / "graph.json")
+    monkeypatch.setattr(graph_mem, "REFS_SIDECAR", index / "refs-resolved.json")
+    monkeypatch.setattr(graph_mem, "LEAN_FILE", tmp_path / "missing.lean")
+    monkeypatch.setattr("scholar._state._state", None)
+    get_resolver().refresh()
+    graph_mem.reset_cache()
+    yield
+    get_resolver().refresh()
+    graph_mem.reset_cache()
 
 
 # ── L1: lexical search ──────────────────────────────────────────────────────
@@ -71,7 +149,7 @@ class TestVecSearch:
         from scholar_mcp.server import scholar_vec_search
 
         result = scholar_vec_search("")
-        assert "unavailable" in result or "sync" in result or "matches" in result
+        assert result == "No semantic query provided."
 
 
 # ── L2: digest ──────────────────────────────────────────────────────────────
@@ -223,7 +301,7 @@ class TestUtilities:
         from scholar_mcp.server import scholar_list_papers
 
         result = scholar_list_papers()
-        assert "Parsed Papers" in result and len(result) > 50
+        assert "Parsed Papers (2 shown, total 2" in result
 
     def test_list_papers_year_filter(self):
         from scholar_mcp.server import scholar_list_papers
@@ -253,6 +331,29 @@ class TestUtilities:
 
         result = scholar_read_output_file("../outside.txt")
         assert "Access denied" in result
+
+    def test_read_output_file_rejects_absolute_and_sibling_prefix_paths(
+        self, tmp_path, monkeypatch
+    ):
+        from scholar_mcp import server
+
+        output = tmp_path / "output"
+        sibling = tmp_path / "output-secret"
+        output.mkdir(exist_ok=True)
+        sibling.mkdir()
+        secret = sibling / "secret.txt"
+        secret.write_text("not-readable", encoding="utf-8")
+        monkeypatch.setattr(server.scholar_config, "OUTPUT_DIR", output)
+        assert "Access denied" in server.scholar_read_output_file(str(secret))
+        assert "Access denied" in server.scholar_read_output_file(
+            "../output-secret/secret.txt"
+        )
+
+    def test_read_skill_rejects_path_traversal(self):
+        from scholar_mcp.server import read_skill
+
+        assert "not found" in read_skill("../research-survey").lower()
+        assert "not found" in read_skill("research-survey/../../dsh").lower()
 
     def test_arxiv_search_tolerant(self):
         from scholar_mcp.server import scholar_arxiv_search
@@ -335,3 +436,184 @@ def test_tool_surface_is_capped():
         "scholar_get_paper_card",
     ):
         assert gone not in names
+
+
+def test_bearer_middleware_rejects_missing_and_wrong_tokens():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+    from scholar_mcp.server import _bearer_token_middleware
+
+    async def endpoint(_request):
+        return JSONResponse({"ok": True})
+
+    app = Starlette(routes=[Route("/mcp", endpoint, methods=["POST"])])
+    app.add_middleware(_bearer_token_middleware("expected-token"))
+    client = TestClient(app)
+    assert client.post("/mcp").status_code == 401
+    assert (
+        client.post("/mcp", headers={"Authorization": "Bearer wrong-token"}).status_code
+        == 401
+    )
+    response = client.post(
+        "/mcp", headers={"Authorization": "Bearer expected-token"}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_streamable_http_requires_token_by_default(monkeypatch):
+    from scholar_mcp import server
+
+    monkeypatch.setenv("SCHOLAR_MCP_TRANSPORT", "streamable-http")
+    monkeypatch.setenv("SCHOLAR_MCP_HOST", "127.0.0.1")
+    monkeypatch.delenv("SCHOLAR_MCP_TOKEN", raising=False)
+    monkeypatch.delenv("SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK", raising=False)
+    import pytest
+
+    with pytest.raises(RuntimeError, match="required for streamable HTTP"):
+        server.main()
+
+
+def _sse_json(response):
+    payload = next(
+        line.removeprefix("data: ")
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    )
+    return json.loads(payload)
+
+
+def test_real_streamable_http_auth_initialize_tools_and_corpus(monkeypatch):
+    from starlette.testclient import TestClient
+    from scholar_mcp.server import _bearer_token_middleware, mcp
+
+    monkeypatch.setattr(
+        "scholar_mcp.server.vecstore.search_papers_semantic",
+        lambda _question, k: [
+            {"paper_id": REAL_3DGS, "similarity": 0.91}
+        ][:k],
+    )
+    app = mcp.streamable_http_app()
+    app.add_middleware(_bearer_token_middleware("expected-token"))
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+    }
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"},
+        },
+    }
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        assert client.post("/mcp", headers=headers, json=initialize).status_code == 401
+        assert (
+            client.post(
+                "/mcp",
+                headers={**headers, "Authorization": "Bearer wrong-token"},
+                json=initialize,
+            ).status_code
+            == 401
+        )
+        accepted = client.post(
+            "/mcp",
+            headers={**headers, "Authorization": "Bearer expected-token"},
+            json=initialize,
+        )
+        assert accepted.status_code == 200
+        initialized = _sse_json(accepted)
+        assert initialized["result"]["protocolVersion"] == "2025-06-18"
+        session_headers = {
+            **headers,
+            "Authorization": "Bearer expected-token",
+            "mcp-session-id": accepted.headers["mcp-session-id"],
+        }
+        notification = client.post(
+            "/mcp",
+            headers=session_headers,
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        )
+        assert notification.status_code == 202
+        listed = client.post(
+            "/mcp",
+            headers=session_headers,
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+        )
+        assert listed.status_code == 200
+        names = {tool["name"] for tool in _sse_json(listed)["result"]["tools"]}
+        assert names == {
+            "scholar_search",
+            "scholar_vec_search",
+            "scholar_info",
+            "scholar_section",
+            "scholar_passages",
+            "scholar_cite_network",
+            "scholar_graph_query",
+            "scholar_lineage",
+            "scholar_graph_stats",
+            "scholar_list_papers",
+            "scholar_arxiv_search",
+            "read_parsed_paper",
+            "scholar_read_output_file",
+            "read_skill",
+            "scholar_auto_notes",
+            "scholar_interests",
+        }
+        lexical = client.post(
+            "/mcp",
+            headers=session_headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "scholar_search",
+                    "arguments": {"query": "gaussian splatting optimization"},
+                },
+            },
+        )
+        assert lexical.status_code == 200
+        lexical_text = _sse_json(lexical)["result"]["content"][0]["text"]
+        assert REAL_3DGS in lexical_text
+        semantic = client.post(
+            "/mcp",
+            headers=session_headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "scholar_vec_search",
+                    "arguments": {
+                        "question": "efficient differentiable radiance rendering"
+                    },
+                },
+            },
+        )
+        assert semantic.status_code == 200
+        semantic_text = _sse_json(semantic)["result"]["content"][0]["text"]
+        assert "Semantic matches" in semantic_text
+        assert REAL_3DGS in semantic_text
+
+
+def test_load_parsed_rejects_unsafe_identifier(tmp_path):
+    from scholar import db
+
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"title":"secret"}', encoding="utf-8")
+    parsed = tmp_path / "parsed"
+    parsed.mkdir()
+    assert db.load_parsed("../outside", parsed) is None
+    assert db.load_parsed(str(Path("/tmp/absolute")), parsed) is None
+    malformed = parsed / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    assert db.load_parsed("malformed", parsed) is None
+    symlink = parsed / "linked.json"
+    symlink.symlink_to(outside)
+    assert db.load_parsed("linked", parsed) is None

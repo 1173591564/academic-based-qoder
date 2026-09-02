@@ -24,6 +24,14 @@ class EmbedUnavailable(RuntimeError):
     """Raised when no embedding provider/key is configured or a call fails."""
 
 
+class IndexUnavailable(RuntimeError):
+    """Raised when the required vector table is absent or empty."""
+
+
+class DatabaseUnavailable(RuntimeError):
+    """Raised when the vector database cannot be queried."""
+
+
 def _connect():
     import psycopg2
 
@@ -34,6 +42,37 @@ def _connect():
         user=config.PG_USER,
         password=config.PG_PASS,
     )
+
+
+def _open_index(table: str):
+    try:
+        conn = _connect()
+        cur = conn.cursor()
+        cur.execute("SELECT to_regclass(%s)", (table,))
+        if cur.fetchone()[0] is None:
+            raise IndexUnavailable(f"{table} index is not initialized")
+        cur.execute(f"SELECT EXISTS (SELECT 1 FROM {table})")
+        if not cur.fetchone()[0]:
+            raise IndexUnavailable(f"{table} index is empty")
+        return conn
+    except IndexUnavailable:
+        if "conn" in locals():
+            conn.close()
+        raise
+    except Exception as error:
+        if "conn" in locals():
+            conn.close()
+        raise DatabaseUnavailable("vector database is unavailable") from error
+
+
+def _embedding(embed_fn, text: str) -> list:
+    try:
+        embedding = embed_fn(text)
+    except Exception as error:
+        raise EmbedUnavailable("embedding provider is unavailable") from error
+    if not embedding:
+        raise EmbedUnavailable("embedding provider is unavailable")
+    return embedding
 
 
 def _ensure_table(cur) -> None:
@@ -144,15 +183,11 @@ def search_papers_semantic(query: str, k: int = 8, embed_fn=None) -> list[dict]:
     """Question → paper-level cosine top-k. Rows: {paper_id, similarity}."""
     if not query or not query.strip():
         return []
-    embed_fn = embed_fn or rag.get_embedding
-    emb = embed_fn(query[:2000])
-    if not emb:
-        raise EmbedUnavailable(
-            "embedding provider unavailable (check SCHOLAR_EMBEDDING_API_KEY)"
-        )
-    emb_str = "[" + ",".join(str(x) for x in emb) + "]"
-    conn = _connect()
+    conn = _open_index("paper_vectors")
     try:
+        embed_fn = embed_fn or rag.get_embedding
+        emb = _embedding(embed_fn, query[:2000])
+        emb_str = "[" + ",".join(str(x) for x in emb) + "]"
         cur = conn.cursor()
         cur.execute(
             """
@@ -181,25 +216,21 @@ def search_passages(
     """Passage-level cosine search with optional scoping filters."""
     if not query or not query.strip():
         return []
-    embed_fn = embed_fn or rag.get_embedding
-    emb = embed_fn(query[:2000])
-    if not emb:
-        raise EmbedUnavailable(
-            "embedding provider unavailable (check SCHOLAR_EMBEDDING_API_KEY)"
-        )
-    emb_str = "[" + ",".join(str(x) for x in emb) + "]"
-    where = []
-    params: list = []
-    if paper_id:
-        where.append("paper_id = %s")
-        params.append(paper_id)
-    if section:
-        where.append("section ILIKE %s")
-        params.append(f"%{section}%")
-    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-    params = [emb_str, emb_str, *params, k]
-    conn = _connect()
+    conn = _open_index("chunks")
     try:
+        embed_fn = embed_fn or rag.get_embedding
+        emb = _embedding(embed_fn, query[:2000])
+        emb_str = "[" + ",".join(str(x) for x in emb) + "]"
+        where = []
+        params: list = []
+        if paper_id:
+            where.append("paper_id = %s")
+            params.append(paper_id)
+        if section:
+            where.append("section ILIKE %s")
+            params.append(f"%{section}%")
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        params = [emb_str, emb_str, *params, k]
         cur = conn.cursor()
         cur.execute(
             f"""

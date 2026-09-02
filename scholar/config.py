@@ -152,22 +152,12 @@ DIGESTS_DIR = OUTPUT_DIR / "digests"
 LOGS_DIR = WORKSPACE_DIR / "output" / "logs"
 INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 
-# Ensure output directories exist (parents=True for fresh-clone safety)
-for d in [
-    PARSED_DIR,
-    NOTES_DIR,
-    DRAFTS_DIR,
-    BIB_DIR,
-    EXPERIMENTS_DIR,
-    DATASETS_DIR,
-    PDFS_DIR,
-    DIGESTS_DIR,
-    LOGS_DIR,
-]:
-    d.mkdir(parents=True, exist_ok=True)
-
 # Running mode flags
 IS_FROZEN = getattr(sys, "frozen", False)
+IS_SOURCE_TREE = (
+    (Path(__file__).resolve().parent.parent / "pyproject.toml").is_file()
+    and (Path(__file__).resolve().parent.parent / ".git").exists()
+)
 
 
 def init_scholar_home() -> dict:

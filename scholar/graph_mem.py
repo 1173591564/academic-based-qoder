@@ -16,6 +16,7 @@ metrics); they live in `unresolved` and are surfaced by the citation queries.
 import json
 import re
 import threading
+from hashlib import sha256
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -232,8 +233,10 @@ class GraphMem:
         innovations: list,
         replaces: list,
         source_files: int = 0,
+        source_fingerprint: str = "",
     ):
-        self.source_files = source_files  # parsed 文件数（缓存新鲜度判据）
+        self.source_files = source_files
+        self.source_fingerprint = source_fingerprint
         self.papers = papers  # ulid -> {title, year, venue}
         self.g = nx.DiGraph()  # real papers + resolved CITES only
         for ulid, meta in papers.items():
@@ -352,10 +355,23 @@ class GraphMem:
         return sorted(out, key=lambda x: x["year"])
 
 
+def _source_fingerprint(parsed_dir: Path) -> str:
+    digest = sha256()
+    paths = sorted(parsed_dir.glob("*.json")) if parsed_dir.exists() else []
+    paths.extend(path for path in (REFS_SIDECAR, LEAN_FILE) if path.exists())
+    for path in paths:
+        stat = path.stat()
+        digest.update(str(path.resolve()).encode("utf-8"))
+        digest.update(str(stat.st_size).encode("ascii"))
+        digest.update(str(stat.st_mtime_ns).encode("ascii"))
+    return digest.hexdigest()
+
+
 def build_graph(parsed_dir: Path | None = None) -> GraphMem:
     """Build the graph from parsed JSON (source of truth)."""
     parsed_dir = Path(parsed_dir) if parsed_dir else config.PARSED_DIR
     source_files = len(list(parsed_dir.glob("*.json"))) if parsed_dir.exists() else 0
+    source_fingerprint = _source_fingerprint(parsed_dir)
     papers: dict = {}
     raw_citations: dict[str, list] = {}
     for f in sorted(parsed_dir.glob("*.json")):
@@ -411,6 +427,7 @@ def build_graph(parsed_dir: Path | None = None) -> GraphMem:
         _load_innovations(),
         _load_replacements(),
         source_files=source_files,
+        source_fingerprint=source_fingerprint,
     )
 
 
@@ -418,6 +435,7 @@ def _serialize(gm: GraphMem) -> dict:
     return {
         "builtAt": datetime.now(timezone.utc).isoformat(),
         "sourceFiles": gm.source_files,
+        "sourceFingerprint": gm.source_fingerprint,
         "papers": gm.papers,
         "cites": [[a, b] for a, b in gm.g.edges],
         "unresolved": gm.unresolved,
@@ -440,22 +458,38 @@ def _deserialize(payload: dict) -> GraphMem:
         [tuple(r) for r in (payload.get("replaces") or [])],
     )
     gm.source_files = int(payload.get("sourceFiles") or 0)
+    gm.source_fingerprint = str(payload.get("sourceFingerprint") or "")
     return gm
 
 
 def ensure_graph(force: bool = False) -> GraphMem:
-    """Load cached graph; rebuild when parsed file count changed or force=True."""
+    """Load cached graph; rebuild when source files change or force=True."""
     global _cache
     n = len(list(config.PARSED_DIR.glob("*.json"))) if config.PARSED_DIR.exists() else 0
-    if _cache is not None and not force and _cache.source_files == n:
+    fingerprint = _source_fingerprint(config.PARSED_DIR)
+    if (
+        _cache is not None
+        and not force
+        and _cache.source_files == n
+        and _cache.source_fingerprint == fingerprint
+    ):
         return _cache
     with _lock:
-        if _cache is not None and not force and _cache.source_files == n:
+        if (
+            _cache is not None
+            and not force
+            and _cache.source_files == n
+            and _cache.source_fingerprint == fingerprint
+        ):
             return _cache
         if not force and GRAPH_CACHE.exists():
             try:
                 payload = json.loads(GRAPH_CACHE.read_text(encoding="utf-8"))
-                if payload.get("sourceFiles") == n and payload.get("papers"):
+                if (
+                    payload.get("sourceFiles") == n
+                    and payload.get("sourceFingerprint") == fingerprint
+                    and payload.get("papers")
+                ):
                     _cache = _deserialize(payload)
                     return _cache
             except Exception:

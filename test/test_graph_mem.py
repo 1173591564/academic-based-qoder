@@ -234,6 +234,15 @@ def test_ensure_graph_rebuild_on_count_change(parsed_dir):
     assert graph_mem.GRAPH_CACHE.read_text(encoding="utf-8") != built_at_1
 
 
+def test_ensure_graph_rebuilds_when_existing_source_changes(parsed_dir):
+    _write_paper(parsed_dir, "01KA", "Before")
+    first = ensure_graph(force=True)
+    assert first.papers["01KA"]["title"] == "Before"
+    _write_paper(parsed_dir, "01KA", "After")
+    second = ensure_graph()
+    assert second.papers["01KA"]["title"] == "After"
+
+
 def test_lean_loaders_fallback(tmp_path):
     inns = graph_mem._load_innovations(tmp_path / "missing.lean")
     assert {"id": "Transformer", "year": 2017} in [dict(i, **{}) for i in inns] or any(

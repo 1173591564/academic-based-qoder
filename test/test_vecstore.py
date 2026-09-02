@@ -23,7 +23,11 @@ class FakeCursor:
 
     def execute(self, sql, params=None):
         self.executed.append((sql, params))
-        if "SELECT paper_id, content_md5" in sql:
+        if "SELECT to_regclass" in sql:
+            self._last = [("available",)]
+        elif "SELECT EXISTS" in sql:
+            self._last = [(True,)]
+        elif "SELECT paper_id, content_md5" in sql:
             self._last = [(pid, md5) for pid, md5 in self.parent.existing.items()]
         elif "FROM paper_vectors" in sql and "similarity" in sql:
             self._last = [("01KA", 0.9123), ("01KB", 0.8001)]
@@ -34,6 +38,10 @@ class FakeCursor:
 
     def fetchall(self):
         return getattr(self, "_last", [])
+
+    def fetchone(self):
+        rows = getattr(self, "_last", [])
+        return rows[0] if rows else None
 
     def close(self):
         pass
@@ -170,7 +178,11 @@ def test_search_passages_filters(fake_pg):
     sqls = " ".join(sql for sql, _ in fake_pg.cursor_obj.executed)
     assert "paper_id = %s" in sqls and "section ILIKE %s" in sqls
     # 参数顺序：emb, emb, paper_id, section_like, k
-    params = [p for sql, p in fake_pg.cursor_obj.executed if "FROM chunks" in sql][0]
+    params = [
+        p
+        for sql, p in fake_pg.cursor_obj.executed
+        if "FROM chunks" in sql and "similarity" in sql
+    ][0]
     assert params[0].startswith("[") and params[2] == "01KA"
     assert params[3] == "%Opt%" and params[4] == 5
 

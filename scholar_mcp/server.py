@@ -1,7 +1,7 @@
 """
-Scholar Studio MCP Server (v0.2.0)
+Scholar Studio MCP Server (v0.2.3)
 
-Model-facing surface: 15 focused tools organised as a reading ladder.
+Model-facing surface: 16 focused tools organised as a reading ladder.
 
   L1 find papers      scholar_search (lexical) / scholar_vec_search (semantic)
   L2 paper digest     scholar_info (abstract + section TOC)
@@ -22,10 +22,13 @@ dumps require an explicit full=True escape hatch. Maintenance operations
 Run: python -m scholar_mcp
 """
 
+import hmac
+import ipaddress
 import json
+import logging
+import os
 import re
 import subprocess
-import os
 import sys
 from pathlib import Path
 
@@ -41,7 +44,7 @@ mcp = FastMCP(
     host=os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1"),
     port=int(os.getenv("SCHOLAR_MCP_PORT", "8000")),
     instructions=(
-        "Academic research toolkit over a local paper library (563+ AI papers). "
+        "Academic research toolkit over the server's configured corpus. "
         "Reading ladder: search/vec-search for relevance → scholar_info for "
         "abstract+TOC → scholar_section for the sections you actually need. "
         "Never read full papers unless truly required."
@@ -49,6 +52,7 @@ mcp = FastMCP(
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 
 # ─── shared helpers ─────────────────────────────────────────────────────────
 
@@ -56,6 +60,7 @@ MAX_SECTION_CHARS = 16_000
 MAX_FULL_JSON_CHARS = 200_000
 ABSTRACT_SNIPPET = 200  # L1 hit lines
 DIGEST_ABSTRACT = 400  # L2 digest
+SKILL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 def _resolve(paper_id: str) -> str:
@@ -90,8 +95,8 @@ def _run_scholar(*args: str, timeout: int = 120) -> str:
     except subprocess.TimeoutExpired:
         return f"[ERROR] Command timed out after {timeout}s: {' '.join(args)}"
     output = result.stdout
-    if result.returncode != 0 and result.stderr:
-        output += f"\n[ERROR] {result.stderr}"
+    if result.returncode != 0:
+        return f"[ERROR] Scholar command failed with exit code {result.returncode}."
     return output.strip()
 
 
@@ -219,17 +224,21 @@ def scholar_vec_search(question: str, k: int = 8) -> str:
         question: The user's academic question in natural language
         k: Max papers to return (default 8)
     """
+    if not question or not question.strip():
+        return "No semantic query provided."
     try:
         rows = vecstore.search_papers_semantic(question, k=max(1, min(k, 20)))
-    except vecstore.EmbedUnavailable as e:
-        return f"Semantic search unavailable: {e}. Fall back to scholar_search."
-    except Exception as e:
-        return f"Semantic search failed: {e}. Fall back to scholar_search."
+    except vecstore.IndexUnavailable:
+        return "Semantic search unavailable: the server vector index is not ready."
+    except vecstore.EmbedUnavailable:
+        return "Semantic search unavailable: the server embedding provider is not ready."
+    except vecstore.DatabaseUnavailable:
+        return "Semantic search unavailable: the server vector database cannot be reached."
+    except Exception as error:
+        logger.warning("semantic search failed (%s)", type(error).__name__)
+        return "Semantic search failed. Fall back to scholar_search."
     if not rows:
-        return (
-            f"No paper vectors yet — run `scholar sync` to build them, "
-            f"or use scholar_search meanwhile."
-        )
+        return "No semantic matches found in the server corpus."
     lines = [f"Semantic matches for: '{question}' ({len(rows)} papers)"]
     for r in rows:
         data = _load_parsed(r["paper_id"]) or {}
@@ -405,10 +414,15 @@ def scholar_passages(
                 paper_id=_resolve(paper_id) if paper_id else None,
                 section=section,
             )
-    except vecstore.EmbedUnavailable as e:
-        return f"Passage search unavailable: {e}. Use scholar_search instead."
-    except Exception as e:
-        return f"Passage search failed: {e}"
+    except vecstore.IndexUnavailable:
+        return "Passage search unavailable: the server passage index is not ready."
+    except vecstore.EmbedUnavailable:
+        return "Passage search unavailable: the server embedding provider is not ready."
+    except vecstore.DatabaseUnavailable:
+        return "Passage search unavailable: the server vector database cannot be reached."
+    except Exception as error:
+        logger.warning("passage search failed (%s)", type(error).__name__)
+        return "Passage search failed."
     if not results:
         return (
             f"No passages for '{query}'. If the vector index is empty, "
@@ -437,8 +451,9 @@ def scholar_cite_network(paper_id: str | None = None) -> str:
     """
     try:
         gm = graph_mem.ensure_graph()
-    except Exception as e:
-        return f"Graph unavailable: {e}"
+    except Exception as error:
+        logger.warning("citation graph unavailable (%s)", type(error).__name__)
+        return "Graph unavailable."
     if not paper_id:
         st = gm.stats()
         lines = [
@@ -487,8 +502,9 @@ def scholar_graph_query(concept: str) -> str:
     """
     try:
         gm = graph_mem.ensure_graph()
-    except Exception as e:
-        return f"Graph unavailable: {e}"
+    except Exception as error:
+        logger.warning("concept graph unavailable (%s)", type(error).__name__)
+        return "Graph unavailable."
     papers = gm.papers_by_concept(concept)
     if not papers:
         return (
@@ -518,8 +534,9 @@ def scholar_lineage(paper_a: str, paper_b: str) -> str:
     """
     try:
         gm = graph_mem.ensure_graph()
-    except Exception as e:
-        return f"Graph unavailable: {e}"
+    except Exception as error:
+        logger.warning("lineage graph unavailable (%s)", type(error).__name__)
+        return "Graph unavailable."
     ua, ub = _resolve(paper_a), _resolve(paper_b)
     result = gm.lineage(ua, ub)
     if result["hops"] < 0:
@@ -541,8 +558,9 @@ def scholar_graph_stats() -> str:
     """Graph statistics: papers, citation edges, refs resolution, concepts, hubs."""
     try:
         gm = graph_mem.ensure_graph()
-    except Exception as e:
-        return f"Graph unavailable: {e}"
+    except Exception as error:
+        logger.warning("graph statistics unavailable (%s)", type(error).__name__)
+        return "Graph unavailable."
     st = gm.stats()
     return (
         f"Papers:            {st['papers']}\n"
@@ -634,8 +652,9 @@ def scholar_arxiv_search(query: str, max_results: int = 10) -> str:
                 f"  {i + 1}. {title[:55]}  {author_str[:30]}  {published}  {arxiv_id}"
             )
         return "\n".join(lines)
-    except Exception as e:
-        return f"arXiv search failed: {e}"
+    except Exception as error:
+        logger.warning("arXiv search failed (%s)", type(error).__name__)
+        return "arXiv search failed."
 
 
 @mcp.tool()
@@ -657,11 +676,12 @@ def read_parsed_paper(paper_id: str, full: bool = False) -> str:
             + "\n\n(reading ladder: use scholar_section for specific "
             "sections instead of full JSON)"
         )
-    path = scholar_config.PARSED_DIR / f"{ulid}.json"
     try:
+        path = dbmod.parsed_path(ulid)
         raw = path.read_text(encoding="utf-8")
-    except Exception as e:
-        return f"Read failed: {e}"
+    except (OSError, ValueError) as error:
+        logger.warning("parsed paper read failed (%s)", type(error).__name__)
+        return "Read failed."
     if len(raw) > MAX_FULL_JSON_CHARS:
         return (
             raw[:MAX_FULL_JSON_CHARS]
@@ -679,10 +699,14 @@ def scholar_read_output_file(path: str) -> str:
     """
     try:
         output_root = (scholar_config.OUTPUT_DIR).resolve()
+        if Path(path).is_absolute():
+            return "Access denied: path must be relative to the output directory"
         full_path = (output_root / path).resolve()
-        if not str(full_path).startswith(str(output_root)):
-            return f"Access denied: path '{path}' resolves outside output directory"
+        if not full_path.is_relative_to(output_root):
+            return "Access denied: path resolves outside the output directory"
         if not full_path.exists():
+            return f"File not found: {path}"
+        if not full_path.is_file():
             return f"File not found: {path}"
         if full_path.stat().st_size > 500_000:
             return (
@@ -690,8 +714,9 @@ def scholar_read_output_file(path: str) -> str:
                 f"Read it in chunks via the workspace file tools."
             )
         return full_path.read_text(encoding="utf-8")
-    except Exception as e:
-        return f"Read output file failed: {e}"
+    except OSError as error:
+        logger.warning("output file read failed (%s)", type(error).__name__)
+        return "Read output file failed."
 
 
 @mcp.tool()
@@ -701,25 +726,30 @@ def read_skill(skill_name: str) -> str:
     Args:
         skill_name: Skill name (e.g., 'paper-deep-dive', 'research-survey')
     """
-    path = PROJECT_ROOT / ".scholar" / "skills" / skill_name / "SKILL.md"
-    if not path.exists():
-        for ide_dir in PROJECT_ROOT.glob(".*/skills/"):
-            candidate = ide_dir / skill_name / "SKILL.md"
-            if candidate.exists():
-                path = candidate
-                break
-    if not path.exists():
-        available = set()
-        scholar_skills = PROJECT_ROOT / ".scholar" / "skills"
-        if scholar_skills.exists():
-            available.update(p.name for p in scholar_skills.iterdir() if p.is_dir())
-        for ide_dir in PROJECT_ROOT.glob(".*/skills/"):
-            if ide_dir.exists():
-                available.update(p.name for p in ide_dir.iterdir() if p.is_dir())
-        return (
-            f"Skill '{skill_name}' not found. Available: {', '.join(sorted(available))}"
-        )
-    return path.read_text(encoding="utf-8")
+    roots = [
+        PROJECT_ROOT / ".scholar" / "skills",
+        scholar_config.SCHOLAR_HOME / ".scholar" / "skills",
+        Path(__file__).resolve().parent.parent / "scholar" / "templates" / "skills",
+    ]
+    available = {
+        child.name
+        for root in roots
+        if root.exists()
+        for child in root.iterdir()
+        if child.is_dir() and SKILL_NAME_PATTERN.fullmatch(child.name)
+    }
+    if not SKILL_NAME_PATTERN.fullmatch(skill_name) or skill_name not in available:
+        return f"Skill not found. Available: {', '.join(sorted(available))}"
+    for root in roots:
+        resolved_root = root.resolve()
+        candidate = (resolved_root / skill_name / "SKILL.md").resolve()
+        if candidate.is_relative_to(resolved_root) and candidate.is_file():
+            try:
+                return candidate.read_text(encoding="utf-8")
+            except OSError as error:
+                logger.warning("skill read failed (%s)", type(error).__name__)
+                return "Skill read failed."
+    return f"Skill not found. Available: {', '.join(sorted(available))}"
 
 
 @mcp.tool()
@@ -742,8 +772,9 @@ def scholar_auto_notes(paper_id: str | None = None, force: bool = False) -> str:
             return json.dumps(result, ensure_ascii=False)
         result = an.generate_all_notes(force=force)
         return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    except Exception as error:
+        logger.warning("auto notes failed (%s)", type(error).__name__)
+        return json.dumps({"error": "auto notes failed"}, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -806,16 +837,16 @@ def scholar_interests(
                 if removed
                 else f"Direction [{category}] not found"
             )
-    except Exception as e:
-        return f"Interests {action} failed: {e}"
+    except Exception as error:
+        logger.warning("interests action failed (%s)", type(error).__name__)
+        return f"Interests {action} failed."
     return (
         f"Unknown action: {action}. Available: list, add, remove, logs, mark-analyzed"
     )
 
 
 def _bearer_token_middleware(token: str):
-    """Bearer token 鉴权中间件（公网部署用）。SSH 隧道模式不设
-    SCHOLAR_MCP_TOKEN，行为不变。"""
+    """Require the configured Bearer token on every HTTP request."""
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
@@ -823,35 +854,73 @@ def _bearer_token_middleware(token: str):
 
     class _Auth(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
-            if request.headers.get("authorization", "") != expected:
+            supplied = request.headers.get("authorization", "")
+            if not hmac.compare_digest(supplied, expected):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
             return await call_next(request)
 
     return _Auth
 
 
+def _loopback_only_middleware():
+    """Reject requests that do not arrive directly through a loopback authority."""
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+
+    class _LoopbackOnly(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            client_host = request.client.host if request.client else ""
+            if not _is_loopback_host(request.url.hostname or ""):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            if not _is_loopback_host(client_host):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            return await call_next(request)
+
+    return _LoopbackOnly
+
+
+def _is_loopback_host(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main():
     """stdio 为默认（dsh 本地挂载）；streamable-http 供服务器集中部署
     （队友 MCP over HTTP，数据与索引全部留在服务器，本地零论文数据）。
     host/port 由 SCHOLAR_MCP_HOST / SCHOLAR_MCP_PORT 控制；
-    SCHOLAR_MCP_TOKEN 设置后强制 Bearer 鉴权（公网模式）。"""
+    HTTP 默认要求 SCHOLAR_MCP_TOKEN；仅显式启用
+    SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK=1 时允许回环无鉴权。"""
     transport = os.getenv("SCHOLAR_MCP_TRANSPORT", "stdio")
-    if transport != "streamable-http":
+    if transport == "stdio":
         mcp.run()
         return
+    if transport != "streamable-http":
+        raise RuntimeError("SCHOLAR_MCP_TRANSPORT must be stdio or streamable-http")
 
+    host = os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1")
     token = os.getenv("SCHOLAR_MCP_TOKEN", "")
+    allow_insecure_loopback = (
+        os.getenv("SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK", "") == "1"
+    )
     if not token:
-        mcp.run(transport="streamable-http")
-        return
+        if not allow_insecure_loopback or not _is_loopback_host(host):
+            raise RuntimeError(
+                "SCHOLAR_MCP_TOKEN is required for streamable HTTP unless explicit "
+                "loopback-only no-auth mode is enabled"
+            )
 
     app = mcp.streamable_http_app()
-    app.add_middleware(_bearer_token_middleware(token))
+    if token:
+        app.add_middleware(_bearer_token_middleware(token))
+    else:
+        app.add_middleware(_loopback_only_middleware())
     import uvicorn
 
     uvicorn.run(
         app,
-        host=os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1"),
+        host=host,
         port=int(os.getenv("SCHOLAR_MCP_PORT", "8000")),
     )
 
