@@ -130,3 +130,35 @@ def sync(
         f"\n[bold green]sync complete[/] in {time.time() - t0:.1f}s "
         f"({len(all_ids)} papers)"
     )
+
+
+@app.command(name="vec-search")
+def vec_search(
+    query: str = typer.Argument(help="自然语言学术问题"),
+    k: int = typer.Option(8, "--k", help="返回条数"),
+):
+    """论文级语义检索（paper_vectors，问题→贡献余弦 top-k）。"""
+    from .. import vecstore as vs
+
+    try:
+        rows = vs.search_papers_semantic(query, k=max(1, min(k, 20)))
+    except vs.EmbedUnavailable as e:
+        console.print(f"[red]语义检索不可用：{e}[/]")
+        raise typer.Exit(2)
+    except Exception as e:
+        console.print(f"[red]检索失败：{e}[/]")
+        raise typer.Exit(1)
+    if not rows:
+        console.print("[yellow]无向量数据——先运行 scholar sync[/]")
+        raise typer.Exit(1)
+    from .._state import init_shared_state, get_state
+
+    init_shared_state()
+    for r in rows:
+        state = get_state()
+        data = state.get_parsed(r["paper_id"]) if state else None
+        title = (data or {}).get("title", "N/A")
+        console.print(
+            f"  [{r['paper_id']}] {title[:70]}  "
+            f"{(data or {}).get('year', '')}  sim={r['similarity']}"
+        )
