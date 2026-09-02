@@ -8,7 +8,7 @@ Scholar Studio 是 Python 学术研究引擎，提供 48-command CLI、16-tool M
 
 DeepSeek Harness 是独立的 client 与用户交互层。本仓库只承载 backend：`scholar/` 负责学术与 data-plane 逻辑，`scholar_mcp/` 负责 MCP adapter，`services/` 定义 deployable ownership，`infra/` 分离 Scholar 与未来 Proxy Hub 的部署资产。
 
-第一阶段保留 authenticated DSH-to-Scholar direct path。第二阶段在本仓库新增独立 Proxy Hub control plane，不把 tenant policy 放进 Scholar，也不把 Hub code 放进 DSH。详见[架构图](docs/architecture.md)与[最小 Proxy Hub 接口](docs/proxy-hub.md)。
+第一阶段保留 authenticated DSH-to-Scholar direct path。第二阶段在本仓库新增 Proxy Hub backend 与同源 operator 管理前端，不把 tenant policy 放进 Scholar，也不把 Hub code 放进 DSH。详见[架构图](docs/architecture.md)、[最小 Proxy Hub 接口](docs/proxy-hub.md)与[管理控制台设计](docs/proxy-hub-console.md)。
 
 ## 安装
 

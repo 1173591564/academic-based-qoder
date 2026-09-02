@@ -8,7 +8,7 @@ Scholar Studio is a Python academic-research engine with a 48-command CLI, a 16-
 
 DeepSeek Harness is the independent client and user-facing plane. This repository contains the backend: `scholar/` owns academic and data-plane logic, `scholar_mcp/` adapts it to MCP, `services/` defines deployable ownership, and `infra/` separates Scholar and future Proxy Hub deployment assets.
 
-Phase One keeps the direct authenticated DSH-to-Scholar path. Phase Two adds Proxy Hub as a separate control-plane service in this repository without moving tenant policy into Scholar or Hub code into DSH. See [the architecture map](docs/architecture.md) and [minimum Proxy Hub interface](docs/proxy-hub.md).
+Phase One keeps the direct authenticated DSH-to-Scholar path. Phase Two adds a Proxy Hub backend and a same-origin operator administration frontend in this repository without moving tenant policy into Scholar or Hub code into DSH. See [the architecture map](docs/architecture.md), [minimum Proxy Hub interface](docs/proxy-hub.md), and [management console design](docs/proxy-hub-console.md).
 
 ## Installation
 
