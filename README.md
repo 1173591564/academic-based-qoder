@@ -4,6 +4,12 @@ English | [中文](README.zh.md)
 
 Scholar Studio is a Python academic-research engine with a 48-command CLI, a 16-tool MCP server, 15 local research skills, lexical and semantic retrieval, an in-memory citation/concept graph, paper parsing, academic writing support, experiment helpers, and optional Lean4 synchronization.
 
+## Architecture
+
+DeepSeek Harness is the independent client and user-facing plane. This repository contains the backend: `scholar/` owns academic and data-plane logic, `scholar_mcp/` adapts it to MCP, `services/` defines deployable ownership, and `infra/` separates Scholar and future Proxy Hub deployment assets.
+
+Phase One keeps the direct authenticated DSH-to-Scholar path. Phase Two adds Proxy Hub as a separate control-plane service in this repository without moving tenant policy into Scholar or Hub code into DSH. See [the architecture map](docs/architecture.md) and [minimum Proxy Hub interface](docs/proxy-hub.md).
+
 ## Installation
 
 Scholar Studio requires Python 3.10 or newer.
@@ -100,6 +106,7 @@ Semantic search reports provider, database, and index unavailability separately 
 
 ```sh
 python -m pip install -e '.[dev]'
+docker compose -f infra/scholar/compose.yml up -d
 pytest -q
 python -m pip wheel . --no-deps -w dist
 ```
@@ -108,4 +115,4 @@ Tests cover path containment, malformed paper data, graph/index invalidation, au
 
 ## Phase boundary
 
-Phase one is a direct authenticated client-to-Scholar-server product. Multi-tenant authorization, team policy, quotas, centralized audit, and corpus isolation are deferred to a separate Proxy Hub.
+Phase one is a direct authenticated client-to-Scholar-server product. Multi-tenant authorization, team policy, quotas, centralized audit, and corpus isolation are deferred to the Proxy Hub control plane.

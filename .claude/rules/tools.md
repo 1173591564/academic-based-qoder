@@ -9,7 +9,7 @@ alwaysApply: true
 **Fallback**: Execute CLI commands via terminal.
 
 ## MCP Server (recommended)
-The scholar MCP server exposes 55 tools. Start it with:
+The scholar MCP server exposes 16 tools. Start it with:
 ```bash
 cd <project-root> && python -m scholar_mcp
 ```
@@ -48,14 +48,14 @@ python -m scholar venue-fix [--apply]     # Fill missing venue (arxiv_id → 'ar
 python -m scholar metadata-enrich [--apply]  # Backfill arxiv_id/DOI/year/venue via arXiv API
 ```
 
-### Graph & Network (requires Neo4j: cd infra && docker compose up -d neo4j)
+### Graph & Network (in-memory; no external graph service required)
 ```bash
 python -m scholar graph-build             # Build citation + concept graph + Lean4 relations
 python -m scholar graph-stats             # Detailed graph stats: centrality, components, isolated
 python -m scholar graph-query <concept>   # Query concept-related papers
 python -m scholar cite-network            # Global citation network stats
 python -m scholar cite-network <paper_id> # Forward/backward citation analysis
-python -m scholar cite-resolve [--apply]  # Resolve citation refs (internal + arXiv + Neo4j nodes)
+python -m scholar cite-resolve [--apply]  # Resolve citation refs (internal + arXiv sidecar)
 ```
 
 ### RAG Semantic Search (requires: set SCHOLAR_EMBEDDING_API_KEY=xxx)

@@ -22,8 +22,6 @@ dumps require an explicit full=True escape hatch. Maintenance operations
 Run: python -m scholar_mcp
 """
 
-import hmac
-import ipaddress
 import json
 import logging
 import os
@@ -38,6 +36,12 @@ from scholar import config as scholar_config
 from scholar import db as dbmod
 from scholar import graph_mem, vecstore
 from scholar._state import init_shared_state, get_state  # noqa: F401 (re-exported)
+from scholar_mcp.transport import (
+    bearer_token_middleware as _bearer_token_middleware,
+    is_loopback_host as _is_loopback_host,
+    loopback_only_middleware as _loopback_only_middleware,
+    run_transport,
+)
 
 mcp = FastMCP(
     "Scholar Studio",
@@ -845,84 +849,13 @@ def scholar_interests(
     )
 
 
-def _bearer_token_middleware(token: str):
-    """Require the configured Bearer token on every HTTP request."""
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.responses import JSONResponse
-
-    expected = f"Bearer {token}"
-
-    class _Auth(BaseHTTPMiddleware):
-        async def dispatch(self, request, call_next):
-            supplied = request.headers.get("authorization", "")
-            if not hmac.compare_digest(supplied, expected):
-                return JSONResponse({"error": "unauthorized"}, status_code=401)
-            return await call_next(request)
-
-    return _Auth
-
-
-def _loopback_only_middleware():
-    """Reject requests that do not arrive directly through a loopback authority."""
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.responses import JSONResponse
-
-    class _LoopbackOnly(BaseHTTPMiddleware):
-        async def dispatch(self, request, call_next):
-            client_host = request.client.host if request.client else ""
-            if not _is_loopback_host(request.url.hostname or ""):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            if not _is_loopback_host(client_host):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            return await call_next(request)
-
-    return _LoopbackOnly
-
-
-def _is_loopback_host(host: str) -> bool:
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def main():
     """stdio 为默认（dsh 本地挂载）；streamable-http 供服务器集中部署
     （队友 MCP over HTTP，数据与索引全部留在服务器，本地零论文数据）。
     host/port 由 SCHOLAR_MCP_HOST / SCHOLAR_MCP_PORT 控制；
     HTTP 默认要求 SCHOLAR_MCP_TOKEN；仅显式启用
     SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK=1 时允许回环无鉴权。"""
-    transport = os.getenv("SCHOLAR_MCP_TRANSPORT", "stdio")
-    if transport == "stdio":
-        mcp.run()
-        return
-    if transport != "streamable-http":
-        raise RuntimeError("SCHOLAR_MCP_TRANSPORT must be stdio or streamable-http")
-
-    host = os.getenv("SCHOLAR_MCP_HOST", "127.0.0.1")
-    token = os.getenv("SCHOLAR_MCP_TOKEN", "")
-    allow_insecure_loopback = (
-        os.getenv("SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK", "") == "1"
-    )
-    if not token:
-        if not allow_insecure_loopback or not _is_loopback_host(host):
-            raise RuntimeError(
-                "SCHOLAR_MCP_TOKEN is required for streamable HTTP unless explicit "
-                "loopback-only no-auth mode is enabled"
-            )
-
-    app = mcp.streamable_http_app()
-    if token:
-        app.add_middleware(_bearer_token_middleware(token))
-    else:
-        app.add_middleware(_loopback_only_middleware())
-    import uvicorn
-
-    uvicorn.run(
-        app,
-        host=host,
-        port=int(os.getenv("SCHOLAR_MCP_PORT", "8000")),
-    )
+    run_transport(mcp)
 
 
 if __name__ == "__main__":

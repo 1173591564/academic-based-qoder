@@ -40,7 +40,7 @@ Lean4 已安装在本地，AiEvolution 项目在 `LEAN/` 目录下。
 - 检查特殊值代入是否成立（如 x=0, x=1）
 
 ### Step 4: 对照 Lean4 已有定义
-检查 Neo4j 中是否有相关 Innovation 节点：
+检查内存图谱中是否有相关 Innovation 节点：
 ```bash
 python -m scholar graph-query <概念名>
 ```

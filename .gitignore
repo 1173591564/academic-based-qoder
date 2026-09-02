@@ -18,8 +18,8 @@ venv/
 Thumbs.db
 
 # Docker volumes
-infra/pgdata/
-infra/neo4jdata/
+infra/scholar/pgdata/
+infra/scholar/neo4jdata/
 
 # Scholar data (papers: PDF + TeX source, too large for GitHub)
 data/papers/

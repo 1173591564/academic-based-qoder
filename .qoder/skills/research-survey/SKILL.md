@@ -52,7 +52,7 @@ python -m scholar arxiv-search "<关键词>" --max 15
 ```bash
 python -m scholar graph-query <概念ID>
 ```
-从已读论文和 Neo4j 概念图谱中提取：
+从已读论文和内存概念图谱中提取：
 - 核心概念和方法（利用 `classify --list-tags` 获取标签体系）
 - 概念之间的 REPLACES 关系（技术演化证据）
 - 时间脉络（按年份排列发展线索）

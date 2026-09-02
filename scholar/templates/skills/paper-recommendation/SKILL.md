@@ -32,7 +32,7 @@ python -m scholar graph-stats
 - **后向引用**：哪些后续论文引用了这篇？（追踪最新进展）
 - **桥接论文**：连接不同子领域的关键论文（扩展视野）
 
-如果 Neo4j 已启动，使用图谱查询：
+使用内存图谱查询：
 ```bash
 python -m scholar graph-query <概念>
 ```

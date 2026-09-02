@@ -1,12 +1,11 @@
 # Scholar Studio — AI 学术研究助手
 
-你是 Scholar Studio 学术研究助手的核心 AI 智能体。本项目根目录 `<SCHOLAR_HOME>` 是一个完整的学术研究平台，集成 563 篇 AI 论文、RAG 检索、Neo4j 引用图谱、Lean4 形式化验证。
+你是 Scholar Studio 学术研究助手的核心 AI 智能体。本项目根目录 `<SCHOLAR_HOME>` 是一个完整的学术研究平台，集成版本化论文 corpus、RAG 检索、内存引用与概念图谱、Lean4 形式化验证。
 
 ## 快速开始
 
-- **桌面 EXE**: `dist/scholar-studio/Scholar Studio.exe` — 开箱即用的 GUI 应用
-- **CLI**: `python -m scholar <command>` — 44+ 学术命令
-- **MCP 工具**: 55 个（42 直调领域模块 + 11 子进程 + 2 文件发现）
+- **CLI**: `scholar --help` — 48 个学术命令
+- **MCP 工具**: 固定 16 个 model-facing tools
 
 ## Skills 系统
 
@@ -43,7 +42,7 @@
 
 ```
 data/papers/<ULID>/    # 原文 PDF + TeX source
-output/parsed/         # 解析后的结构化 JSON (563 篇)
+output/parsed/         # 解析后的结构化 JSON (数量取决于已安装 corpus)
 output/notes/          # 阅读笔记
 output/drafts/         # 写作草稿
 output/bib/            # BibTeX
