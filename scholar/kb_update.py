@@ -308,24 +308,12 @@ def batch_ingest(
             except Exception:
                 pass
 
-            # Step 5: Graph update (best-effort)
-            gdb = None
+            # Step 5: mark graph cache stale (rebuilt wholesale from JSON)
             try:
-                from . import graph_db as gdb_mod
-                gdb = gdb_mod.GraphDB()
-                if gdb.available:
-                    paper_data = json.loads(json_path.read_text(encoding="utf-8"))
-                    gdb_mod.upsert_paper_node(gdb, paper_data)
-                    gdb_mod.upsert_paper_citations(gdb, paper_id, paper_data)
-                    gdb_mod.upsert_paper_concepts(gdb, paper_id, paper_data)
+                from . import graph_mem
+                graph_mem.reset_cache()
             except Exception:
                 pass
-            finally:
-                if gdb is not None:
-                    try:
-                        gdb.close()
-                    except Exception:
-                        pass
 
             # Step 6: RAG reindex (best-effort)
             if config.EMBEDDING_API_KEY:

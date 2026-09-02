@@ -214,10 +214,6 @@ def init_scholar_home() -> dict:
             "SCHOLAR_PG_NAME=scholar\n"
             "SCHOLAR_PG_USER=scholar\n"
             "SCHOLAR_PG_PASS=scholar2024\n\n"
-            "# Neo4j\n"
-            "SCHOLAR_NEO4J_URI=bolt://localhost:7687\n"
-            "SCHOLAR_NEO4J_USER=neo4j\n"
-            "SCHOLAR_NEO4J_PASS=scholar2024\n\n"
             "# RAG Embedding (智谱 API)\n"
             "SCHOLAR_EMBEDDING_PROVIDER=zhipu\n"
             "SCHOLAR_EMBEDDING_MODEL=embedding-2\n"
@@ -438,11 +434,6 @@ PG_PORT = int(os.getenv("SCHOLAR_PG_PORT", "5433"))
 PG_NAME = os.getenv("SCHOLAR_PG_NAME", "scholar")
 PG_USER = os.getenv("SCHOLAR_PG_USER", "scholar")
 PG_PASS = os.getenv("SCHOLAR_PG_PASS", "scholar2024")
-
-# Neo4j: 概念图谱 + 引用网络
-NEO4J_URI = os.getenv("SCHOLAR_NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("SCHOLAR_NEO4J_USER", "neo4j")
-NEO4J_PASS = os.getenv("SCHOLAR_NEO4J_PASS", "scholar2024")
 
 # RAG Embedding (智谱 API)
 EMBEDDING_PROVIDER = os.getenv("SCHOLAR_EMBEDDING_PROVIDER", "zhipu")

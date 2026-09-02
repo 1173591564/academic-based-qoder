@@ -41,3 +41,5 @@ scholar-studio-*.zip
 
 # Qoder IDE auto-generated
 .qoder/repowiki/
+
+.pytest_cache/

@@ -55,15 +55,11 @@ def init():
         console.print("  [yellow][!!][/yellow] PostgreSQL error: {0}".format(e))
 
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            console.print("  [green][OK][/green] Neo4j connected ({0})".format(config.NEO4J_URI))
-            gdb.close()
-        else:
-            console.print("  [yellow][!!][/yellow] Neo4j not available (start Docker?)")
+        from .. import graph_mem
+        gm = graph_mem.ensure_graph()
+        console.print("  [green][OK][/green] Graph cache ({0} papers)".format(len(gm.papers)))
     except Exception as e:
-        console.print("  [yellow][!!][/yellow] Neo4j error: {0}".format(e))
+        console.print("  [yellow][!!][/yellow] Graph: {0}".format(e))
 
     mode = "frozen (.exe)" if config.IS_FROZEN else "development (source)"
     console.print("\n[dim]Mode: {0} | Home: {1}[/dim]".format(mode, home))
@@ -168,15 +164,11 @@ def doctor():
         console.print("  [yellow][!!][/yellow] PostgreSQL error: {0}".format(e))
 
     try:
-        from .. import graph_db
-        gdb = graph_db.GraphDB()
-        if gdb.available:
-            console.print("  [green][OK][/green] Neo4j connected ({0})".format(config.NEO4J_URI))
-            gdb.close()
-        else:
-            console.print("  [yellow][!!][/yellow] Neo4j not available (start Docker?)")
+        from .. import graph_mem
+        gm = graph_mem.ensure_graph()
+        console.print("  [green][OK][/green] Graph cache ({0} papers)".format(len(gm.papers)))
     except Exception as e:
-        console.print("  [yellow][!!][/yellow] Neo4j error: {0}".format(e))
+        console.print("  [yellow][!!][/yellow] Graph: {0}".format(e))
 
     # 4. Check MCP server
     try:
