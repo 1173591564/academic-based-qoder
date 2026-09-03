@@ -2,11 +2,11 @@
 
 import io
 import json
-
 from pathlib import Path
 
-import yaml
+import pytest
 import typer
+import yaml
 from typer.testing import CliRunner
 
 from scholar.commands import dsh_ops
@@ -55,8 +55,7 @@ def test_gateway_login_exchanges_and_stores_capability(tmp_path, monkeypatch):
     monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
     result = invoke_gateway_login(
         [
-            "--code",
-            "enrol-code-1",
+            "--code-stdin",
             "--gateway",
             "https://hub.example.test/v1/mcp/scholar",
             "--scholar-home",
@@ -65,7 +64,8 @@ def test_gateway_login_exchanges_and_stores_capability(tmp_path, monkeypatch):
             str(dsh_home),
             "--workspace",
             str(tmp_path / "workspace"),
-        ]
+        ],
+        input="enrol-code-1\n",
     )
     assert result.exit_code == 0, result.output
     assert captured["url"] == "https://hub.example.test/v1/session"
@@ -100,19 +100,78 @@ def test_gateway_login_surfaces_hub_error(tmp_path, monkeypatch):
     monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
     result = invoke_gateway_login(
         [
-            "--code",
-            "enrol-code-1",
+            "--code-stdin",
             "--gateway",
             "https://hub.example.test/v1/mcp/scholar",
             "--scholar-home",
             str(scholar_home),
             "--dsh-home",
             str(dsh_home),
-        ]
+        ],
+        input="enrol-code-1\n",
     )
     assert result.exit_code != 0
     assert "invalid_credential" in result.output
     assert not (dsh_home / ".credentials.yaml").exists()
+
+
+def test_gateway_login_requires_explicit_secure_gateway(tmp_path):
+    result = invoke_gateway_login(
+        [
+            "--code-stdin",
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(tmp_path / "dsh"),
+        ],
+        input="enrol-code-1\n",
+    )
+    assert result.exit_code != 0
+    assert "需要 --gateway" in result.output
+
+
+def test_gateway_login_rejects_public_http_gateway(tmp_path):
+    result = invoke_gateway_login(
+        [
+            "--code-stdin",
+            "--gateway",
+            "http://192.0.2.10/v1/mcp/scholar",
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(tmp_path / "dsh"),
+        ],
+        input="enrol-code-1\n",
+    )
+    assert result.exit_code != 0
+    assert "must use HTTPS" in result.output
+
+
+def test_gateway_login_prompts_without_echo(monkeypatch):
+    captured = {}
+
+    def fake_getpass(prompt):
+        captured["prompt"] = prompt
+        return "enrol-code-1"
+
+    class FakeTty:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(dsh_ops.sys, "stdin", FakeTty())
+    monkeypatch.setattr(dsh_ops.getpass, "getpass", fake_getpass)
+    assert dsh_ops._read_enrolment_code(False) == "enrol-code-1"
+    assert captured["prompt"] == "请输入一次性 enrolment code: "
+
+
+def test_gateway_login_rejects_implicit_noninteractive_input(monkeypatch):
+    class FakePipe:
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(dsh_ops.sys, "stdin", FakePipe())
+    with pytest.raises(typer.BadParameter, match="--code-stdin"):
+        dsh_ops._read_enrolment_code(False)
 
 
 def test_write_segment_idempotent(tmp_path):

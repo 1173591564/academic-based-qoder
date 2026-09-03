@@ -23,17 +23,18 @@
   scholar init-dsh --uninstall    # 卸载（删 patch 段 + 预设目录）
 """
 
+import getpass
+import ipaddress
 import json
 import os
 import re
 import shutil
 import sys
-import ipaddress
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from urllib.parse import urlparse, urlsplit
 from urllib.error import HTTPError as _HTTPError
 from urllib.error import URLError as _URLError
+from urllib.parse import urlparse, urlsplit
 from urllib.request import Request as _Request
 from urllib.request import urlopen as _urlopen
 
@@ -50,7 +51,6 @@ console = Console()
 MARKER = "# >>> scholar"
 END_MARKER = "# <<< scholar"
 DEFAULT_REMOTE_TOKEN_REF = "SCHOLAR_REMOTE_TOKEN"
-DEFAULT_GATEWAY_URL = "http://47.108.198.147:8081/v1/mcp/scholar"
 _CREDENTIAL_REF = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -292,7 +292,7 @@ def _ensure_scholar_assets(
     return actions
 
 
-def _validated_remote_url(value: str, *, allow_http: bool = False) -> str:
+def _validated_remote_url(value: str) -> str:
     try:
         parsed = urlparse(value)
         hostname = parsed.hostname or ""
@@ -315,12 +315,6 @@ def _validated_remote_url(value: str, *, allow_http: bool = False) -> str:
                 return value
         except ValueError:
             pass
-        if allow_http:
-            console.print(
-                "[yellow]警告：网关为 HTTP。production 模式的 Proxy Hub "
-                "会强制 HTTPS origin，届时请改用 https 地址重跑。[/]"
-            )
-            return value
     raise typer.BadParameter(
         "remote MCP URL must use HTTPS, or HTTP on a numeric loopback address for an SSH tunnel"
     )
@@ -677,16 +671,23 @@ def _exchange_capability(
     return token, expires
 
 
+def _read_enrolment_code(code_stdin: bool) -> str:
+    if code_stdin:
+        return sys.stdin.readline().rstrip("\r\n")
+    if not sys.stdin.isatty():
+        raise typer.BadParameter(
+            "非交互输入必须使用 --code-stdin，避免兑换码被终端回显"
+        )
+    return getpass.getpass("请输入一次性 enrolment code: ").strip()
+
+
 @app.command(name="gateway-login")
 def gateway_login(
-    code: str = typer.Option(
-        None, "--code", help="Proxy Hub 一次性 enrolment 兑换码（管理员发放）"
-    ),
     code_stdin: bool = typer.Option(False, "--code-stdin", help="从标准输入读取兑换码"),
     gateway: str = typer.Option(
         None,
         "--gateway",
-        help="Proxy Hub 网关 MCP URL（默认 http://47.108.198.147:8081/v1/mcp/scholar）",
+        help="Proxy Hub 网关 MCP URL（公网必须使用 HTTPS）",
     ),
     dsh_home: Path = typer.Option(None, "--dsh-home", help="dsh 配置根（默认 ~/.dsh）"),
     scholar_home: Path = typer.Option(None, "--scholar-home", help="知识库根"),
@@ -711,14 +712,11 @@ def gateway_login(
     py = str(python_cmd) if python_cmd else sys.executable
     patch = _patch_path(dsh_home, profile)
     dev_tree = _detect_dev_tree(scholar_home)
-    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL, allow_http=True)
+    if not gateway:
+        raise typer.BadParameter("需要 --gateway 提供 Proxy Hub 网关 MCP URL")
+    gateway_url = _validated_remote_url(gateway)
     token_ref = _validated_credential_ref(token_env)
-    if code_stdin and code:
-        raise typer.BadParameter("--code 与 --code-stdin 二选一")
-    if not code_stdin and not code:
-        raise typer.BadParameter("需要 --code 或 --code-stdin 提供兑换码")
-
-    code_value = sys.stdin.readline().rstrip("\r\n") if code_stdin else code.strip()
+    code_value = _read_enrolment_code(code_stdin)
     if not code_value:
         raise typer.BadParameter("兑换码为空")
 
