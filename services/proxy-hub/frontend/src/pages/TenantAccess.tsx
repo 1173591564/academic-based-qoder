@@ -37,6 +37,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { t } = useI18n();
 
@@ -70,16 +71,24 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
     setError(
       mutationError instanceof ApiError ? mutationError.message : fallback,
     );
+    setErrorRequestId(
+      mutationError instanceof ApiError ? mutationError.requestId : null,
+    );
     if (mutationError instanceof ApiError && mutationError.status === 412) {
       void load();
     }
+  }
+
+  function clearMutationError(): void {
+    setError(null);
+    setErrorRequestId(null);
   }
 
   async function createTeam(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy("team");
-    setError(null);
+    clearMutationError();
     try {
       const result = await api.post<Team>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/teams`,
@@ -102,7 +111,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy("membership");
-    setError(null);
+    clearMutationError();
     try {
       const result = await api.post<Membership>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/memberships`,
@@ -128,7 +137,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy("role");
-    setError(null);
+    clearMutationError();
     try {
       const result = await api.post<RoleBinding>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/role-bindings`,
@@ -156,7 +165,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       return;
     }
     setBusy(team.id);
-    setError(null);
+    clearMutationError();
     try {
       const result = await api.patch<Team>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/teams/${encodeURIComponent(team.id)}`,
@@ -184,7 +193,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       return;
     }
     setBusy(membership.id);
-    setError(null);
+    clearMutationError();
     try {
       const result = await api.patch<Membership>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/memberships/${encodeURIComponent(membership.id)}`,
@@ -207,7 +216,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       return;
     }
     setBusy(membership.id);
-    setError(null);
+    clearMutationError();
     try {
       await api.delete(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/memberships/${encodeURIComponent(membership.id)}`,
@@ -229,7 +238,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       return;
     }
     setBusy(binding.id);
-    setError(null);
+    clearMutationError();
     try {
       await api.delete(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/role-bindings/${encodeURIComponent(binding.id)}`,
@@ -269,7 +278,9 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
-      {error ? <InlineAlert message={error} /> : null}
+      {error ? (
+        <InlineAlert message={error} requestId={errorRequestId} />
+      ) : null}
       <div className="access-grid">
         <section className="panel">
           <div className="panel-heading">
@@ -279,7 +290,11 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             </div>
             <div className="panel-actions">
               <span className="section-count">{state.data.teams.length}</span>
-              <button className="text-button" onClick={() => setModal("team")}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setModal("team")}
+              >
                 {t("New team")}
               </button>
             </div>
@@ -296,8 +311,10 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                   </div>
                   <StatusPill status={team.status} />
                   <button
+                    type="button"
                     className="text-button"
                     disabled={busy === team.id}
+                    aria-busy={busy === team.id}
                     onClick={() => void toggleTeam(team)}
                   >
                     {team.status === "active" ? t("Disable") : t("Enable")}
@@ -316,6 +333,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             <div className="panel-actions">
               <span className="section-count">{state.data.memberships.length}</span>
               <button
+                type="button"
                 className="text-button"
                 onClick={() => setModal("membership")}
               >
@@ -339,15 +357,19 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                   <StatusPill status={membership.status} />
                   <div className="inline-actions">
                     <button
+                      type="button"
                       className="text-button"
                       disabled={busy === membership.id}
+                      aria-busy={busy === membership.id}
                       onClick={() => void toggleMembership(membership)}
                     >
                       {membership.status === "active" ? t("Disable") : t("Enable")}
                     </button>
                     <button
+                      type="button"
                       className="text-button danger-text"
                       disabled={busy === membership.id}
+                      aria-busy={busy === membership.id}
                       onClick={() => void removeMembership(membership)}
                     >
                       {t("Remove")}
@@ -366,7 +388,11 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             </div>
             <div className="panel-actions">
               <span className="section-count">{state.data.roles.length}</span>
-              <button className="text-button" onClick={() => setModal("role")}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setModal("role")}
+              >
                 {t("Bind role")}
               </button>
             </div>
@@ -386,8 +412,10 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                   </div>
                   <span className="mono">v{binding.version}</span>
                   <button
+                    type="button"
                     className="text-button danger-text"
                     disabled={busy === binding.id}
+                    aria-busy={busy === binding.id}
                     onClick={() => void revokeRole(binding)}
                   >
                     {t("Revoke")}

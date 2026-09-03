@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "../api";
 import {
   activateOnKeyDown,
   EmptyState,
   InlineAlert,
+  ListToolbar,
   Modal,
   PageHeader,
   PanelState,
@@ -35,13 +36,22 @@ export function BackendsPage({ me }: { me: AdminMe }) {
   const [selected, setSelected] =
     useState<ResourceState<ScholarBackend> | null>(null);
   const [selectedError, setSelectedError] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
+    null,
+  );
   const [modal, setModal] = useState<"create" | "edit" | "rotate" | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const { t } = useI18n();
 
   const canManage = me.capabilities.includes("backend:manage");
   const canProbe = me.capabilities.includes("backend:probe");
+
+  function showBackendError(error: unknown, fallback: string): void {
+    setSelectedError(error instanceof ApiError ? error.message : fallback);
+    setSelectedRequestId(error instanceof ApiError ? error.requestId : null);
+  }
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -58,9 +68,29 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     void load();
   }, [load]);
 
+  const filteredBackends = useMemo(() => {
+    if (state.kind !== "ready") {
+      return [];
+    }
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) {
+      return state.data;
+    }
+    return state.data.filter((backend) =>
+      [
+        backend.name,
+        backend.base_url,
+        backend.corpus_version,
+        backend.status,
+        backend.probe.reason ?? "",
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
+  }, [search, state]);
+
   async function selectBackend(backendId: string) {
     setSelected(null);
     setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.get<ScholarBackend>(
         `/v1/admin/backends/${encodeURIComponent(backendId)}`,
@@ -70,9 +100,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       }
       setSelected({ data: result.data, etag: result.etag });
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Backend details unavailable.",
-      );
+      showBackendError(error, "Backend details unavailable.");
     }
   }
 
@@ -80,6 +108,8 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy(true);
+    setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.post<ScholarBackend>(
         "/v1/admin/backends",
@@ -98,9 +128,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       await load();
       await selectBackend(result.data.id);
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Backend creation failed.",
-      );
+      showBackendError(error, "Backend creation failed.");
     } finally {
       setBusy(false);
     }
@@ -112,6 +140,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     }
     setBusy(true);
     setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.patch<ScholarBackend>(
         `/v1/admin/backends/${encodeURIComponent(selected.data.id)}`,
@@ -125,9 +154,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       setNotice(backendResponse(result.data));
       await load();
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Backend update failed.",
-      );
+      showBackendError(error, "Backend update failed.");
       if (error instanceof ApiError && error.status === 412) {
         await selectBackend(selected.data.id);
       }
@@ -144,6 +171,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.patch<ScholarBackend>(
         `/v1/admin/backends/${encodeURIComponent(selected.data.id)}`,
@@ -162,9 +190,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       setNotice(backendResponse(result.data));
       await load();
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Backend update failed.",
-      );
+      showBackendError(error, "Backend update failed.");
       if (error instanceof ApiError && error.status === 412) {
         await selectBackend(selected.data.id);
       }
@@ -180,6 +206,8 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     }
     const form = new FormData(event.currentTarget);
     setBusy(true);
+    setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.post<ScholarBackend>(
         `/v1/admin/backends/${encodeURIComponent(selected.data.id)}:rotate-credential`,
@@ -198,9 +226,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       setNotice(backendResponse(result.data));
       await load();
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Credential rotation failed.",
-      );
+      showBackendError(error, "Credential rotation failed.");
     } finally {
       setBusy(false);
     }
@@ -212,6 +238,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
     }
     setBusy(true);
     setSelectedError(null);
+    setSelectedRequestId(null);
     try {
       const result = await api.post<ScholarBackend>(
         `/v1/admin/backends/${encodeURIComponent(selected.data.id)}:probe`,
@@ -224,9 +251,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       setNotice(backendResponse(result.data));
       await load();
     } catch (error) {
-      setSelectedError(
-        error instanceof ApiError ? error.message : "Backend probe failed.",
-      );
+      showBackendError(error, "Backend probe failed.");
     } finally {
       setBusy(false);
     }
@@ -284,7 +309,12 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
-      {selectedError ? <InlineAlert message={selectedError} /> : null}
+      {selectedError ? (
+        <InlineAlert
+          message={selectedError}
+          requestId={selectedRequestId}
+        />
+      ) : null}
       {state.kind === "loading" ? (
         <section className="panel">
           <PanelState kind="loading" />
@@ -316,53 +346,77 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       ) : (
         <div className={selected ? "split-layout wide-detail" : undefined}>
           <section className="panel">
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("Backend")}</th>
-                    <th>{t("Status")}</th>
-                    <th>{t("Probe")}</th>
-                    <th>{t("Corpus")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.data.map((backend) => (
-                    <tr
-                      key={backend.id}
-                      tabIndex={0}
-                      aria-label={`${t("Open backend")} ${backend.name}`}
-                      aria-selected={selected?.data.id === backend.id}
-                      className={`interactive-row${
-                        selected?.data.id === backend.id ? " selected" : ""
-                      }`}
-                      onClick={() => void selectBackend(backend.id)}
-                      onKeyDown={(event) =>
-                        activateOnKeyDown(event, () =>
-                          void selectBackend(backend.id),
-                        )
-                      }
-                    >
-                      <td>
-                        <strong>{backend.name}</strong>
-                        <span>{backend.base_url}</span>
-                      </td>
-                      <td>
-                        <StatusPill status={backend.status} />
-                      </td>
-                      <td>{backend.probe.reason ?? "Not probed"}</td>
-                      <td className="mono">{backend.corpus_version}</td>
+            <ListToolbar
+              value={search}
+              onChange={setSearch}
+              label={t("Search backends")}
+              placeholder={t("Search by name, URL, corpus, or status")}
+              resultCount={filteredBackends.length}
+              totalCount={state.data.length}
+            />
+            {filteredBackends.length === 0 ? (
+              <EmptyState
+                title={t("No matching backends")}
+                message={t("Try a different name, URL, corpus, or status.")}
+                action={{
+                  label: t("Clear search"),
+                  onClick: () => setSearch(""),
+                }}
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>{t("Backend")}</th>
+                      <th>{t("Status")}</th>
+                      <th>{t("Probe")}</th>
+                      <th>{t("Corpus")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredBackends.map((backend) => (
+                      <tr
+                        key={backend.id}
+                        tabIndex={0}
+                        aria-label={`${t("Open backend")} ${backend.name}`}
+                        aria-selected={selected?.data.id === backend.id}
+                        className={`interactive-row${
+                          selected?.data.id === backend.id ? " selected" : ""
+                        }`}
+                        onClick={() => void selectBackend(backend.id)}
+                        onKeyDown={(event) =>
+                          activateOnKeyDown(event, () =>
+                            void selectBackend(backend.id),
+                          )
+                        }
+                      >
+                        <td data-label={t("Backend")}>
+                          <strong>{backend.name}</strong>
+                          <span>{backend.base_url}</span>
+                        </td>
+                        <td data-label={t("Status")}>
+                          <StatusPill status={backend.status} />
+                        </td>
+                        <td data-label={t("Probe")}>
+                          {backend.probe.reason ?? t("Not probed")}
+                        </td>
+                        <td className="mono" data-label={t("Corpus")}>
+                          {backend.corpus_version}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           {selected ? (
             <aside className="detail-panel backend-detail">
               <button
+                type="button"
                 className="close-button"
-                aria-label="Close backend details"
+                aria-label={t("Close backend details")}
                 onClick={() => setSelected(null)}
               >
                 ×
@@ -400,8 +454,10 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               <div className="button-stack">
                 {canProbe ? (
                   <button
+                    type="button"
                     className="secondary-button"
                     disabled={busy}
+                    aria-busy={busy}
                     onClick={() => void probeBackend()}
                   >
                     {t("Probe readiness")}
@@ -410,24 +466,28 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                 {canManage ? (
                   <>
                     <button
+                      type="button"
                       className="secondary-button"
                       onClick={() => setModal("edit")}
                     >
                       {t("Edit registration")}
                     </button>
                     <button
+                      type="button"
                       className="secondary-button"
                       onClick={() => setModal("rotate")}
                     >
                       {t("Rotate credential reference")}
                     </button>
                     <button
+                      type="button"
                       className={
                         selected.data.status === "active"
                           ? "danger-button"
                           : "primary-button"
                       }
                       disabled={busy}
+                      aria-busy={busy}
                       onClick={() =>
                         void mutateBackend(
                           {
@@ -468,6 +528,12 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                 name="base_url"
                 required
                 type="url"
+                pattern="https?://.*"
+                maxLength={2048}
+                inputMode="url"
+                autoCapitalize="none"
+                spellCheck={false}
+                title={t("Use an HTTP or HTTPS service URL.")}
                 placeholder="https://scholar.internal"
               />
             </label>
@@ -480,7 +546,11 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               <input
                 name="credential_ref"
                 required
-                pattern="env:[A-Z][A-Z0-9_]*"
+                pattern="env:[A-Z][A-Z0-9_]{0,127}"
+                maxLength={512}
+                autoCapitalize="characters"
+                spellCheck={false}
+                title={t("Use an env:NAME secret reference.")}
                 placeholder="env:SCHOLAR_SERVICE_TOKEN"
               />
             </label>
@@ -508,7 +578,11 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               <input
                 name="credential_ref"
                 required
-                pattern="env:[A-Z][A-Z0-9_]*"
+                pattern="env:[A-Z][A-Z0-9_]{0,127}"
+                maxLength={512}
+                autoCapitalize="characters"
+                spellCheck={false}
+                title={t("Use an env:NAME secret reference.")}
                 placeholder="env:SCHOLAR_SERVICE_TOKEN_V2"
                 autoFocus
               />
@@ -548,6 +622,12 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                 name="base_url"
                 required
                 type="url"
+                pattern="https?://.*"
+                maxLength={2048}
+                inputMode="url"
+                autoCapitalize="none"
+                spellCheck={false}
+                title={t("Use an HTTP or HTTPS service URL.")}
                 defaultValue={selected.data.base_url}
               />
             </label>

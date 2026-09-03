@@ -3,15 +3,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import {
   EmptyState,
+  ListToolbar,
+  PaginationControls,
   PageHeader,
   PanelState,
   StatusPill,
 } from "../components";
 import { useI18n } from "../i18n";
 import {
+  currentQueryValue,
   defaultTimeRange,
   loadFailure,
   queryString,
+  replaceQueryValue,
   type LoadFailure,
 } from "../load";
 import type { AdminMe, AuditPage as AuditResponse, Tenant } from "../types";
@@ -39,9 +43,20 @@ export function AuditPage({
   const range = useMemo(defaultTimeRange, []);
   const globalScope = hasGlobalScope(me);
   const { t } = useI18n();
-  const [tenantId, setTenantId] = useState(globalScope ? "" : (tenants[0]?.id ?? ""));
+  const [tenantId, setTenantId] = useState(() => {
+    const requestedTenant = currentQueryValue("tenant");
+    if (
+      requestedTenant &&
+      tenants.some((tenant) => tenant.id === requestedTenant)
+    ) {
+      return requestedTenant;
+    }
+    return globalScope ? "" : (tenants[0]?.id ?? "");
+  });
   const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
   const [state, setState] = useState<AuditLoad>({ kind: "loading" });
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     if (!globalScope && !tenantId) {
@@ -75,6 +90,51 @@ export function AuditPage({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    replaceQueryValue("tenant", tenantId);
+  }, [tenantId]);
+
+  const filteredEvents = useMemo(() => {
+    if (state.kind !== "ready") {
+      return [];
+    }
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) {
+      return state.data.items;
+    }
+    return state.data.items.filter((event) =>
+      [
+        event.action,
+        event.outcome,
+        event.tool_name ?? "",
+        event.decision ?? "",
+        event.result_class ?? "",
+        event.tenant_id ?? "",
+        event.resource_id ?? "",
+        event.backend_id ?? "",
+        event.request_id,
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
+  }, [search, state]);
+
+  function selectTenant(value: string): void {
+    setTenantId(value);
+    setCursor(null);
+    setCursorHistory([]);
+    setSearch("");
+  }
+
+  function nextPage(nextCursor: string): void {
+    setCursorHistory((history) => [...history, cursor]);
+    setCursor(nextCursor);
+  }
+
+  function previousPage(): void {
+    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+    setCursorHistory((history) => history.slice(0, -1));
+    setCursor(previousCursor);
+  }
+
   return (
     <>
       <PageHeader
@@ -87,10 +147,7 @@ export function AuditPage({
           {t("Scope")}
           <select
             value={tenantId}
-            onChange={(event) => {
-              setCursor(null);
-              setTenantId(event.target.value);
-            }}
+            onChange={(event) => selectTenant(event.target.value)}
           >
             {globalScope ? <option value="">{t("All tenants")}</option> : null}
             {tenants.map((tenant) => (
@@ -122,55 +179,85 @@ export function AuditPage({
           />
         ) : (
           <>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("Occurred")}</th>
-                    <th>{t("Action")}</th>
-                    <th>{t("Outcome")}</th>
-                    <th>{t("Tenant / resource")}</th>
-                    <th>{t("Latency")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.data.items.map((event) => (
-                    <tr key={event.id}>
-                      <td>
-                        <strong>{new Date(event.occurred_at).toLocaleString()}</strong>
-                        <span className="mono">{event.request_id}</span>
-                      </td>
-                      <td>
-                        <strong>{event.action}</strong>
-                        <span>
-                          {event.tool_name ??
-                            event.decision ??
-                            event.result_class ??
-                            "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <StatusPill status={event.outcome} />
-                      </td>
-                      <td>
-                        <strong>{event.tenant_id ?? "Platform"}</strong>
-                        <span>{event.resource_id ?? event.backend_id ?? "—"}</span>
-                      </td>
-                      <td>{event.latency_ms === null ? "—" : `${event.latency_ms} ms`}</td>
+            <ListToolbar
+              value={search}
+              onChange={setSearch}
+              label={t("Search audit events")}
+              placeholder={t("Search actions, outcomes, or resources")}
+              resultCount={filteredEvents.length}
+              totalCount={state.data.items.length}
+            />
+            {filteredEvents.length === 0 ? (
+              <EmptyState
+                title={t("No matching audit events")}
+                message={t("Try a different action, outcome, or resource.")}
+                action={{
+                  label: t("Clear search"),
+                  onClick: () => setSearch(""),
+                }}
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>{t("Occurred")}</th>
+                      <th>{t("Action")}</th>
+                      <th>{t("Outcome")}</th>
+                      <th>{t("Tenant / resource")}</th>
+                      <th>{t("Latency")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {state.data.next_cursor ? (
-              <div className="pagination">
-                <button
-                  className="secondary-button"
-                  onClick={() => setCursor(state.data.next_cursor)}
-                >
-                  {t("Next page")}
-                </button>
+                  </thead>
+                  <tbody>
+                    {filteredEvents.map((event) => (
+                      <tr key={event.id}>
+                        <td data-label={t("Occurred")}>
+                          <strong>
+                            {new Date(event.occurred_at).toLocaleString()}
+                          </strong>
+                          <span className="mono">{event.request_id}</span>
+                        </td>
+                        <td data-label={t("Action")}>
+                          <strong>{event.action}</strong>
+                          <span>
+                            {event.tool_name ??
+                              event.decision ??
+                              event.result_class ??
+                              "—"}
+                          </span>
+                        </td>
+                        <td data-label={t("Outcome")}>
+                          <StatusPill status={event.outcome} />
+                        </td>
+                        <td data-label={t("Tenant / resource")}>
+                        <strong>{event.tenant_id ?? t("Platform")}</strong>
+                          <span>
+                            {event.resource_id ?? event.backend_id ?? "—"}
+                          </span>
+                        </td>
+                        <td data-label={t("Latency")}>
+                          {event.latency_ms === null
+                            ? "—"
+                            : `${event.latency_ms} ms`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            )}
+            {cursorHistory.length > 0 || state.data.next_cursor ? (
+              <PaginationControls
+                page={cursorHistory.length + 1}
+                hasPrevious={cursorHistory.length > 0}
+                hasNext={Boolean(state.data.next_cursor)}
+                onPrevious={previousPage}
+                onNext={() => {
+                  if (state.data.next_cursor) {
+                    nextPage(state.data.next_cursor);
+                  }
+                }}
+              />
             ) : null}
           </>
         )}

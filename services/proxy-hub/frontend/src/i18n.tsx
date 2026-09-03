@@ -46,21 +46,18 @@ const ZH: Record<string, string> = {
   "Submitting…": "提交中…",
   "Operational": "运行中",
   "Disabled": "已停用",
-  "Disable": "停用",
-  "Role": "角色",
-  "Team": "团队",
-  "Memberships": "成员资格",
-  "Bind tenant role": "绑定租户角色",
   "Request": "请求",
   "Close": "关闭",
   "Server mutation": "服务器变更",
   "Dismiss server response": "关闭提示",
+  "Clear search": "清除搜索",
+  "records": "条记录",
+  "of": "/",
   "Switch to English": "Switch to English",
   "Switch to Chinese": "切换到中文",
 
   // ── overview ──
   "CONTROL PLANE": "控制面",
-  "Control plane": "控制面",
   "Operations overview": "运营总览",
   "Current health, tenant footprint, and routing readiness.":
     "当前健康状态、租户覆盖与路由就绪情况。",
@@ -95,6 +92,8 @@ const ZH: Record<string, string> = {
   "Updated": "更新时间",
   "Tenant slug is required.": "租户标识不能为空。",
   "Tenant name is required.": "租户名称不能为空。",
+  "Use 3–64 lowercase letters, numbers, or hyphens; start and end with a letter or number.":
+    "请使用 3–64 个小写字母、数字或连字符，并以字母或数字开头和结尾。",
   "Teams": "团队",
   "Members": "成员",
   "Role bindings": "角色绑定",
@@ -123,6 +122,10 @@ const ZH: Record<string, string> = {
   "Create the first tenant to establish a policy and corpus boundary.":
     "创建第一个租户以建立策略与语料边界。",
   "No tenants are assigned to this session.": "当前会话未被分配任何租户。",
+  "Search tenants": "搜索租户",
+  "Search by name, slug, or status": "按名称、标识或状态搜索",
+  "No matching tenants": "没有匹配的租户",
+  "Try a different name, slug, or status.": "请尝试其他名称、标识或状态。",
   "Tenant identity": "租户身份",
   "Resource ID": "资源 ID",
   "Last updated": "最后更新",
@@ -182,6 +185,9 @@ const ZH: Record<string, string> = {
   "Corpus": "语料",
   "No explicit route is configured.": "尚未配置显式路由。",
   "Saving…": "保存中…",
+  "Unsaved": "未保存",
+  "You have unsaved changes.": "你有尚未保存的更改。",
+  "Discard unsaved changes?": "放弃尚未保存的更改吗？",
   "Backend": "后端",
 
   // ── backends ──
@@ -206,6 +212,27 @@ const ZH: Record<string, string> = {
   "corpus version": "语料库版本",
   "credential reference": "凭据引用",
   "credential version": "凭据版本",
+  "Use an env:NAME secret reference.": "请使用 env:NAME 格式的密钥引用。",
+  "Use an HTTP or HTTPS service URL.": "请使用 HTTP 或 HTTPS 服务 URL。",
+  "Close backend details": "关闭后端详情",
+  "Bind tenant role": "绑定租户角色",
+  "Control plane": "控制平面",
+  "Disable": "停用",
+  "Memberships": "成员关系",
+  "Role": "角色",
+  "Team": "团队",
+  "Tenant sections": "租户分区",
+  "Open": "打开",
+  "Platform": "平台",
+  "bytes": "字节",
+  "successful": "成功",
+  "failed": "失败",
+  "rejected": "拒绝",
+  "No samples": "无样本",
+  "ms average": "毫秒平均",
+  "ms maximum": "毫秒最大",
+  "consumed": "已使用",
+  "Not configured": "未配置",
   "Backend name is required.": "后端名称不能为空。",
   "Base URL": "基础 URL",
   "Base URL is required.": "基础 URL 不能为空。",
@@ -224,6 +251,11 @@ const ZH: Record<string, string> = {
     "请先注册后端，再配置租户路由。",
   "Backend detail": "后端详情",
   "Open backend": "打开后端",
+  "Search backends": "搜索后端",
+  "Search by name, URL, corpus, or status": "按名称、URL、语料或状态搜索",
+  "No matching backends": "没有匹配的后端",
+  "Try a different name, URL, corpus, or status.":
+    "请尝试其他名称、URL、语料或状态。",
   "Service URL": "服务 URL",
   "Unversioned": "未标注版本",
   "Not probed": "未探测",
@@ -277,6 +309,14 @@ const ZH: Record<string, string> = {
   "Tenant / resource": "租户 / 资源",
   "Latency": "延迟",
   "Next page": "下一页",
+  "Previous page": "上一页",
+  "Page": "页码",
+  "Pagination": "分页导航",
+  "Search audit events": "搜索审计事件",
+  "Search actions, outcomes, or resources": "按操作、结果或资源搜索",
+  "No matching audit events": "没有匹配的审计事件",
+  "Try a different action, outcome, or resource.":
+    "请尝试其他操作、结果或资源。",
   "Time": "时间",
 
   // ── usage ──
@@ -298,6 +338,10 @@ const ZH: Record<string, string> = {
   "Quota": "配额",
   "Limit": "上限",
   "Window": "窗口",
+  "Search usage": "搜索用量",
+  "Search by tenant name or ID": "按租户名称或 ID 搜索",
+  "No matching usage rows": "没有匹配的用量数据",
+  "Try a different tenant name or ID.": "请尝试其他租户名称或 ID。",
 
   // ── principals ──
   "PRINCIPALS": "身份主体",
@@ -314,6 +358,11 @@ const ZH: Record<string, string> = {
   "Roles": "角色",
   "Created": "创建时间",
   "Issuer / subject": "签发方 / 主体",
+  "Search principals": "搜索身份主体",
+  "Search by identity, issuer, or status": "按身份、签发方或状态搜索",
+  "No matching principals": "没有匹配的身份主体",
+  "Try a different identity, issuer, or status.":
+    "请尝试其他身份、签发方或状态。",
 
   // ── enrolments ──
   "ACCESS": "访问控制",
@@ -462,6 +511,7 @@ export function LanguageToggle() {
   const next = lang === "zh" ? "en" : "zh";
   return (
     <button
+      type="button"
       className="lang-toggle"
       onClick={() => setLang(next)}
       title={lang === "zh" ? t("Switch to English") : t("Switch to Chinese")}

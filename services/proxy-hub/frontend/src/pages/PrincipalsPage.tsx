@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "../api";
 import {
   EmptyState,
   InlineAlert,
+  ListToolbar,
   PageHeader,
   PanelState,
   ServerNotice,
@@ -22,7 +23,9 @@ export function PrincipalsPage() {
   const [state, setState] = useState<PrincipalLoad>({ kind: "loading" });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const { t } = useI18n();
 
   const load = useCallback(async () => {
@@ -40,6 +43,26 @@ export function PrincipalsPage() {
     void load();
   }, [load]);
 
+  const filteredPrincipals = useMemo(() => {
+    if (state.kind !== "ready") {
+      return [];
+    }
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) {
+      return state.data;
+    }
+    return state.data.filter((principal) =>
+      [
+        principal.display_name ?? "",
+        principal.email ?? "",
+        principal.id,
+        principal.issuer,
+        principal.subject,
+        principal.status,
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
+  }, [search, state]);
+
   async function togglePrincipal(principal: AdminPrincipal) {
     const nextStatus = principal.status === "active" ? "disabled" : "active";
     if (
@@ -51,6 +74,7 @@ export function PrincipalsPage() {
     }
     setBusyId(principal.id);
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.patch<AdminPrincipal>(
         `/v1/admin/principals/${encodeURIComponent(principal.id)}`,
@@ -66,6 +90,9 @@ export function PrincipalsPage() {
         mutationError instanceof ApiError
           ? mutationError.message
           : "Principal update failed.",
+      );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
       );
       if (mutationError instanceof ApiError && mutationError.status === 412) {
         await load();
@@ -85,7 +112,9 @@ export function PrincipalsPage() {
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
-      {error ? <InlineAlert message={error} /> : null}
+      {error ? (
+        <InlineAlert message={error} requestId={errorRequestId} />
+      ) : null}
       <section className="panel">
         {state.kind === "loading" ? (
           <PanelState kind="loading" />
@@ -102,52 +131,81 @@ export function PrincipalsPage() {
             message={t("Principals appear after the identity provider establishes them.")}
           />
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("Principals")}</th>
-                  <th>{t("Status")}</th>
-                  <th>{t("Issuer / subject")}</th>
-                  <th>{t("Version")}</th>
-                  <th>{t("Action")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.map((principal) => (
-                  <tr key={principal.id}>
-                    <td>
-                      <strong>
-                        {principal.display_name ?? principal.email ?? principal.id}
-                      </strong>
-                      <span>{principal.email ?? principal.id}</span>
-                    </td>
-                    <td>
-                      <StatusPill status={principal.status} />
-                    </td>
-                    <td>
-                      <strong>{principal.issuer}</strong>
-                      <span className="mono">{principal.subject}</span>
-                    </td>
-                    <td className="mono">v{principal.version}</td>
-                    <td>
-                      <button
-                        className={
-                          principal.status === "active"
-                            ? "danger-button compact-button"
-                            : "secondary-button compact-button"
-                        }
-                        disabled={busyId === principal.id}
-                        onClick={() => void togglePrincipal(principal)}
-                      >
-                        {principal.status === "active" ? t("Disable") : t("Enable")}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <ListToolbar
+              value={search}
+              onChange={setSearch}
+              label={t("Search principals")}
+              placeholder={t("Search by identity, issuer, or status")}
+              resultCount={filteredPrincipals.length}
+              totalCount={state.data.length}
+            />
+            {filteredPrincipals.length === 0 ? (
+              <EmptyState
+                title={t("No matching principals")}
+                message={t("Try a different identity, issuer, or status.")}
+                action={{
+                  label: t("Clear search"),
+                  onClick: () => setSearch(""),
+                }}
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>{t("Principals")}</th>
+                      <th>{t("Status")}</th>
+                      <th>{t("Issuer / subject")}</th>
+                      <th>{t("Version")}</th>
+                      <th>{t("Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPrincipals.map((principal) => (
+                      <tr key={principal.id}>
+                        <td data-label={t("Principals")}>
+                          <strong>
+                            {principal.display_name ??
+                              principal.email ??
+                              principal.id}
+                          </strong>
+                          <span>{principal.email ?? principal.id}</span>
+                        </td>
+                        <td data-label={t("Status")}>
+                          <StatusPill status={principal.status} />
+                        </td>
+                        <td data-label={t("Issuer / subject")}>
+                          <strong>{principal.issuer}</strong>
+                          <span className="mono">{principal.subject}</span>
+                        </td>
+                        <td className="mono" data-label={t("Version")}>
+                          v{principal.version}
+                        </td>
+                        <td data-label={t("Action")}>
+                          <button
+                            type="button"
+                            className={
+                              principal.status === "active"
+                                ? "danger-button compact-button"
+                                : "secondary-button compact-button"
+                            }
+                            disabled={busyId === principal.id}
+                            aria-busy={busyId === principal.id}
+                            onClick={() => void togglePrincipal(principal)}
+                          >
+                            {principal.status === "active"
+                              ? t("Disable")
+                              : t("Enable")}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
     </>

@@ -67,6 +67,7 @@ export function GuidePage() {
             <p>{step.body}</p>
             {step.link ? (
               <button
+                type="button"
                 className="secondary-button"
                 onClick={() => navigate(step.link!.path)}
               >

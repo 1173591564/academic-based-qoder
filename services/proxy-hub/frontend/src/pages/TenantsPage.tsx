@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "../api";
 import {
   activateOnKeyDown,
   EmptyState,
   InlineAlert,
+  ListToolbar,
   Modal,
   PageHeader,
   ServerNotice,
@@ -60,6 +61,7 @@ export function TenantsPage({
 }) {
   const [detail, setDetail] = useState<ResourceState<Tenant> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +83,7 @@ export function TenantsPage({
     }
     setDetail(null);
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.get<Tenant>(
         `/v1/admin/tenants/${encodeURIComponent(route.tenantId)}`,
@@ -94,6 +97,9 @@ export function TenantsPage({
         loadError instanceof ApiError
           ? loadError.message
           : "Tenant details unavailable.",
+      );
+      setErrorRequestId(
+        loadError instanceof ApiError ? loadError.requestId : null,
       );
     }
   }, [route.tenantId]);
@@ -111,6 +117,7 @@ export function TenantsPage({
     };
     setBusy(true);
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.post<Tenant>("/v1/admin/tenants", payload, {
         "Idempotency-Key": crypto.randomUUID(),
@@ -127,6 +134,9 @@ export function TenantsPage({
           ? mutationError.message
           : "Tenant creation failed.",
       );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
+      );
     } finally {
       setBusy(false);
     }
@@ -142,6 +152,7 @@ export function TenantsPage({
     }
     setBusy(true);
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.patch<Tenant>(
         `/v1/admin/tenants/${encodeURIComponent(detail.data.id)}`,
@@ -161,6 +172,9 @@ export function TenantsPage({
         mutationError instanceof ApiError
           ? mutationError.message
           : "Tenant update failed.",
+      );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
       );
       if (mutationError instanceof ApiError && mutationError.status === 412) {
         await loadDetail();
@@ -189,7 +203,9 @@ export function TenantsPage({
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
-      {error ? <InlineAlert message={error} /> : null}
+      {error ? (
+        <InlineAlert message={error} requestId={errorRequestId} />
+      ) : null}
       {!route.tenantId ? (
         <TenantList
           tenants={tenants}
@@ -200,8 +216,9 @@ export function TenantsPage({
         error ? null : <section className="panel detail-loading">{t("Loading tenant…")}</section>
       ) : (
         <>
-          <div className="subnav" aria-label="Tenant sections">
+          <div className="subnav" aria-label={t("Tenant sections")}>
             <button
+              type="button"
               className={route.section === "summary" ? "active" : undefined}
               onClick={() => navigate(tenantPath(detail.data.id, "summary"))}
             >
@@ -209,6 +226,7 @@ export function TenantsPage({
             </button>
             {canManageAccess ? (
               <button
+                type="button"
                 className={route.section === "access" ? "active" : undefined}
                 onClick={() => navigate(tenantPath(detail.data.id, "access"))}
               >
@@ -217,6 +235,7 @@ export function TenantsPage({
             ) : null}
             {canViewPolicies ? (
               <button
+                type="button"
                 className={route.section === "policies" ? "active" : undefined}
                 onClick={() => navigate(tenantPath(detail.data.id, "policies"))}
               >
@@ -224,6 +243,7 @@ export function TenantsPage({
               </button>
             ) : null}
             <button
+              type="button"
               className="back-link"
               onClick={() => navigate("/console/tenants")}
             >
@@ -263,6 +283,12 @@ export function TenantsPage({
                 minLength={3}
                 maxLength={64}
                 pattern="[a-z0-9][a-z0-9-]+[a-z0-9]"
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                title={t(
+                  "Use 3–64 lowercase letters, numbers, or hyphens; start and end with a letter or number.",
+                )}
                 placeholder="research-platform"
               />
             </label>
@@ -288,6 +314,19 @@ function TenantList({
   onCreate: () => void;
 }) {
   const { t } = useI18n();
+  const [search, setSearch] = useState("");
+  const filteredTenants = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) {
+      return tenants;
+    }
+    return tenants.filter((tenant) =>
+      [tenant.name, tenant.slug, tenant.status].some((value) =>
+        value.toLocaleLowerCase().includes(query),
+      ),
+    );
+  }, [search, tenants]);
+
   if (tenants.length === 0) {
     return (
       <section className="panel">
@@ -309,46 +348,68 @@ function TenantList({
   }
   return (
     <section className="panel">
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("Tenant")}</th>
-              <th>{t("Status")}</th>
-              <th>{t("Version")}</th>
-              <th>{t("Updated")}</th>
-              <th aria-label="Open" />
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map((tenant) => (
-              <tr
-                key={tenant.id}
-                className="interactive-row"
-                tabIndex={0}
-                aria-label={`${t("Open tenant")} ${tenant.name}`}
-                onClick={() => navigate(tenantPath(tenant.id, "summary"))}
-                onKeyDown={(event) =>
-                  activateOnKeyDown(event, () =>
-                    navigate(tenantPath(tenant.id, "summary")),
-                  )
-                }
-              >
-                <td>
-                  <strong>{tenant.name}</strong>
-                  <span>{tenant.slug}</span>
-                </td>
-                <td>
-                  <StatusPill status={tenant.status} />
-                </td>
-                <td className="mono">v{tenant.version}</td>
-                <td>{new Date(tenant.updated_at).toLocaleDateString()}</td>
-                <td className="row-arrow">›</td>
+      <ListToolbar
+        value={search}
+        onChange={setSearch}
+        label={t("Search tenants")}
+        placeholder={t("Search by name, slug, or status")}
+        resultCount={filteredTenants.length}
+        totalCount={tenants.length}
+      />
+      {filteredTenants.length === 0 ? (
+        <EmptyState
+          title={t("No matching tenants")}
+          message={t("Try a different name, slug, or status.")}
+          action={{ label: t("Clear search"), onClick: () => setSearch("") }}
+        />
+      ) : (
+        <div className="table-wrap">
+          <table className="responsive-table">
+            <thead>
+              <tr>
+                <th>{t("Tenant")}</th>
+                <th>{t("Status")}</th>
+                <th>{t("Version")}</th>
+                <th>{t("Updated")}</th>
+                <th aria-label={t("Open")} />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredTenants.map((tenant) => (
+                <tr
+                  key={tenant.id}
+                  className="interactive-row"
+                  tabIndex={0}
+                  aria-label={`${t("Open tenant")} ${tenant.name}`}
+                  onClick={() => navigate(tenantPath(tenant.id, "summary"))}
+                  onKeyDown={(event) =>
+                    activateOnKeyDown(event, () =>
+                      navigate(tenantPath(tenant.id, "summary")),
+                    )
+                  }
+                >
+                  <td data-label={t("Tenant")}>
+                    <strong>{tenant.name}</strong>
+                    <span>{tenant.slug}</span>
+                  </td>
+                  <td data-label={t("Status")}>
+                    <StatusPill status={tenant.status} />
+                  </td>
+                  <td className="mono" data-label={t("Version")}>
+                    v{tenant.version}
+                  </td>
+                  <td data-label={t("Updated")}>
+                    {new Date(tenant.updated_at).toLocaleDateString()}
+                  </td>
+                  <td className="row-arrow" aria-hidden="true">
+                    ›
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
@@ -393,10 +454,12 @@ function TenantSummary({
         </dl>
         {canUpdate ? (
           <button
+            type="button"
             className={
               tenant.status === "active" ? "danger-button" : "primary-button"
             }
             disabled={busy}
+            aria-busy={busy}
             onClick={onToggle}
           >
             {tenant.status === "active" ? t("Disable tenant") : t("Enable tenant")}

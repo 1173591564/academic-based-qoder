@@ -3,15 +3,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import {
   EmptyState,
+  ListToolbar,
   MetricCard,
+  PaginationControls,
   PageHeader,
   PanelState,
 } from "../components";
 import { useI18n } from "../i18n";
 import {
+  currentQueryValue,
   defaultTimeRange,
   loadFailure,
   queryString,
+  replaceQueryValue,
   type LoadFailure,
 } from "../load";
 import type { AdminMe, Tenant, UsagePage as UsageResponse } from "../types";
@@ -39,9 +43,20 @@ export function UsagePage({
   const range = useMemo(defaultTimeRange, []);
   const globalScope = hasGlobalScope(me);
   const { t } = useI18n();
-  const [tenantId, setTenantId] = useState(globalScope ? "" : (tenants[0]?.id ?? ""));
+  const [tenantId, setTenantId] = useState(() => {
+    const requestedTenant = currentQueryValue("tenant");
+    if (
+      requestedTenant &&
+      tenants.some((tenant) => tenant.id === requestedTenant)
+    ) {
+      return requestedTenant;
+    }
+    return globalScope ? "" : (tenants[0]?.id ?? "");
+  });
   const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
   const [state, setState] = useState<UsageLoad>({ kind: "loading" });
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     if (!globalScope && !tenantId) {
@@ -75,6 +90,10 @@ export function UsagePage({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    replaceQueryValue("tenant", tenantId);
+  }, [tenantId]);
+
   const totals =
     state.kind === "ready"
       ? state.data.items.reduce(
@@ -86,6 +105,41 @@ export function UsagePage({
           { requests: 0, failures: 0, bytes: 0 },
         )
       : { requests: 0, failures: 0, bytes: 0 };
+
+  const filteredItems = useMemo(() => {
+    if (state.kind !== "ready") {
+      return [];
+    }
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) {
+      return state.data.items;
+    }
+    return state.data.items.filter((item) => {
+      const tenantName =
+        tenants.find((tenant) => tenant.id === item.tenant_id)?.name ?? "";
+      return [tenantName, item.tenant_id].some((value) =>
+        value.toLocaleLowerCase().includes(query),
+      );
+    });
+  }, [search, state, tenants]);
+
+  function selectTenant(value: string): void {
+    setTenantId(value);
+    setCursor(null);
+    setCursorHistory([]);
+    setSearch("");
+  }
+
+  function nextPage(nextCursor: string): void {
+    setCursorHistory((history) => [...history, cursor]);
+    setCursor(nextCursor);
+  }
+
+  function previousPage(): void {
+    const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+    setCursorHistory((history) => history.slice(0, -1));
+    setCursor(previousCursor);
+  }
 
   return (
     <>
@@ -99,10 +153,7 @@ export function UsagePage({
           {t("Scope")}
           <select
             value={tenantId}
-            onChange={(event) => {
-              setCursor(null);
-              setTenantId(event.target.value);
-            }}
+            onChange={(event) => selectTenant(event.target.value)}
           >
             {globalScope ? <option value="">{t("All tenants")}</option> : null}
             {tenants.map((tenant) => (
@@ -156,72 +207,101 @@ export function UsagePage({
           />
         ) : (
           <>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("Tenant")}</th>
-                    <th>{t("Requests")}</th>
-                    <th>{t("Outcomes")}</th>
-                    <th>{t("Latency")}</th>
-                    <th>{t("Quota")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.data.items.map((item) => (
-                    <tr key={item.tenant_id}>
-                      <td>
-                        <strong>
-                          {tenants.find((tenant) => tenant.id === item.tenant_id)
-                            ?.name ?? item.tenant_id}
-                        </strong>
-                        <span className="mono">{item.tenant_id}</span>
-                      </td>
-                      <td>
-                        <strong>{item.requests.total}</strong>
-                        <span>{item.returned_bytes.toLocaleString()} bytes</span>
-                      </td>
-                      <td>
-                        <strong>{item.requests.successful} successful</strong>
-                        <span>
-                          {item.requests.failed} failed · {item.requests.rejected}{" "}
-                          rejected
-                        </span>
-                      </td>
-                      <td>
-                        <strong>
-                          {item.latency.average_ms === null
-                            ? "No samples"
-                            : `${item.latency.average_ms} ms avg`}
-                        </strong>
-                        <span>
-                          {item.latency.maximum_ms === null
-                            ? "—"
-                            : `${item.latency.maximum_ms} ms maximum`}
-                        </span>
-                      </td>
-                      <td>
-                        <strong>{item.quota.consumed} consumed</strong>
-                        <span>
-                          {item.quota.configured
-                            ? `${item.quota.request_limit ?? 0} / ${item.quota.period_seconds ?? 0}s`
-                            : "Not configured"}
-                        </span>
-                      </td>
+            <ListToolbar
+              value={search}
+              onChange={setSearch}
+              label={t("Search usage")}
+              placeholder={t("Search by tenant name or ID")}
+              resultCount={filteredItems.length}
+              totalCount={state.data.items.length}
+            />
+            {filteredItems.length === 0 ? (
+              <EmptyState
+                title={t("No matching usage rows")}
+                message={t("Try a different tenant name or ID.")}
+                action={{
+                  label: t("Clear search"),
+                  onClick: () => setSearch(""),
+                }}
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="responsive-table">
+                  <thead>
+                    <tr>
+                      <th>{t("Tenant")}</th>
+                      <th>{t("Requests")}</th>
+                      <th>{t("Outcomes")}</th>
+                      <th>{t("Latency")}</th>
+                      <th>{t("Quota")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {state.data.next_cursor ? (
-              <div className="pagination">
-                <button
-                  className="secondary-button"
-                  onClick={() => setCursor(state.data.next_cursor)}
-                >
-                  Next page
-                </button>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item) => (
+                      <tr key={item.tenant_id}>
+                        <td data-label={t("Tenant")}>
+                          <strong>
+                            {tenants.find(
+                              (tenant) => tenant.id === item.tenant_id,
+                            )?.name ?? item.tenant_id}
+                          </strong>
+                          <span className="mono">{item.tenant_id}</span>
+                        </td>
+                        <td data-label={t("Requests")}>
+                          <strong>{item.requests.total}</strong>
+                          <span>
+                            {item.returned_bytes.toLocaleString()} {t("bytes")}
+                          </span>
+                        </td>
+                        <td data-label={t("Outcomes")}>
+                          <strong>
+                            {item.requests.successful} {t("successful")}
+                          </strong>
+                          <span>
+                            {item.requests.failed} {t("failed")} ·{" "}
+                            {item.requests.rejected} {t("rejected")}
+                          </span>
+                        </td>
+                        <td data-label={t("Latency")}>
+                          <strong>
+                            {item.latency.average_ms === null
+                              ? t("No samples")
+                              : `${item.latency.average_ms} ${t("ms average")}`}
+                          </strong>
+                          <span>
+                            {item.latency.maximum_ms === null
+                              ? "—"
+                              : `${item.latency.maximum_ms} ${t("ms maximum")}`}
+                          </span>
+                        </td>
+                        <td data-label={t("Quota")}>
+                          <strong>
+                            {item.quota.consumed} {t("consumed")}
+                          </strong>
+                          <span>
+                            {item.quota.configured
+                              ? `${item.quota.request_limit ?? 0} / ${item.quota.period_seconds ?? 0}s`
+                              : t("Not configured")}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            )}
+            {cursorHistory.length > 0 || state.data.next_cursor ? (
+              <PaginationControls
+                page={cursorHistory.length + 1}
+                hasPrevious={cursorHistory.length > 0}
+                hasNext={Boolean(state.data.next_cursor)}
+                onPrevious={previousPage}
+                onNext={() => {
+                  if (state.data.next_cursor) {
+                    nextPage(state.data.next_cursor);
+                  }
+                }}
+              />
             ) : null}
           </>
         )}

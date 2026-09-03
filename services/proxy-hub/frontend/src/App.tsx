@@ -370,7 +370,11 @@ function DeniedPage() {
           "This browser session does not advertise the capability for this page.",
         )}
       </p>
-      <button className="secondary-button" onClick={() => navigate("/console/")}>
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => navigate("/console/")}
+      >
         {t("Return to overview")}
       </button>
     </section>

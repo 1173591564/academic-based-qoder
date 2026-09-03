@@ -58,12 +58,14 @@ export function OverviewPage({
           </div>
           <div className="panel-actions">
             <button
+              type="button"
               className="text-button"
               onClick={() => navigate("/console/guide")}
             >
               {t("Read the setup guide")}
             </button>
             <button
+              type="button"
               className="text-button"
               onClick={() => navigate("/console/tenants")}
             >
@@ -78,7 +80,7 @@ export function OverviewPage({
           />
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="responsive-table">
               <thead>
                 <tr>
                   <th>{t("Tenant")}</th>
@@ -107,15 +109,19 @@ export function OverviewPage({
                       )
                     }
                   >
-                    <td>
+                    <td data-label={t("Tenant")}>
                       <strong>{tenant.name}</strong>
                       <span>{tenant.slug}</span>
                     </td>
-                    <td>
+                    <td data-label={t("Status")}>
                       <StatusPill status={tenant.status} />
                     </td>
-                    <td className="mono">v{tenant.version}</td>
-                    <td>{new Date(tenant.updated_at).toLocaleDateString()}</td>
+                    <td className="mono" data-label={t("Version")}>
+                      v{tenant.version}
+                    </td>
+                    <td data-label={t("Updated")}>
+                      {new Date(tenant.updated_at).toLocaleDateString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

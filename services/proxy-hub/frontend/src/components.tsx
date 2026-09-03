@@ -10,6 +10,12 @@ import {
 import { statusLabel, useI18n } from "./i18n";
 
 export function navigate(path: string): void {
+  const navigationEvent = new Event("proxy-hub:before-navigate", {
+    cancelable: true,
+  });
+  if (!window.dispatchEvent(navigationEvent)) {
+    return;
+  }
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
@@ -119,6 +125,59 @@ export function EmptyState({
   );
 }
 
+export function ListToolbar({
+  value,
+  onChange,
+  label,
+  placeholder,
+  resultCount,
+  totalCount,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  placeholder: string;
+  resultCount: number;
+  totalCount: number;
+}) {
+  const { t } = useI18n();
+  const searchId = useId();
+  return (
+    <div className="list-toolbar">
+      <div className="search-field">
+        <label className="sr-only" htmlFor={searchId}>
+          {label}
+        </label>
+        <span className="search-icon" aria-hidden="true">
+          ⌕
+        </span>
+        <input
+          id={searchId}
+          type="search"
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {value ? (
+          <button
+            type="button"
+            className="search-clear"
+            aria-label={t("Clear search")}
+            onClick={() => onChange("")}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+      <span className="result-count" aria-live="polite">
+        {resultCount === totalCount
+          ? `${totalCount} ${t("records")}`
+          : `${resultCount} ${t("of")} ${totalCount}`}
+      </span>
+    </div>
+  );
+}
+
 export function InlineAlert({
   message,
   requestId,
@@ -126,10 +185,15 @@ export function InlineAlert({
   message: string;
   requestId?: string | null;
 }) {
+  const { t } = useI18n();
   return (
     <div className="inline-alert" role="alert" aria-live="assertive">
       {message}
-      {requestId ? <code>Request {requestId}</code> : null}
+      {requestId ? (
+        <code>
+          {t("Request")} {requestId}
+        </code>
+      ) : null}
     </div>
   );
 }
@@ -196,7 +260,7 @@ export function PanelState({
       <p>{message}</p>
       {requestId ? <code>{t("Request")} {requestId}</code> : null}
       {onRetry ? (
-        <button className="secondary-button" onClick={onRetry}>
+        <button type="button" className="secondary-button" onClick={onRetry}>
           {t("Retry")}
         </button>
       ) : null}
@@ -217,6 +281,7 @@ export function CenteredState({
   pulse?: boolean;
   action?: { label: string; href?: string; onClick?: () => void };
 }) {
+  const { t } = useI18n();
   return (
     <main
       className="centered-state"
@@ -228,13 +293,17 @@ export function CenteredState({
       <span className="eyebrow">Scholar Proxy Hub</span>
       <h1>{title}</h1>
       {message ? <p>{message}</p> : null}
-      {requestId ? <code>Request {requestId}</code> : null}
+      {requestId ? (
+        <code>
+          {t("Request")} {requestId}
+        </code>
+      ) : null}
       {action?.href ? (
         <a className="primary-button" href={action.href}>
           {action.label}
         </a>
       ) : action?.onClick ? (
-        <button className="primary-button" onClick={action.onClick}>
+        <button type="button" className="primary-button" onClick={action.onClick}>
           {action.label}
         </button>
       ) : null}
@@ -369,6 +438,47 @@ export function SubmitActions({
         {busy ? t("Submitting…") : submitLabel}
       </button>
     </div>
+  );
+}
+
+export function PaginationControls({
+  page,
+  hasPrevious,
+  hasNext,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <nav className="pagination" aria-label={t("Pagination")}>
+      <span aria-live="polite">
+        {t("Page")} {page}
+      </span>
+      <div>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!hasPrevious}
+          onClick={onPrevious}
+        >
+          {t("Previous page")}
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!hasNext}
+          onClick={onNext}
+        >
+          {t("Next page")}
+        </button>
+      </div>
+    </nav>
   );
 }
 

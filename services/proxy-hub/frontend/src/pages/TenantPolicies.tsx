@@ -50,6 +50,14 @@ type PolicyLoad =
   | { kind: "ready"; data: PolicyData }
   | LoadFailure;
 
+type PolicySection = "tools" | "quota" | "route";
+
+const CLEAN_SECTIONS: Record<PolicySection, boolean> = {
+  tools: false,
+  quota: false,
+  route: false,
+};
+
 async function optionalResource<T>(path: string): Promise<ResourceState<T | null>> {
   try {
     const result = await api.get<T>(path);
@@ -82,7 +90,9 @@ export function TenantPolicies({
   const [state, setState] = useState<PolicyLoad>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorRequestId, setErrorRequestId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [dirtySections, setDirtySections] = useState(CLEAN_SECTIONS);
   const { t } = useI18n();
 
   const canManagePolicy = me.capabilities.includes("policy:manage");
@@ -120,6 +130,106 @@ export function TenantPolicies({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setDirtySections(CLEAN_SECTIONS);
+  }, [tenantId]);
+
+  const hasUnsavedChanges = Object.values(dirtySections).some(Boolean);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const warnBeforeNavigation = (event: Event) => {
+      if (!window.confirm(t("Discard unsaved changes?"))) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    window.addEventListener(
+      "proxy-hub:before-navigate",
+      warnBeforeNavigation,
+    );
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      window.removeEventListener(
+        "proxy-hub:before-navigate",
+        warnBeforeNavigation,
+      );
+    };
+  }, [hasUnsavedChanges, t]);
+
+  function markDirty(section: PolicySection): void {
+    setDirtySections((current) => ({ ...current, [section]: true }));
+  }
+
+  function clearDirty(section: PolicySection): void {
+    setDirtySections((current) => ({ ...current, [section]: false }));
+  }
+
+  function syncRouteCorpus(
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ): void {
+    if (state.kind !== "ready") {
+      return;
+    }
+    const backend = state.data.backends.find(
+      (candidate) => candidate.id === event.currentTarget.value,
+    );
+    const corpusInput = event.currentTarget.form?.elements.namedItem(
+      "corpus_version",
+    );
+    if (backend && corpusInput instanceof HTMLInputElement) {
+      corpusInput.value = backend.corpus_version;
+    }
+  }
+
+  async function reloadToolPolicy(): Promise<void> {
+    const toolPolicy = await optionalResource<ToolPolicy>(
+      `/v1/admin/tenants/${encodeURIComponent(tenantId)}/tool-policy`,
+    );
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            data: { ...current.data, toolPolicy },
+          }
+        : current,
+    );
+  }
+
+  async function reloadQuotaPolicy(): Promise<void> {
+    const quotaPolicy = await optionalResource<QuotaPolicy>(
+      `/v1/admin/tenants/${encodeURIComponent(tenantId)}/quota-policy`,
+    );
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            data: { ...current.data, quotaPolicy },
+          }
+        : current,
+    );
+  }
+
+  async function reloadRoute(): Promise<void> {
+    const route = await optionalResource<TenantRoute>(
+      `/v1/admin/tenants/${encodeURIComponent(tenantId)}/backend-route`,
+    );
+    setState((current) =>
+      current.kind === "ready"
+        ? {
+            kind: "ready",
+            data: { ...current.data, route },
+          }
+        : current,
+    );
+  }
+
   async function saveToolPolicy(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (state.kind !== "ready") {
@@ -136,6 +246,7 @@ export function TenantPolicies({
     }
     setBusy("tools");
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.put<ToolPolicy>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/tool-policy`,
@@ -143,15 +254,33 @@ export function TenantPolicies({
         state.data.toolPolicy.etag,
       );
       setNotice(serverVersion("tool policy", result));
-      await load();
+      clearDirty("tools");
+      setState((current) =>
+        current.kind === "ready"
+          ? {
+              kind: "ready",
+              data: {
+                ...current.data,
+                toolPolicy: {
+                  data: result.data,
+                  etag: result.etag ?? current.data.toolPolicy.etag,
+                },
+              },
+            }
+          : current,
+      );
     } catch (mutationError) {
       setError(
         mutationError instanceof ApiError
           ? mutationError.message
           : "Tool policy update failed.",
       );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
+      );
       if (mutationError instanceof ApiError && mutationError.status === 412) {
-        await load();
+        clearDirty("tools");
+        await reloadToolPolicy();
       }
     } finally {
       setBusy(null);
@@ -166,6 +295,7 @@ export function TenantPolicies({
     const form = new FormData(event.currentTarget);
     setBusy("quota");
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.put<QuotaPolicy>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/quota-policy`,
@@ -179,15 +309,33 @@ export function TenantPolicies({
         state.data.quotaPolicy.etag,
       );
       setNotice(serverVersion("quota policy", result));
-      await load();
+      clearDirty("quota");
+      setState((current) =>
+        current.kind === "ready"
+          ? {
+              kind: "ready",
+              data: {
+                ...current.data,
+                quotaPolicy: {
+                  data: result.data,
+                  etag: result.etag ?? current.data.quotaPolicy.etag,
+                },
+              },
+            }
+          : current,
+      );
     } catch (mutationError) {
       setError(
         mutationError instanceof ApiError
           ? mutationError.message
           : "Quota policy update failed.",
       );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
+      );
       if (mutationError instanceof ApiError && mutationError.status === 412) {
-        await load();
+        clearDirty("quota");
+        await reloadQuotaPolicy();
       }
     } finally {
       setBusy(null);
@@ -211,6 +359,7 @@ export function TenantPolicies({
     }
     setBusy("route");
     setError(null);
+    setErrorRequestId(null);
     try {
       const result = await api.put<TenantRoute>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/backend-route`,
@@ -222,15 +371,33 @@ export function TenantPolicies({
         state.data.route.etag,
       );
       setNotice(serverVersion("backend route", result));
-      await load();
+      clearDirty("route");
+      setState((current) =>
+        current.kind === "ready"
+          ? {
+              kind: "ready",
+              data: {
+                ...current.data,
+                route: {
+                  data: result.data,
+                  etag: result.etag ?? current.data.route.etag,
+                },
+              },
+            }
+          : current,
+      );
     } catch (mutationError) {
       setError(
         mutationError instanceof ApiError
           ? mutationError.message
           : "Backend route update failed.",
       );
+      setErrorRequestId(
+        mutationError instanceof ApiError ? mutationError.requestId : null,
+      );
       if (mutationError instanceof ApiError && mutationError.status === 412) {
-        await load();
+        clearDirty("route");
+        await reloadRoute();
       }
     } finally {
       setBusy(null);
@@ -266,7 +433,14 @@ export function TenantPolicies({
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
-      {error ? <InlineAlert message={error} /> : null}
+      {error ? (
+        <InlineAlert message={error} requestId={errorRequestId} />
+      ) : null}
+      {hasUnsavedChanges ? (
+        <div className="unsaved-banner" role="status" aria-live="polite">
+          {t("You have unsaved changes.")}
+        </div>
+      ) : null}
       <div className="settings-grid">
         <section className="panel settings-panel">
           <div className="panel-heading">
@@ -274,9 +448,19 @@ export function TenantPolicies({
               <span className="eyebrow">{t("Deny by default")}</span>
               <h2>{t("Tool policy")}</h2>
             </div>
-            {toolPolicy ? <span className="mono">v{toolPolicy.version}</span> : null}
+            <div className="panel-actions">
+              {dirtySections.tools ? (
+                <span className="unsaved-badge">{t("Unsaved")}</span>
+              ) : null}
+              {toolPolicy ? <span className="mono">v{toolPolicy.version}</span> : null}
+            </div>
           </div>
-          <form className="settings-form" onSubmit={(event) => void saveToolPolicy(event)}>
+          <form
+            key={toolPolicy?.version ?? "new-tool-policy"}
+            className="settings-form"
+            onChange={() => markDirty("tools")}
+            onSubmit={(event) => void saveToolPolicy(event)}
+          >
             <div className="tool-grid">
               {SCHOLAR_TOOLS.map((tool) => (
                 <label className="check-row" key={tool}>
@@ -295,6 +479,7 @@ export function TenantPolicies({
                 className="primary-button"
                 type="submit"
                 disabled={busy === "tools"}
+                aria-busy={busy === "tools"}
               >
                 {busy === "tools" ? t("Saving…") : t("Save exact allowlist")}
               </button>
@@ -308,19 +493,32 @@ export function TenantPolicies({
                 <span className="eyebrow">{t("Request enforcement")}</span>
                 <h2>{t("Quota policy")}</h2>
               </div>
-              {quotaPolicy ? (
-                <StatusPill
-                  status={quotaPolicy.enforcement_enabled ? "active" : "disabled"}
-                />
-              ) : null}
+              <div className="panel-actions">
+                {dirtySections.quota ? (
+                  <span className="unsaved-badge">{t("Unsaved")}</span>
+                ) : null}
+                {quotaPolicy ? (
+                  <StatusPill
+                    status={
+                      quotaPolicy.enforcement_enabled ? "active" : "disabled"
+                    }
+                  />
+                ) : null}
+              </div>
             </div>
-            <form className="settings-form" onSubmit={(event) => void saveQuotaPolicy(event)}>
+            <form
+              key={quotaPolicy?.version ?? "new-quota-policy"}
+              className="settings-form"
+              onChange={() => markDirty("quota")}
+              onSubmit={(event) => void saveQuotaPolicy(event)}
+            >
               <label>
                 {t("Quota class")}
                 <input
                   name="quota_class"
                   required
                   maxLength={64}
+                  autoComplete="off"
                   defaultValue={quotaPolicy?.quota_class ?? "standard"}
                   disabled={!canManageQuota}
                 />
@@ -332,6 +530,7 @@ export function TenantPolicies({
                     name="request_limit"
                     type="number"
                     min={1}
+                    step={1}
                     required
                     defaultValue={quotaPolicy?.request_limit ?? 1000}
                     disabled={!canManageQuota}
@@ -343,6 +542,7 @@ export function TenantPolicies({
                     name="period_seconds"
                     type="number"
                     min={1}
+                    step={1}
                     required
                     defaultValue={quotaPolicy?.period_seconds ?? 3600}
                     disabled={!canManageQuota}
@@ -354,6 +554,7 @@ export function TenantPolicies({
                     name="concurrency_limit"
                     type="number"
                     min={1}
+                    step={1}
                     required
                     defaultValue={quotaPolicy?.concurrency_limit ?? 5}
                     disabled={!canManageQuota}
@@ -374,6 +575,7 @@ export function TenantPolicies({
                   className="primary-button"
                   type="submit"
                   disabled={busy === "quota"}
+                  aria-busy={busy === "quota"}
                 >
                   {busy === "quota" ? t("Saving…") : t("Save quota")}
                 </button>
@@ -386,16 +588,27 @@ export function TenantPolicies({
                 <span className="eyebrow">{t("Explicit affinity")}</span>
                 <h2>{t("Backend route")}</h2>
               </div>
-              {route ? <StatusPill status={route.status} /> : null}
+              <div className="panel-actions">
+                {dirtySections.route ? (
+                  <span className="unsaved-badge">{t("Unsaved")}</span>
+                ) : null}
+                {route ? <StatusPill status={route.status} /> : null}
+              </div>
             </div>
             {canManageRoute ? (
-              <form className="settings-form" onSubmit={(event) => void saveRoute(event)}>
+              <form
+                key={route?.version ?? "new-route"}
+                className="settings-form"
+                onChange={() => markDirty("route")}
+                onSubmit={(event) => void saveRoute(event)}
+              >
                 <label>
                   {t("Scholar backend")}
                   <select
                     name="backend_id"
                     required
                     defaultValue={route?.backend_id ?? ""}
+                    onChange={syncRouteCorpus}
                   >
                     <option value="" disabled>
                       {t("Select backend")}
@@ -412,6 +625,7 @@ export function TenantPolicies({
                   <input
                     name="corpus_version"
                     required
+                    maxLength={128}
                     defaultValue={route?.corpus_version ?? ""}
                   />
                 </label>
@@ -426,6 +640,7 @@ export function TenantPolicies({
                   className="primary-button"
                   type="submit"
                   disabled={busy === "route"}
+                  aria-busy={busy === "route"}
                 >
                   {busy === "route" ? t("Saving…") : t("Save route")}
                 </button>

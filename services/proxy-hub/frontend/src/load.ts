@@ -41,3 +41,21 @@ export function queryString(values: Record<string, string | null>): string {
   }
   return parameters.toString();
 }
+
+export function currentQueryValue(name: string): string | null {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+export function replaceQueryValue(name: string, value: string): void {
+  const url = new URL(window.location.href);
+  if (value) {
+    url.searchParams.set(name, value);
+  } else {
+    url.searchParams.delete(name);
+  }
+  window.history.replaceState(
+    {},
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
