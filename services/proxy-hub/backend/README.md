@@ -49,6 +49,12 @@ activating a backend or an active tenant route; changes to the URL, corpus, or
 credential reference invalidate the previous observation.
 Quota enforcement remains disabled until a tenant quota policy explicitly
 enables it. The reservation TTL is refreshed for active response streams.
+Audit and usage endpoints require explicit timezone-aware `from` and `to`
+parameters spanning no more than 31 days. Audit pages return only operational
+identifiers, authorization decisions, backend/corpus selection, result class,
+latency, response size, and quota delta. Usage pages aggregate gateway
+requests, outcomes, latency, returned bytes, and current quota configuration
+without reading request bodies or changing quota counters.
 
 Production configuration fails closed unless the public origin uses HTTPS, PostgreSQL is configured, and all OIDC settings are present.
 

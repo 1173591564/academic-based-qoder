@@ -168,6 +168,26 @@ PUT    /v1/admin/settings
 ```
 
 Audit and usage queries require bounded time ranges and cursor pagination. Raw research questions and Bearer credentials are not queryable fields.
+The current API requires timezone-aware `from` and `to` values covering at
+most 31 days. Audit responses omit request bodies, argument digests,
+capability/session digests, credential material, and corpus content. Usage
+responses aggregate request outcomes, latency, returned bytes, quota
+consumption, and current quota configuration per tenant.
+
+## Administration console
+
+The React console under `/console/` is a same-origin client of the Proxy Hub API.
+It provides overview, tenants, teams, memberships, role bindings, tool policy,
+quota policy, Scholar backend registry and probes, tenant routes, bounded audit,
+usage, and principal status administration.
+
+Capability-driven navigation is a presentation hint only. The backend remains
+authoritative for role and tenant scope. Browser mutations use the session and
+CSRF cookie pair, send current ETags through `If-Match`, attach
+`Idempotency-Key` to create operations, display the server response, and refresh
+the resource ETag after policy or route changes. Identity-provider tokens,
+DSH capabilities, Scholar credentials, research content, and Proxy Hub database
+access never enter frontend storage.
 
 ## API behavior
 
