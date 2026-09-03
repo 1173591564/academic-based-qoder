@@ -159,6 +159,9 @@ def append_mutation_audit(
     resource_id: str,
     tenant_id: str | None,
     digest: str,
+    backend_id: str | None = None,
+    corpus_version: str | None = None,
+    decision: str | None = None,
     details: Mapping[str, object] | None = None,
 ) -> None:
     """Append one minimized mutation audit event."""
@@ -180,6 +183,9 @@ def append_mutation_audit(
             resource_id=resource_id,
             outcome="accepted",
             argument_digest=digest,
+            backend_id=backend_id,
+            corpus_version=corpus_version,
+            decision=decision,
             result_class="success",
             details=event_details,
         ),

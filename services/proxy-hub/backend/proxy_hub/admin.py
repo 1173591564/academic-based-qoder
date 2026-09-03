@@ -2,14 +2,18 @@
 
 from collections.abc import Generator
 
+import httpx
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from proxy_hub.admin_backends import build_backend_router
 from proxy_hub.admin_iam import build_iam_router
+from proxy_hub.admin_policies import build_policy_router
 from proxy_hub.auth import AuthComponents
+from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
 from proxy_hub.enrolment import build_enrolment_router
 from proxy_hub.errors import HubError
@@ -30,6 +34,7 @@ from proxy_hub.rbac import (
     require_platform_admin,
     require_tenant_read,
 )
+from proxy_hub.secrets import SecretResolver
 from proxy_hub.security import resource_etag
 
 
@@ -69,11 +74,24 @@ def tenant_body(tenant: Tenant) -> dict[str, object]:
 def build_admin_router(
     database: Database,
     auth: AuthComponents,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+    secret_resolver: SecretResolver,
 ) -> APIRouter:
     """Build administration routes bound to application resources."""
     router = APIRouter(prefix="/v1/admin", tags=["administration"])
     router.include_router(build_iam_router(database, auth))
     router.include_router(build_enrolment_router(database, auth))
+    router.include_router(
+        build_backend_router(
+            database,
+            auth,
+            settings,
+            http_client,
+            secret_resolver,
+        )
+    )
+    router.include_router(build_policy_router(database, auth, settings))
 
     def get_session() -> Generator[Session, None, None]:
         yield from session_scope(database)

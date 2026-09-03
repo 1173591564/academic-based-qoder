@@ -262,6 +262,7 @@ class ScholarBackend(Base, Timestamped, Versioned):
     )
     last_probe_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_probe_ready: Mapped[bool | None] = mapped_column(Boolean)
+    last_probe_reason: Mapped[str | None] = mapped_column(String(64))
 
 
 class TenantRoute(Base, Timestamped, Versioned):

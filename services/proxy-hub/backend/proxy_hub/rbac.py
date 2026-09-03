@@ -98,6 +98,11 @@ def capability_names(context: AdminContext) -> list[str]:
                 "tenant:create",
                 "tenant:update",
                 "principal:manage",
+                "membership:manage",
+                "policy:manage",
+                "quota:manage",
+                "route:manage",
+                "backend:read",
                 "backend:manage",
                 "settings:manage",
                 "audit:read",
@@ -112,11 +117,10 @@ def capability_names(context: AdminContext) -> list[str]:
                     "membership:manage",
                     "policy:manage",
                     "quota:manage",
-                    "route:manage",
                 }
             )
         elif grant.role == OPERATOR:
-            capabilities.add("backend:probe")
+            capabilities.update({"backend:read", "backend:probe"})
         elif grant.role == AUDITOR:
             capabilities.add("audit:read")
     return sorted(capabilities)

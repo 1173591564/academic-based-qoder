@@ -1,8 +1,10 @@
 """Shared Proxy Hub API test resources."""
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
@@ -41,8 +43,27 @@ class ApiHarness:
 
 
 @pytest.fixture
-def api_harness() -> ApiHarness:
+def api_harness(monkeypatch: pytest.MonkeyPatch) -> ApiHarness:
     """Create an isolated platform-administrator browser session."""
+    monkeypatch.setenv("SCHOLAR_TEST_TOKEN", "scholar-service-token")
+
+    def scholar_backend(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/private/health/ready"):
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ready",
+                    "corpus_version": "corpus-v1",
+                    "parsed_papers": 12,
+                    "vector_chunks": 240,
+                    "graph_built_at": "2026-09-03T00:00:00Z",
+                    "synchronized_at": "2026-09-03T00:05:00Z",
+                    "workspace_isolation": "tenant",
+                },
+            )
+        return httpx.Response(404)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(scholar_backend))
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -86,6 +107,7 @@ def api_harness() -> ApiHarness:
             public_origin="http://testserver",
         ),
         engine=engine,
+        http_client=http_client,
     )
     with TestClient(app) as client:
         client.cookies.set("proxy_hub_session", raw_session)
@@ -96,3 +118,4 @@ def api_harness() -> ApiHarness:
             principal_id=principal_id,
             csrf_token=csrf_token,
         )
+    asyncio.run(http_client.aclose())
