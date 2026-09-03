@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,12 @@ def invoke_gateway_login(args, input=None):
     app = typer.Typer()
     app.command()(dsh_ops.gateway_login)
     return CliRunner().invoke(app, args, input=input)
+
+
+def plain_output(result):
+    """Strip ANSI styling and collapse Rich line wrapping."""
+    text = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    return re.sub(r"\s+", " ", text)
 
 
 class _FakeResponse:
@@ -127,7 +134,7 @@ def test_gateway_login_requires_explicit_secure_gateway(tmp_path):
         input="enrol-code-1\n",
     )
     assert result.exit_code != 0
-    assert "需要 --gateway" in result.output
+    assert "需要 --gateway" in plain_output(result)
 
 
 def test_gateway_login_rejects_public_http_gateway(tmp_path):
@@ -144,7 +151,7 @@ def test_gateway_login_rejects_public_http_gateway(tmp_path):
         input="enrol-code-1\n",
     )
     assert result.exit_code != 0
-    assert "must use HTTPS" in result.output
+    assert "must use HTTPS" in plain_output(result)
 
 
 def test_gateway_login_prompts_without_echo(monkeypatch):
