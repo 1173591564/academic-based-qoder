@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-
 from conftest import ApiHarness
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 import pytest
+from conftest import ApiHarness
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -24,7 +25,6 @@ from proxy_hub.models import (
 )
 from proxy_hub.quota import quota_window_start
 from proxy_hub.security import digest_token, token_matches
-from conftest import ApiHarness
 
 
 @dataclass(frozen=True)
