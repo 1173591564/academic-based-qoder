@@ -292,7 +292,7 @@ def _ensure_scholar_assets(
     return actions
 
 
-def _validated_remote_url(value: str) -> str:
+def _validated_remote_url(value: str, *, allow_http: bool = False) -> str:
     try:
         parsed = urlparse(value)
         hostname = parsed.hostname or ""
@@ -315,6 +315,12 @@ def _validated_remote_url(value: str) -> str:
                 return value
         except ValueError:
             pass
+        if allow_http:
+            console.print(
+                "[yellow]警告：网关为 HTTP。production 模式的 Proxy Hub "
+                "会强制 HTTPS origin，届时请改用 https 地址重跑。[/]"
+            )
+            return value
     raise typer.BadParameter(
         "remote MCP URL must use HTTPS, or HTTP on a numeric loopback address for an SSH tunnel"
     )
@@ -705,7 +711,7 @@ def gateway_login(
     py = str(python_cmd) if python_cmd else sys.executable
     patch = _patch_path(dsh_home, profile)
     dev_tree = _detect_dev_tree(scholar_home)
-    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL)
+    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL, allow_http=True)
     token_ref = _validated_credential_ref(token_env)
     if code_stdin and code:
         raise typer.BadParameter("--code 与 --code-stdin 二选一")
@@ -718,9 +724,7 @@ def gateway_login(
 
     console.print("[cyan]正在兑换 capability ...[/]")
     token_value, expires_at = _exchange_capability(gateway_url, code_value)
-    console.print(
-        f"[green][OK][/] capability 已签发（到期：{expires_at or '见 Hub'}）"
-    )
+    console.print(f"[green][OK][/] capability 已签发（到期：{expires_at or '见 Hub'}）")
 
     for action in _ensure_scholar_assets(scholar_home, include_runtime_dirs=False):
         console.print(f"[green][OK][/] {action}")
