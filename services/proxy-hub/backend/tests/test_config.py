@@ -20,7 +20,7 @@ def test_capability_ttl_is_bounded() -> None:
     with pytest.raises(ValidationError):
         Settings(capability_ttl_seconds=299)
     with pytest.raises(ValidationError):
-        Settings(capability_ttl_seconds=86_401)
+        Settings(capability_ttl_seconds=2_592_001)
 
 
 def test_gateway_limits_are_bounded() -> None:

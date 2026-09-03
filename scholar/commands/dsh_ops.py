@@ -23,6 +23,7 @@
   scholar init-dsh --uninstall    # 卸载（删 patch 段 + 预设目录）
 """
 
+import json
 import os
 import re
 import shutil
@@ -30,7 +31,11 @@ import sys
 import ipaddress
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
+from urllib.error import HTTPError as _HTTPError
+from urllib.error import URLError as _URLError
+from urllib.request import Request as _Request
+from urllib.request import urlopen as _urlopen
 
 import typer
 import yaml
@@ -45,6 +50,7 @@ console = Console()
 MARKER = "# >>> scholar"
 END_MARKER = "# <<< scholar"
 DEFAULT_REMOTE_TOKEN_REF = "SCHOLAR_REMOTE_TOKEN"
+DEFAULT_GATEWAY_URL = "http://47.108.198.147:8081/v1/mcp/scholar"
 _CREDENTIAL_REF = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -335,7 +341,9 @@ def _store_credential(dsh_home: Path, ref: str, value: str) -> Path:
     if path.exists():
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         if loaded is not None and not isinstance(loaded, dict):
-            raise typer.BadParameter(f"credentials document is not a YAML mapping: {path}")
+            raise typer.BadParameter(
+                f"credentials document is not a YAML mapping: {path}"
+            )
         document = loaded or {}
         if not all(
             isinstance(key, str)
@@ -344,7 +352,9 @@ def _store_credential(dsh_home: Path, ref: str, value: str) -> Path:
             and item
             for key, item in document.items()
         ):
-            raise typer.BadParameter(f"credentials document contains an invalid entry: {path}")
+            raise typer.BadParameter(
+                f"credentials document contains an invalid entry: {path}"
+            )
     document[ref] = value
     with NamedTemporaryFile(
         "w", encoding="utf-8", dir=directory, prefix=".credentials.", delete=False
@@ -622,3 +632,159 @@ def init_dsh(
         console.print(f"Bearer 鉴权引用：{token_ref}")
     console.print("\n卸载：")
     console.print("  scholar init-dsh --uninstall")
+
+
+def _exchange_capability(
+    gateway_url: str, code: str, timeout: int = 20
+) -> tuple[str, str]:
+    """用一次性 enrolment 兑换码换取 Proxy Hub capability（session_token）。"""
+    parts = urlsplit(gateway_url)
+    origin = f"{parts.scheme}://{parts.netloc}"
+    req = _Request(
+        origin + "/v1/session",
+        data=json.dumps(
+            {"enrolment_token": code, "session_label": "scholar-gateway-login"}
+        ).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with _urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except _HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("error", {})
+            message = "{}: {}".format(
+                detail.get("code", f"http_{exc.code}"), detail.get("message", "")
+            )
+        except Exception:
+            message = f"HTTP {exc.code}"
+        raise typer.BadParameter(f"兑换失败：{message}") from exc
+    except _URLError as exc:
+        raise typer.BadParameter(
+            f"无法连接 Proxy Hub（{origin}）：{exc.reason}"
+        ) from exc
+    token = body.get("session_token")
+    if not token:
+        raise typer.BadParameter("Proxy Hub 响应缺少 session_token")
+    expires = body.get("expires_at", "")
+    return token, expires
+
+
+@app.command(name="gateway-login")
+def gateway_login(
+    code: str = typer.Option(
+        None, "--code", help="Proxy Hub 一次性 enrolment 兑换码（管理员发放）"
+    ),
+    code_stdin: bool = typer.Option(False, "--code-stdin", help="从标准输入读取兑换码"),
+    gateway: str = typer.Option(
+        None,
+        "--gateway",
+        help="Proxy Hub 网关 MCP URL（默认 http://47.108.198.147:8081/v1/mcp/scholar）",
+    ),
+    dsh_home: Path = typer.Option(None, "--dsh-home", help="dsh 配置根（默认 ~/.dsh）"),
+    scholar_home: Path = typer.Option(None, "--scholar-home", help="知识库根"),
+    workspace: Path = typer.Option(None, "--workspace", help="学术工作区"),
+    python_cmd: Path = typer.Option(None, "--python", help="MCP server 解释器"),
+    profile: str = typer.Option("headless", help="dsh profile"),
+    token_env: str = typer.Option(
+        DEFAULT_REMOTE_TOKEN_REF,
+        "--token-env",
+        help="capability 存入 dsh credentials 的引用名",
+    ),
+):
+    """Proxy Hub 网关接入：一次性兑换码 → capability → 写入学术模式配置。
+
+    等价于 init-dsh --remote <gateway>，外加用兑换码换取短期 capability
+    并存入 dsh credentials。capability 到期后重跑本命令换新码即可，
+    配置无需改动。
+    """
+    dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
+    scholar_home = Path(scholar_home) if scholar_home else Path(config.SCHOLAR_HOME)
+    workspace = Path(workspace) if workspace else Path.cwd()
+    py = str(python_cmd) if python_cmd else sys.executable
+    patch = _patch_path(dsh_home, profile)
+    dev_tree = _detect_dev_tree(scholar_home)
+    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL)
+    token_ref = _validated_credential_ref(token_env)
+    if code_stdin and code:
+        raise typer.BadParameter("--code 与 --code-stdin 二选一")
+    if not code_stdin and not code:
+        raise typer.BadParameter("需要 --code 或 --code-stdin 提供兑换码")
+
+    code_value = sys.stdin.readline().rstrip("\r\n") if code_stdin else code.strip()
+    if not code_value:
+        raise typer.BadParameter("兑换码为空")
+
+    console.print("[cyan]正在兑换 capability ...[/]")
+    token_value, expires_at = _exchange_capability(gateway_url, code_value)
+    console.print(
+        f"[green][OK][/] capability 已签发（到期：{expires_at or '见 Hub'}）"
+    )
+
+    for action in _ensure_scholar_assets(scholar_home, include_runtime_dirs=False):
+        console.print(f"[green][OK][/] {action}")
+    problems = _preflight(scholar_home, py, remote=True)
+    if problems:
+        console.print("\n[red]前置校验未通过:[/]")
+        for p in problems:
+            console.print(f"  - {p}")
+        raise typer.Exit(1)
+
+    block = _build_patch_block(
+        scholar_home,
+        py,
+        dev_tree,
+        workspace=workspace,
+        remote_url=gateway_url,
+        token_ref=token_ref,
+    )
+    patch_previous = patch.read_bytes() if patch.exists() else None
+    preset_dir = _preset_dir(dsh_home)
+    preset_previous = (
+        {
+            item.relative_to(preset_dir): item.read_bytes()
+            for item in preset_dir.rglob("*")
+            if item.is_file()
+        }
+        if preset_dir.exists()
+        else None
+    )
+    try:
+        action = _write_segment(patch, block)
+        pdir = _write_preset(
+            dsh_home,
+            scholar_home,
+            workspace,
+            py,
+            dev_tree,
+            remote_url=gateway_url,
+            token_ref=token_ref,
+        )
+        rules_actions = _ensure_rules(scholar_home)
+        _store_credential(dsh_home, token_ref, token_value)
+    except Exception:
+        if patch_previous is None:
+            patch.unlink(missing_ok=True)
+        else:
+            patch.write_bytes(patch_previous)
+        shutil.rmtree(preset_dir, ignore_errors=True)
+        if preset_previous is not None:
+            for relative, content in preset_previous.items():
+                target = preset_dir / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+        raise
+
+    console.print(f"[green][OK][/] {action} scholar block @ {patch}")
+    console.print(f"[green][OK][/] academic preset written @ {pdir}")
+    for r in rules_actions:
+        console.print(f"[green][OK][/] {r}")
+    console.print(
+        "[green][OK][/] capability credential stored（到期自动失效后重跑本命令换新）"
+    )
+    console.print(f"\n[bold]Proxy Hub 网关模式[/]：MCP 端点 = {gateway_url}")
+    console.print(f"capability 凭据引用：{token_ref}")
+    console.print("\n验证：")
+    console.print('  dsh --profile headless "用 scholar 工具查一下知识库规模"')
+    console.print("  Web UI → 设置 → Agent 预设 → 自定义 →「学术模式」开新会话")

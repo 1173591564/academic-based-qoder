@@ -1,5 +1,8 @@
 """test_dsh_ops.py — init-dsh 的 patch 段管理与 rules 分发逻辑。"""
 
+import io
+import json
+
 from pathlib import Path
 
 import yaml
@@ -15,6 +18,101 @@ def invoke_init_dsh(args, input=None):
     app = typer.Typer()
     app.command()(dsh_ops.init_dsh)
     return CliRunner().invoke(app, args, input=input)
+
+
+def invoke_gateway_login(args, input=None):
+    app = typer.Typer()
+    app.command()(dsh_ops.gateway_login)
+    return CliRunner().invoke(app, args, input=input)
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_gateway_login_exchanges_and_stores_capability(tmp_path, monkeypatch):
+    scholar_home = tmp_path / "scholar"
+    dsh_home = tmp_path / "dsh"
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["data"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse(
+            {"session_token": "cap-token", "expires_at": "2026-10-01T00:00:00+00:00"}
+        )
+
+    monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
+    result = invoke_gateway_login(
+        [
+            "--code",
+            "enrol-code-1",
+            "--gateway",
+            "https://hub.example.test/v1/mcp/scholar",
+            "--scholar-home",
+            str(scholar_home),
+            "--dsh-home",
+            str(dsh_home),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["url"] == "https://hub.example.test/v1/session"
+    assert captured["data"] == {
+        "enrolment_token": "enrol-code-1",
+        "session_label": "scholar-gateway-login",
+    }
+    credentials = dsh_home / ".credentials.yaml"
+    document = yaml.safe_load(credentials.read_text(encoding="utf-8"))
+    assert document[dsh_ops.DEFAULT_REMOTE_TOKEN_REF] == "cap-token"
+    config_text = (dsh_home / "profiles" / "headless" / "cordis.patch.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "hub.example.test" in config_text
+    assert "cap-token" not in config_text + result.output
+    assert "2026-10-01" in result.output
+
+
+def test_gateway_login_surfaces_hub_error(tmp_path, monkeypatch):
+    scholar_home = tmp_path / "scholar"
+    dsh_home = tmp_path / "dsh"
+
+    def fake_urlopen(req, timeout=None):
+        raise dsh_ops._HTTPError(
+            req.full_url,
+            401,
+            "Unauthorized",
+            {},
+            io.BytesIO(b'{"error":{"code":"invalid_credential","message":"bad code"}}'),
+        )
+
+    monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
+    result = invoke_gateway_login(
+        [
+            "--code",
+            "enrol-code-1",
+            "--gateway",
+            "https://hub.example.test/v1/mcp/scholar",
+            "--scholar-home",
+            str(scholar_home),
+            "--dsh-home",
+            str(dsh_home),
+        ]
+    )
+    assert result.exit_code != 0
+    assert "invalid_credential" in result.output
+    assert not (dsh_home / ".credentials.yaml").exists()
 
 
 def test_write_segment_idempotent(tmp_path):
@@ -114,9 +212,9 @@ def test_init_dsh_remote_clean_home_stores_special_token_safely(tmp_path):
     assert result.exit_code == 0, result.output
     credentials = dsh_home / ".credentials.yaml"
     document = yaml.safe_load(credentials.read_text(encoding="utf-8"))
-    config_text = (
-        dsh_home / "profiles" / "headless" / "cordis.patch.yml"
-    ).read_text(encoding="utf-8")
+    config_text = (dsh_home / "profiles" / "headless" / "cordis.patch.yml").read_text(
+        encoding="utf-8"
+    )
     preset_text = (
         dsh_home / ".agent-presets" / "academic" / "agent.cordis.yml"
     ).read_text(encoding="utf-8")
