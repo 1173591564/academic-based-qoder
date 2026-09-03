@@ -31,7 +31,19 @@ class Settings(BaseSettings):
         ge=1_024,
         le=16_777_216,
     )
+    mcp_response_max_bytes: int = Field(
+        default=16_777_216,
+        ge=1_024,
+        le=67_108_864,
+    )
     quota_reservation_ttl_seconds: int = Field(default=600, ge=30, le=7_200)
+    admin_rate_limit_requests: int = Field(default=120, ge=1, le=10_000)
+    admin_rate_limit_period_seconds: int = Field(default=60, ge=1, le=3_600)
+    backend_safe_retry_attempts: int = Field(default=1, ge=0, le=3)
+    backend_retry_backoff_seconds: float = Field(default=0.1, ge=0, le=1)
+    backend_circuit_failure_threshold: int = Field(default=3, ge=1, le=100)
+    backend_circuit_recovery_seconds: int = Field(default=30, ge=1, le=3_600)
+    audit_failure_policy: Literal["fail_closed"] = "fail_closed"
     oidc_issuer_url: HttpUrl | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
@@ -58,6 +70,22 @@ class Settings(BaseSettings):
                 raise ValueError("production OIDC issuer must use HTTPS")
             if self.database_url.startswith("sqlite"):
                 raise ValueError("production requires PostgreSQL")
+            if not self.cookie_name.startswith("__Host-"):
+                raise ValueError(
+                    "production browser session cookie must use the __Host- prefix"
+                )
+            if (
+                self.oidc_client_secret is None
+                or len(self.oidc_client_secret) < 16
+                or "replace" in self.oidc_client_secret.casefold()
+            ):
+                raise ValueError(
+                    "production requires a non-placeholder OIDC client secret"
+                )
+            if self.backend_connect_timeout_seconds > 10:
+                raise ValueError(
+                    "production backend connect timeout must not exceed 10 seconds"
+                )
         return self
 
 

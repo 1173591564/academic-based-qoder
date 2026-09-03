@@ -37,6 +37,13 @@ class InterruptedStream(httpx.AsyncByteStream):
         raise RuntimeError("stream interrupted")
 
 
+class OversizedStream(httpx.AsyncByteStream):
+    """Emit a chunk larger than the configured gateway response limit."""
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield b"oversized"
+
+
 def quota_state() -> tuple[
     Engine,
     Database,
@@ -83,6 +90,7 @@ def test_idle_stream_refreshes_and_completes_quota_lease() -> None:
                 service,
                 reservation,
                 refresh_seconds=0.02,
+                maximum_bytes=1_024,
             )
         ]
         return b"".join(chunks)
@@ -113,12 +121,44 @@ def test_interrupted_stream_fails_and_releases_quota_lease() -> None:
             service,
             reservation,
             refresh_seconds=0.02,
+            maximum_bytes=1_024,
         ):
             pass
 
     with pytest.RaisesGroup(RuntimeError) as error:
         asyncio.run(consume())
     assert str(error.value.exceptions[0]) == "stream interrupted"
+    with Session(engine) as session:
+        record = session.get(QuotaReservationRecord, reservation.reservation_id)
+        window = session.scalar(
+            select(QuotaWindow).where(QuotaWindow.tenant_id == "tenant_stream")
+        )
+        assert record is not None
+        assert record.status == "failed"
+        assert window is not None
+        assert window.active_count == 0
+        assert window.failed_count == 1
+    engine.dispose()
+
+
+def test_oversized_stream_fails_and_releases_quota_lease() -> None:
+    engine, database, service, reservation = quota_state()
+
+    async def consume() -> None:
+        response = httpx.Response(200, stream=OversizedStream())
+        async for _chunk in stream_with_quota(
+            response,
+            database,
+            service,
+            reservation,
+            refresh_seconds=0.02,
+            maximum_bytes=4,
+        ):
+            pass
+
+    with pytest.RaisesGroup(RuntimeError) as error:
+        asyncio.run(consume())
+    assert "exceeded the configured limit" in str(error.value.exceptions[0])
     with Session(engine) as session:
         record = session.get(QuotaReservationRecord, reservation.reservation_id)
         window = session.scalar(

@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from proxy_hub.admin_backends import build_backend_router
+from proxy_hub.admin_capabilities import build_capability_router
 from proxy_hub.admin_iam import build_iam_router
 from proxy_hub.admin_observability import build_observability_router
 from proxy_hub.admin_policies import build_policy_router
@@ -83,6 +84,7 @@ def build_admin_router(
     router = APIRouter(prefix="/v1/admin", tags=["administration"])
     router.include_router(build_iam_router(database, auth))
     router.include_router(build_enrolment_router(database, auth))
+    router.include_router(build_capability_router(database, auth))
     router.include_router(
         build_backend_router(
             database,
