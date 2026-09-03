@@ -23,6 +23,17 @@ def test_capability_ttl_is_bounded() -> None:
         Settings(capability_ttl_seconds=86_401)
 
 
+def test_gateway_limits_are_bounded() -> None:
+    with pytest.raises(ValidationError):
+        Settings(backend_probe_max_age_seconds=4)
+    with pytest.raises(ValidationError):
+        Settings(backend_connect_timeout_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(backend_request_timeout_seconds=3_601)
+    with pytest.raises(ValidationError):
+        Settings(mcp_request_max_bytes=1_023)
+
+
 def test_production_requires_https_oidc_issuer() -> None:
     with pytest.raises(ValidationError, match="OIDC issuer must use HTTPS"):
         Settings(

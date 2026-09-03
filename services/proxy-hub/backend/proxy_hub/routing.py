@@ -92,25 +92,22 @@ def resolve_route(
 
     if mcp_session_digest is not None:
         affinity = session.get(McpSessionAffinity, mcp_session_digest)
-        if affinity is not None:
-            if (
-                affinity.tenant_id != tenant_id
-                or affinity.capability_id != capability_id
-            ):
-                raise RouteResolutionError("session_affinity_mismatch")
-            if _as_utc(affinity.expires_at) > _as_utc(at):
-                backend = session.get(ScholarBackend, affinity.backend_id)
-                if backend is None:
-                    raise RouteResolutionError("backend_missing")
-                return _select_backend(
-                    session,
-                    tenant_id,
-                    affinity.backend_id,
-                    affinity.corpus_version,
-                    at,
-                    max_probe_age,
-                    from_affinity=True,
-                )
+        if affinity is None or _as_utc(affinity.expires_at) <= _as_utc(at):
+            raise RouteResolutionError("session_affinity_missing")
+        if affinity.tenant_id != tenant_id or affinity.capability_id != capability_id:
+            raise RouteResolutionError("session_affinity_mismatch")
+        backend = session.get(ScholarBackend, affinity.backend_id)
+        if backend is None:
+            raise RouteResolutionError("backend_missing")
+        return _select_backend(
+            session,
+            tenant_id,
+            affinity.backend_id,
+            affinity.corpus_version,
+            at,
+            max_probe_age,
+            from_affinity=True,
+        )
 
     return _select_backend(
         session,
