@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     public_origin: HttpUrl = HttpUrl("http://127.0.0.1:8000")
     cookie_name: str = "proxy_hub_session"
     session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
+    capability_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
     oidc_issuer_url: HttpUrl | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
