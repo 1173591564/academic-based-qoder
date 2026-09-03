@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./proxy-hub.db"
     public_origin: HttpUrl = HttpUrl("http://127.0.0.1:8000")
     cookie_name: str = "proxy_hub_session"
-    session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
+    session_ttl_seconds: int = Field(default=28_800, ge=300, le=2_592_000)
     capability_ttl_seconds: int = Field(default=3_600, ge=300, le=2_592_000)
     backend_probe_max_age_seconds: int = Field(default=300, ge=5, le=3_600)
     backend_probe_max_bytes: int = Field(default=65_536, ge=1_024, le=1_048_576)
