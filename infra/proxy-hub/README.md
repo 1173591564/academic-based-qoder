@@ -29,8 +29,19 @@ docker compose --env-file infra/proxy-hub/.env \
   -f infra/proxy-hub/compose.yml run --rm migrate
 ```
 
+For production, run `proxy-hub-production-check` after the migration and before
+traffic reaches a new API instance. Production startup repeats the migration
+head check and fails closed when configuration or schema state is unsafe. See
+`docs/proxy-hub-operations.md` for release, rollback, incident, and backup
+procedures.
+
 Back up the control plane with `pg_dump` and restore only into an empty, access-controlled control-plane PostgreSQL instance. Audit rows are append-only application records and must use retention and backup policies independent from operational logs.
 
-Production deployments must terminate HTTPS at the same origin, set `PROXY_HUB_ENVIRONMENT=production`, inject the OIDC client secret through the deployment secret facility, keep `/private/*` inaccessible from public ingress, and run migrations as a separate release operation. The local Compose file is not a high-availability production topology.
+Production deployments must terminate HTTPS at the same origin, set
+`PROXY_HUB_ENVIRONMENT=production`, use a `__Host-` browser-session cookie,
+inject the OIDC client secret through the deployment secret facility, keep
+`/private/*` inaccessible from public ingress, and run migrations as a
+separate release operation. The local Compose file is not a high-availability
+production topology.
 
 Scholar database credentials, corpus volumes, parsing jobs, and vector-index assets must not be added to this directory.

@@ -283,7 +283,7 @@ class TenantRoute(Base, Timestamped, Versioned):
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
 
 
-class DshCapability(Base):
+class DshCapability(Base, Versioned):
     """Revocable DSH session capability metadata."""
 
     __tablename__ = "dsh_capabilities"
@@ -315,6 +315,34 @@ class DshCapability(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
+        nullable=False,
+    )
+
+
+class AdminRateLimit(Base):
+    """Database-backed fixed-window administration request counter."""
+
+    __tablename__ = "admin_rate_limits"
+    __table_args__ = (
+        CheckConstraint(
+            "request_count > 0",
+            name="ck_admin_rate_limit_request_count",
+        ),
+    )
+
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("browser_sessions.id"),
+        primary_key=True,
+    )
+    window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
     )
 

@@ -18,11 +18,13 @@ async def stream_with_quota(
     reservation: QuotaReservation,
     *,
     refresh_seconds: float,
+    maximum_bytes: int,
 ) -> AsyncIterator[bytes]:
     """Relay a response while refreshing and finally settling its lease."""
     completed = False
     active_reservation = reservation
     stopped = anyio.Event()
+    returned_bytes = 0
 
     async def refresh_lease() -> None:
         nonlocal active_reservation
@@ -45,6 +47,11 @@ async def stream_with_quota(
                 task_group.start_soon(refresh_lease)
             try:
                 async for chunk in stream_body(response):
+                    returned_bytes += len(chunk)
+                    if returned_bytes > maximum_bytes:
+                        raise RuntimeError(
+                            "Scholar response exceeded the configured limit"
+                        )
                     yield chunk
             finally:
                 stopped.set()

@@ -165,6 +165,7 @@ def gateway_harness(
     scopes: list[str] | None = None,
     secret_resolver: StaticSecretResolver | None = None,
     request_max_bytes: int = 1_048_576,
+    response_max_bytes: int = 8_388_608,
 ) -> Iterator[GatewayHarness]:
     """Create an app backed by an HTTPX mock Scholar service."""
     engine = create_engine(
@@ -190,6 +191,7 @@ def gateway_harness(
             database_url="sqlite://",
             public_origin="http://testserver",
             mcp_request_max_bytes=request_max_bytes,
+            mcp_response_max_bytes=response_max_bytes,
         ),
         engine=engine,
         http_client=http_client,
@@ -354,6 +356,59 @@ def test_initialize_and_tool_call_forward_without_rewriting_or_secret_leakage() 
             assert CAPABILITY not in str(tool_audit.details)
             assert SERVICE_CREDENTIAL not in str(tool_audit.details)
             assert MCP_SESSION not in str(tool_audit.details)
+
+
+def test_declared_oversized_backend_response_fails_closed() -> None:
+    response_body = b"x" * 1_025
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=response_body)
+
+    with gateway_harness(handler, response_max_bytes=1_024) as gateway:
+        response = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=initialize_body(),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 502
+        assert response.json()["error"]["code"] == "backend_response_too_large"
+        assert response_body not in response.content
+        with Session(gateway.engine) as session:
+            audit = session.scalar(
+                select(AuditEvent).where(
+                    AuditEvent.details["reason"].as_string()
+                    == "backend_response_too_large"
+                )
+            )
+            assert audit is not None
+
+
+def test_backend_timeout_is_classified_as_gateway_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    with gateway_harness(handler) as gateway:
+        response = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=initialize_body(),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 504
+        assert response.json()["error"]["code"] == "backend_timeout"
+        with Session(gateway.engine) as session:
+            audit = session.scalar(
+                select(AuditEvent).where(AuditEvent.result_class == "timeout")
+            )
+            assert audit is not None
+            assert audit.details["reason"] == "backend_timeout"
 
 
 def test_credentials_and_tool_policy_fail_before_backend_contact() -> None:

@@ -99,6 +99,7 @@ def capability_names(context: AdminContext) -> list[str]:
                 "tenant:update",
                 "principal:manage",
                 "membership:manage",
+                "capability:manage",
                 "policy:manage",
                 "quota:manage",
                 "route:manage",
@@ -119,6 +120,7 @@ def capability_names(context: AdminContext) -> list[str]:
             capabilities.update(
                 {
                     "membership:manage",
+                    "capability:manage",
                     "policy:manage",
                     "quota:manage",
                     "usage:read",

@@ -3,7 +3,7 @@
 The backend is a Python FastAPI control-plane service. The current route groups are:
 
 - OIDC login and callback routes under `/auth/`;
-- DSH enrolment exchange under `/v1/session`;
+- DSH enrolment exchange and holder revocation under `/v1/session`;
 - authenticated Scholar Streamable HTTP MCP under `/v1/mcp/scholar`;
 - browser-session administration APIs under `/v1/admin/`;
 - private liveness and readiness routes under `/private/health/`.
@@ -16,6 +16,10 @@ and research arguments are not persisted in control-plane records.
 Each MCP tool call is intersected with the tenant's exact tool allowlist.
 Optional tenant quotas reserve request and concurrency capacity atomically
 before Scholar is contacted, then settle a durable lease when streaming ends.
+Tenant administrators can inspect non-secret capability metadata and revoke a
+capability immediately. Administration requests are database-rate-limited, and
+Scholar calls use safe-method retries, bounded bodies, timeout classification,
+and per-backend circuit isolation.
 
 ## Local development
 
@@ -37,6 +41,8 @@ export PROXY_HUB_OIDC_CLIENT_SECRET=replace-with-a-development-secret
 export SCHOLAR_SERVICE_TOKEN=replace-with-a-development-service-token
 export PROXY_HUB_BACKEND_PROBE_MAX_AGE_SECONDS=300
 export PROXY_HUB_QUOTA_RESERVATION_TTL_SECONDS=600
+export PROXY_HUB_ADMIN_RATE_LIMIT_REQUESTS=120
+export PROXY_HUB_ADMIN_RATE_LIMIT_PERIOD_SECONDS=60
 alembic upgrade head
 uvicorn proxy_hub.app:app --reload
 ```
@@ -56,7 +62,10 @@ latency, response size, and quota delta. Usage pages aggregate gateway
 requests, outcomes, latency, returned bytes, and current quota configuration
 without reading request bodies or changing quota counters.
 
-Production configuration fails closed unless the public origin uses HTTPS, PostgreSQL is configured, and all OIDC settings are present.
+Production configuration fails closed unless the public origin uses HTTPS,
+the browser session cookie uses the `__Host-` prefix, PostgreSQL is configured,
+OIDC settings are secure, and the database is at the current Alembic head.
+Run `proxy-hub-production-check` before rollout.
 
 ## Verification
 

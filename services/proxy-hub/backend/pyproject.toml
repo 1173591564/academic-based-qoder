@@ -29,6 +29,7 @@ dev = [
 
 [project.scripts]
 proxy-hub = "proxy_hub.app:run"
+proxy-hub-production-check = "proxy_hub.production_check:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["proxy_hub"]
