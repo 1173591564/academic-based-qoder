@@ -168,6 +168,11 @@ PUT    /v1/admin/settings
 ```
 
 Audit and usage queries require bounded time ranges and cursor pagination. Raw research questions and Bearer credentials are not queryable fields.
+The current API requires timezone-aware `from` and `to` values covering at
+most 31 days. Audit responses omit request bodies, argument digests,
+capability/session digests, credential material, and corpus content. Usage
+responses aggregate request outcomes, latency, returned bytes, quota
+consumption, and current quota configuration per tenant.
 
 ## API behavior
 
