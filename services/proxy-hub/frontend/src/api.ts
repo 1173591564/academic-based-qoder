@@ -69,7 +69,20 @@ export async function request<T>(
     },
   });
   if (!response.ok) {
-    throw await parseError(response);
+    const error = await parseError(response);
+    if (
+      error.status === 401 &&
+      (error.code === "browser_session_required" ||
+        error.code === "browser_session_expired")
+    ) {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.assign(
+        `/auth/login?return_to=${encodeURIComponent(
+          returnTo.startsWith("/console/") ? returnTo : "/console/",
+        )}`,
+      );
+    }
+    throw error;
   }
   const data =
     response.status === 204 ? (undefined as T) : ((await response.json()) as T);
