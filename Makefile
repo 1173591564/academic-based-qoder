@@ -1,4 +1,4 @@
-.PHONY: help install-dev sync-templates check-templates test-scholar check-proxy-backend check-proxy-frontend check
+.PHONY: help install-dev init-scholar sync-templates check-templates test-scholar check-proxy-backend check-proxy-frontend check
 
 PYTHON ?= python
 PROXY_BACKEND := services/proxy-hub/backend
@@ -7,6 +7,7 @@ PROXY_FRONTEND := services/proxy-hub/frontend
 help:
 	@printf '%s\n' \
 		'install-dev          Install all development dependencies' \
+		'init-scholar         Initialize Scholar runtime directories' \
 		'sync-templates       Refresh package and IDE template projections' \
 		'check-templates      Verify generated templates are current' \
 		'test-scholar         Run the Scholar test suite' \
@@ -20,6 +21,9 @@ install-dev:
 	$(PYTHON) -m pip install -e '$(PROXY_BACKEND)[dev]'
 	cd $(PROXY_FRONTEND) && npm ci
 
+init-scholar:
+	$(PYTHON) -m scholar init
+
 sync-templates:
 	$(PYTHON) scripts/sync-ide-config.py
 
@@ -27,7 +31,7 @@ check-templates:
 	$(PYTHON) scripts/sync-ide-config.py --check
 	$(PYTHON) scripts/verify_docs.py
 
-test-scholar:
+test-scholar: init-scholar
 	$(PYTHON) -m pytest tests -v --tb=short
 
 check-proxy-backend:

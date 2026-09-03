@@ -24,9 +24,6 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Initialize Scholar runtime directories
-        run: python -m scholar init
-
       - name: Verify generated templates
         run: make check-templates
 

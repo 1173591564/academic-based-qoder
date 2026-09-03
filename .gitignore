@@ -43,6 +43,12 @@ scholar-studio-*.zip
 .qoder/repowiki/
 
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+.coverage
+.coverage.*
+htmlcov/
 
 # JavaScript
 node_modules/
