@@ -2,9 +2,11 @@
 
 The frontend is a React and TypeScript administration SPA built with Vite and served from `/console/` on the same origin as the Hub API.
 
-The current slice includes OIDC sign-in, control-plane overview, tenant listing and detail, platform-administrator tenant creation, and ETag-protected tenant status changes. Role capabilities returned by `/v1/admin/me` control presentation only; the backend remains authoritative.
+The console includes OIDC sign-in, overview, tenant detail, teams, memberships, role bindings, exact Scholar tool policy, quota policy, backend registry/readiness/credential rotation, explicit tenant routes, bounded audit, usage, and principal status administration.
 
-The browser stores no identity-provider access or refresh token. Mutations use the server-side session cookie, same-origin checks, the CSRF cookie and header pair, and pessimistic response handling.
+Navigation and controls are derived from capabilities returned by `/v1/admin/me`, but the frontend is never the security boundary. Direct navigation and every API mutation remain subject to server-side role and tenant scope checks.
+
+The browser stores no identity-provider access, refresh token, capability, or Scholar service credential in local storage. Mutations use the server-side session cookie, same-origin checks, the CSRF cookie and header pair, ETag/`If-Match` concurrency control, and `Idempotency-Key` for creation. Successful mutations display the returned server resource and refresh its ETag.
 
 ## Development
 

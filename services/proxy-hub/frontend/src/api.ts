@@ -56,7 +56,7 @@ async function parseError(response: Response): Promise<ApiError> {
   );
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<ApiResult<T>> {
@@ -71,12 +71,16 @@ async function request<T>(
   if (!response.ok) {
     throw await parseError(response);
   }
-  const data = (await response.json()) as T;
+  const data =
+    response.status === 204 ? (undefined as T) : ((await response.json()) as T);
   return { data, etag: response.headers.get("ETag") };
 }
 
-function mutationHeaders(): Record<string, string> {
-  const csrf = getCookie(document.cookie, "proxy_hub_csrf");
+export function mutationHeaders(
+  cookieHeader: string,
+  extraHeaders: Record<string, string> = {},
+): Record<string, string> {
+  const csrf = getCookie(cookieHeader, "proxy_hub_csrf");
   if (!csrf) {
     throw new ApiError(
       403,
@@ -88,6 +92,7 @@ function mutationHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "X-CSRF-Token": csrf,
+    ...extraHeaders,
   };
 }
 
@@ -103,7 +108,7 @@ export const api = {
   ): Promise<ApiResult<T>> {
     return request<T>(path, {
       method: "POST",
-      headers: { ...mutationHeaders(), ...extraHeaders },
+      headers: mutationHeaders(document.cookie, extraHeaders),
       body: JSON.stringify(body),
     });
   },
@@ -115,8 +120,23 @@ export const api = {
   ): Promise<ApiResult<T>> {
     return request<T>(path, {
       method: "PATCH",
-      headers: { ...mutationHeaders(), "If-Match": etag },
+      headers: mutationHeaders(document.cookie, { "If-Match": etag }),
       body: JSON.stringify(body),
+    });
+  },
+
+  put<T>(path: string, body: object, etag: string): Promise<ApiResult<T>> {
+    return request<T>(path, {
+      method: "PUT",
+      headers: mutationHeaders(document.cookie, { "If-Match": etag }),
+      body: JSON.stringify(body),
+    });
+  },
+
+  delete(path: string, etag: string): Promise<ApiResult<void>> {
+    return request<void>(path, {
+      method: "DELETE",
+      headers: mutationHeaders(document.cookie, { "If-Match": etag }),
     });
   },
 };

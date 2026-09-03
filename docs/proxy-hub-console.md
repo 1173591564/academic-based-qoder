@@ -174,6 +174,21 @@ capability/session digests, credential material, and corpus content. Usage
 responses aggregate request outcomes, latency, returned bytes, quota
 consumption, and current quota configuration per tenant.
 
+## Administration console
+
+The React console under `/console/` is a same-origin client of the Proxy Hub API.
+It provides overview, tenants, teams, memberships, role bindings, tool policy,
+quota policy, Scholar backend registry and probes, tenant routes, bounded audit,
+usage, and principal status administration.
+
+Capability-driven navigation is a presentation hint only. The backend remains
+authoritative for role and tenant scope. Browser mutations use the session and
+CSRF cookie pair, send current ETags through `If-Match`, attach
+`Idempotency-Key` to create operations, display the server response, and refresh
+the resource ETag after policy or route changes. Identity-provider tokens,
+DSH capabilities, Scholar credentials, research content, and Proxy Hub database
+access never enter frontend storage.
+
 ## API behavior
 
 List responses use cursor pagination and stable resource identifiers. Create requests accept an `Idempotency-Key`. Mutations require `If-Match` with the current resource ETag so two operators cannot silently overwrite each other.
