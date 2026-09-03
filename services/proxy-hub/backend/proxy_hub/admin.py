@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from proxy_hub.audit import AuditEntry, append_audit_event
 from proxy_hub.auth import AuthComponents
 from proxy_hub.database import Database, session_scope
 from proxy_hub.errors import HubError, request_id
 from proxy_hub.models import (
-    AuditEvent,
     IdempotencyRecord,
     Principal,
     Tenant,
@@ -72,35 +72,6 @@ def request_digest(payload: BaseModel) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return sha256(encoded).hexdigest()
-
-
-def append_audit(
-    session: Session,
-    request: Request,
-    context: AdminContext,
-    action: str,
-    resource_type: str,
-    resource_id: str,
-    tenant_id: str | None,
-    argument_digest: str,
-) -> None:
-    """Append an audit event in the caller's transaction."""
-    session.add(
-        AuditEvent(
-            id=new_id("audit"),
-            request_id=request_id(request),
-            principal_id=context.principal_id,
-            tenant_id=tenant_id,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            outcome="accepted",
-            details={
-                "argument_digest": argument_digest,
-                "result_class": "success",
-            },
-        )
-    )
 
 
 def build_admin_router(
@@ -247,15 +218,20 @@ def build_admin_router(
         session.add(tenant)
         session.flush()
         body = tenant_body(tenant)
-        append_audit(
+        append_audit_event(
             session,
-            request,
-            context,
-            operation,
-            "tenant",
-            tenant.id,
-            tenant.id,
-            digest,
+            AuditEntry(
+                request_id=request_id(request),
+                principal_id=context.principal_id,
+                tenant_id=tenant.id,
+                action=operation,
+                resource_type="tenant",
+                resource_id=tenant.id,
+                outcome="accepted",
+                argument_digest=digest,
+                result_class="success",
+                details={"argument_digest": digest, "result_class": "success"},
+            ),
         )
         session.add(
             IdempotencyRecord(
@@ -336,15 +312,21 @@ def build_admin_router(
             )
         session.expire(tenant)
         session.refresh(tenant)
-        append_audit(
+        digest = request_digest(payload)
+        append_audit_event(
             session,
-            request,
-            context,
-            "tenant:update",
-            "tenant",
-            tenant.id,
-            tenant.id,
-            request_digest(payload),
+            AuditEntry(
+                request_id=request_id(request),
+                principal_id=context.principal_id,
+                tenant_id=tenant.id,
+                action="tenant:update",
+                resource_type="tenant",
+                resource_id=tenant.id,
+                outcome="accepted",
+                argument_digest=digest,
+                result_class="success",
+                details={"argument_digest": digest, "result_class": "success"},
+            ),
         )
         return JSONResponse(
             content=tenant_body(tenant),

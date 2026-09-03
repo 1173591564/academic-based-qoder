@@ -20,11 +20,11 @@ from joserfc.jwt import JWTClaimsRegistry
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from proxy_hub.audit import AuditEntry, append_audit_event
 from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
 from proxy_hub.errors import HubError, request_id
 from proxy_hub.models import (
-    AuditEvent,
     BrowserSession,
     OidcLoginState,
     Principal,
@@ -302,9 +302,9 @@ def build_auth_components(database: Database, settings: Settings) -> AuthCompone
         browser_session = session.get(BrowserSession, context.session_id)
         if browser_session is not None:
             browser_session.revoked_at = utc_now()
-        session.add(
-            AuditEvent(
-                id=new_id("audit"),
+        append_audit_event(
+            session,
+            AuditEntry(
                 request_id=request_id(request),
                 principal_id=context.principal_id,
                 tenant_id=None,
@@ -312,8 +312,9 @@ def build_auth_components(database: Database, settings: Settings) -> AuthCompone
                 resource_type="browser_session",
                 resource_id=context.session_id,
                 outcome="accepted",
+                result_class="success",
                 details={"result_class": "success"},
-            )
+            ),
         )
         response.delete_cookie(settings.cookie_name, path="/")
         response.delete_cookie("proxy_hub_csrf", path="/")
