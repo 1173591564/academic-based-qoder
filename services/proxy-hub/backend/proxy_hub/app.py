@@ -4,6 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import timedelta
 from uuid import uuid4
 
 import httpx
@@ -26,6 +27,7 @@ from proxy_hub.errors import (
 )
 from proxy_hub.health import build_health_router
 from proxy_hub.mcp_gateway import build_mcp_gateway_router
+from proxy_hub.quota import DatabaseQuotaService, QuotaService
 from proxy_hub.secrets import EnvironmentSecretResolver, SecretResolver
 from proxy_hub.session import build_session_router
 
@@ -40,6 +42,7 @@ class AppResources:
     database: Database
     http_client: httpx.AsyncClient
     secret_resolver: SecretResolver
+    quota_service: QuotaService
     owns_http_client: bool
 
 
@@ -48,6 +51,7 @@ def create_app(
     engine: Engine | None = None,
     http_client: httpx.AsyncClient | None = None,
     secret_resolver: SecretResolver | None = None,
+    quota_service: QuotaService | None = None,
 ) -> FastAPI:
     """Create a configured Proxy Hub application."""
     active_settings = settings or get_settings()
@@ -70,6 +74,10 @@ def create_app(
         database=database,
         http_client=active_http_client,
         secret_resolver=secret_resolver or EnvironmentSecretResolver(),
+        quota_service=quota_service
+        or DatabaseQuotaService(
+            timedelta(seconds=active_settings.quota_reservation_ttl_seconds)
+        ),
         owns_http_client=http_client is None,
     )
 
@@ -118,6 +126,7 @@ def create_app(
             resources.settings,
             resources.http_client,
             resources.secret_resolver,
+            resources.quota_service,
         )
     )
     app.include_router(build_admin_router(resources.database, auth))

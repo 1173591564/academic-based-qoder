@@ -11,6 +11,7 @@ from proxy_hub.models import (
     Tenant,
     TenantRoute,
 )
+from proxy_hub.policy import backend_allows_workspace_writes
 
 
 class RouteResolutionError(RuntimeError):
@@ -30,6 +31,7 @@ class RouteSelection:
     base_url: str
     corpus_version: str
     credential_ref: str
+    workspace_writes_allowed: bool
     from_affinity: bool
 
 
@@ -67,6 +69,7 @@ def _select_backend(
         base_url=backend.base_url,
         corpus_version=backend.corpus_version,
         credential_ref=backend.credential_ref,
+        workspace_writes_allowed=backend_allows_workspace_writes(backend.capacity),
         from_affinity=from_affinity,
     )
 
