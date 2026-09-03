@@ -10,6 +10,20 @@ DeepSeek Harness is the independently distributed user client. Its academic mode
 
 Phase One keeps the direct authenticated DSH-to-Scholar path. Phase Two adds a Proxy Hub backend and a same-origin operator administration frontend in this repository without moving tenant policy into Scholar or Hub code into DSH. See [the architecture map](docs/architecture.md), [minimum Proxy Hub interface](docs/proxy-hub.md), and [management console design](docs/proxy-hub-console.md).
 
+## Repository layout
+
+| Path | Responsibility |
+| --- | --- |
+| `scholar/` | Academic domain logic, CLI, and packaged templates |
+| `scholar_mcp/` | Fixed MCP tool surface and transports |
+| `services/proxy-hub/` | Independent Proxy Hub backend and operator console |
+| `infra/` | Deployment assets grouped by service |
+| `tests/` | Scholar and MCP regression tests |
+| `.scholar/` | Canonical shared IDE templates |
+| `.qoder/`, `.claude/` | Generated IDE projections |
+
+`scholar/templates/` is the package-distribution mirror of `.scholar/` plus package-only DSH assets. Run `make sync-templates` after editing canonical templates; CI enforces `make check-templates`.
+
 ## Installation
 
 Scholar Studio requires Python 3.10 or newer.
@@ -105,11 +119,13 @@ Semantic search reports provider, database, and index unavailability separately 
 ## Development
 
 ```sh
-python -m pip install -e '.[dev]'
+make install-dev
 docker compose -f infra/scholar/compose.yml up -d
-pytest -q
+make check
 python -m pip wheel . --no-deps -w dist
 ```
+
+The root `Makefile` also exposes focused checks for Scholar, the Proxy Hub backend, the Proxy Hub frontend, and generated templates.
 
 Tests cover path containment, malformed paper data, graph/index invalidation, authentication, MCP initialization, the 16-tool catalog, lexical and semantic search, DSH clean-home installation, credential storage, permissions, existing-file preservation, and rollback.
 

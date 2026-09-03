@@ -22,16 +22,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
-          pip install rapidfuzz bibtexparser
+        run: pip install -e ".[dev]"
 
       - name: Initialize Scholar runtime directories
         run: python -m scholar init
 
+      - name: Verify generated templates
+        run: make check-templates
+
       - name: Run tests
-        run: |
-          python -m pytest test/ -v --tb=short
+        run: make test-scholar
 
       - name: Verify Lean4 (if available)
         run: |
@@ -59,12 +59,7 @@ jobs:
         run: pip install -e "services/proxy-hub/backend[dev]"
 
       - name: Check backend
-        working-directory: services/proxy-hub/backend
-        run: |
-          ruff check .
-          ruff format --check .
-          mypy proxy_hub
-          pytest
+        run: make check-proxy-backend
 
       - name: Exercise migrations
         working-directory: services/proxy-hub/backend
@@ -92,12 +87,7 @@ jobs:
         run: npm ci
 
       - name: Check frontend
-        working-directory: services/proxy-hub/frontend
-        run: |
-          npm test
-          npm run typecheck
-          npm run build
-          npm audit --audit-level=high
+        run: make check-proxy-frontend
 
       - name: Validate local deployment
         env:

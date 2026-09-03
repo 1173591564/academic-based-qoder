@@ -10,6 +10,20 @@ DeepSeek Harness 是独立分发给用户的客户端，其学术模式负责用
 
 第一阶段保留 authenticated DSH-to-Scholar direct path。第二阶段在本仓库新增 Proxy Hub backend 与同源 operator 管理前端，不把 tenant policy 放进 Scholar，也不把 Hub code 放进 DSH。详见[架构图](docs/architecture.md)、[最小 Proxy Hub 接口](docs/proxy-hub.md)与[管理控制台设计](docs/proxy-hub-console.md)。
 
+## 仓库布局
+
+| 路径 | 职责 |
+| --- | --- |
+| `scholar/` | 学术领域逻辑、CLI 与打包模板 |
+| `scholar_mcp/` | 固定 MCP 工具面与 transport |
+| `services/proxy-hub/` | 独立的 Proxy Hub backend 与 operator console |
+| `infra/` | 按服务划分的部署资源 |
+| `tests/` | Scholar 与 MCP 回归测试 |
+| `.scholar/` | 共享 IDE 模板的唯一源 |
+| `.qoder/`、`.claude/` | 生成的 IDE 投影 |
+
+`scholar/templates/` 是 `.scholar/` 的 package-distribution 镜像，并额外包含 package-only DSH assets。修改源模板后运行 `make sync-templates`；CI 通过 `make check-templates` 防止漂移。
+
 ## 安装
 
 Scholar Studio 需要 Python 3.10 或更高版本。
@@ -105,11 +119,13 @@ Semantic search 会将 provider、database 与 index unavailable 分别报告，
 ## 开发
 
 ```sh
-python -m pip install -e '.[dev]'
+make install-dev
 docker compose -f infra/scholar/compose.yml up -d
-pytest -q
+make check
 python -m pip wheel . --no-deps -w dist
 ```
+
+根目录 `Makefile` 也提供 Scholar、Proxy Hub backend、Proxy Hub frontend 与生成模板的独立检查入口。
 
 Tests 覆盖 path containment、malformed paper data、graph/index invalidation、authentication、MCP initialization、16-tool catalog、lexical 与 semantic search、DSH clean-home installation、credential storage、permission、existing-file preservation 与 rollback。
 

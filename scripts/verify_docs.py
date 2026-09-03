@@ -21,25 +21,25 @@ def count_mcp_tools():
     return len(re.findall(r'@mcp\.tool\(\)', content))
 
 def count_skills():
-    skills_dir = ROOT / ".qoder" / "skills"
+    skills_dir = ROOT / ".scholar" / "skills"
     if not skills_dir.exists():
         return 0
     return len([d for d in skills_dir.iterdir() if d.is_dir()])
 
 def count_rules():
-    rules_dir = ROOT / ".qoder" / "rules"
+    rules_dir = ROOT / ".scholar" / "rules"
     if not rules_dir.exists():
         return 0
     return len([f for f in rules_dir.iterdir() if f.suffix == ".md"])
 
 def count_commands():
-    cmds_dir = ROOT / ".qoder" / "commands"
+    cmds_dir = ROOT / ".scholar" / "commands"
     if not cmds_dir.exists():
         return 0
     return len([f for f in cmds_dir.iterdir() if f.suffix == ".md"])
 
 def count_hooks():
-    hooks_dir = ROOT / ".qoder" / "hooks"
+    hooks_dir = ROOT / ".scholar" / "hooks"
     if not hooks_dir.exists():
         return 0
     return len([f for f in hooks_dir.iterdir() if f.suffix == ".ps1"])

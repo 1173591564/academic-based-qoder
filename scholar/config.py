@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .ide_templates import sync_ide_templates
+
 
 # ===================================================================
 # 运行模式检测
@@ -237,65 +239,31 @@ def init_scholar_home() -> dict:
 def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
     """Sync .scholar/ templates to .qoder/ and .claude/ in the given workspace.
 
-    This is the embedded sync logic (no external script dependency).
     Returns list of newly created directory paths.
     """
-    import shutil
     import json as _json
 
-    IDE_CONFIGS = {
+    ide_configs = {
         "qoder": {"name": "Qoder", "dir": ".qoder", "entry_file": None},
         "claude": {"name": "Claude", "dir": ".claude", "entry_file": "CLAUDE.md"},
     }
-    DIRECT_COPY_DIRS = ["skills", "commands", "hooks"]
     created = []
 
-    def _substitute(text: str, ide_name: str, ide_dir: str) -> str:
-        return text.replace("{IDE_NAME}", ide_name).replace("{IDE_DIR}", ide_dir)
-
-    for ide_key, ide_cfg in IDE_CONFIGS.items():
+    for ide_cfg in ide_configs.values():
         ide_name = ide_cfg["name"]
         ide_dir_name = ide_cfg["dir"]
         ide_target = ws / ide_dir_name
         is_new = not ide_target.exists()
 
-        ide_target.mkdir(parents=True, exist_ok=True)
+        sync_ide_templates(
+            scholar_source,
+            ws,
+            ide_name=ide_name,
+            ide_dir=ide_dir_name,
+            entry_file=ide_cfg["entry_file"],
+        )
 
-        # 1. Direct copy: skills, commands, hooks
-        for subdir in DIRECT_COPY_DIRS:
-            src = scholar_source / subdir
-            if not src.exists():
-                continue
-            dst = ide_target / subdir
-            if dst.exists():
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-
-        # 2. Template copy: rules
-        rules_src = scholar_source / "rules"
-        if rules_src.exists():
-            rules_dst = ide_target / "rules"
-            if rules_dst.exists():
-                shutil.rmtree(rules_dst)
-            rules_dst.mkdir(parents=True)
-            for f in rules_src.rglob("*"):
-                if f.is_file():
-                    content = f.read_text(encoding="utf-8")
-                    templated = _substitute(content, ide_name, ide_dir_name)
-                    rel = f.relative_to(rules_src)
-                    out = rules_dst / rel
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    out.write_text(templated, encoding="utf-8")
-
-        # 3. Generate IDE entry point (CLAUDE.md for Claude)
-        entry_src = scholar_source / "IDE_ENTRY.md"
-        entry_file = ide_cfg.get("entry_file")
-        if entry_src.exists() and entry_file:
-            content = entry_src.read_text(encoding="utf-8")
-            templated = _substitute(content, ide_name, ide_dir_name)
-            (ide_target / entry_file).write_text(templated, encoding="utf-8")
-
-        # 4. Generate settings.json
+        # Generate settings.json
         settings_path = ide_target / "settings.json"
         if not settings_path.exists():
             settings = {
@@ -346,7 +314,7 @@ def _sync_ide_config(ws: Path, scholar_source: Path) -> list[str]:
                 _json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8"
             )
 
-        # 5. Generate mcp.json (always overwrite to reflect correct paths)
+        # Generate mcp.json (always overwrite to reflect correct paths)
         mcp_path = ide_target / "mcp.json"
         mcp_config = {
             "mcpServers": {
@@ -399,7 +367,7 @@ def init_workspace(target_dir: Optional[str] = None) -> dict:
             d.mkdir(parents=True, exist_ok=True)
             created.append(str(d))
 
-    # Sync IDE config from .scholar/ shared source (embedded, no external script)
+    # Sync IDE config from the canonical source or packaged fallback.
     scholar_source = _resolve_templates_dir()
     if scholar_source.exists():
         ide_created = _sync_ide_config(ws, scholar_source)

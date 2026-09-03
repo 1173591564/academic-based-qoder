@@ -5,8 +5,11 @@ Tests init-workspace command output directory creation,
 .qoder/ template copy, mcp.json generation, and
 WORKSPACE_DIR path resolution in dev mode.
 """
-import pytest
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 class TestWorkspaceDir:
@@ -117,54 +120,48 @@ class TestInitWorkspace:
 
 
 class TestTemplatesBundled:
-    """Test scholar/templates/ is properly bundled."""
+    """Test the package-distribution template projection."""
 
-    def test_templates_dir_exists(self):
+    def test_templates_dir_exists(self, project_root):
         """scholar/templates/ directory exists with all required subdirs."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         assert templates.exists()
 
-    def test_templates_has_rules(self):
+    def test_templates_has_rules(self, project_root):
         """scholar/templates/rules/ contains 7 rule files."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         rules_dir = templates / "rules"
         if rules_dir.exists():
             rule_files = list(rules_dir.glob("*.md"))
             assert len(rule_files) >= 7
 
-    def test_templates_has_skills(self):
+    def test_templates_has_skills(self, project_root):
         """scholar/templates/skills/ contains 15 skill directories."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         skills_dir = templates / "skills"
         if skills_dir.exists():
             skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
             assert len(skill_dirs) >= 15
 
-    def test_templates_has_commands(self):
+    def test_templates_has_commands(self, project_root):
         """scholar/templates/commands/ contains 6 command files."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         commands_dir = templates / "commands"
         if commands_dir.exists():
             cmd_files = list(commands_dir.glob("*.md"))
             assert len(cmd_files) >= 6
 
-    def test_templates_has_hooks(self):
+    def test_templates_has_hooks(self, project_root):
         """scholar/templates/hooks/ contains 4 hook scripts."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         hooks_dir = templates / "hooks"
         if hooks_dir.exists():
             hook_files = list(hooks_dir.glob("*.ps1"))
             assert len(hook_files) >= 4
 
-    def test_templates_has_ide_entry(self):
+    def test_templates_has_ide_entry(self, project_root):
         """scholar/templates/IDE_ENTRY.md exists with template variables."""
-        from scholar import config
-        templates = config._resolve_templates_dir()
+        templates = project_root / "scholar" / "templates"
         ide_entry = templates / "IDE_ENTRY.md"
         if ide_entry.exists():
             content = ide_entry.read_text(encoding="utf-8")
@@ -194,25 +191,74 @@ class TestResolveTemplatesDir:
 class TestSyncConsistency:
     """Test sync script consistency check."""
 
-    def test_sync_check_passes_after_sync(self, project_root):
-        """After sync, --check mode reports 0 drift."""
-        import subprocess
-        import sys
+    def test_repository_projections_are_in_sync(self, project_root):
+        """Committed package and IDE projections match the canonical source."""
         sync_script = project_root / "scripts" / "sync-ide-config.py"
-        if sync_script.exists():
-            # First sync
-            subprocess.run(
-                [sys.executable, str(sync_script)],
-                capture_output=True, text=True, timeout=30,
-                cwd=str(project_root),
-            )
-            # Then check
-            result = subprocess.run(
-                [sys.executable, str(sync_script), "--check"],
-                capture_output=True, text=True, timeout=30,
-                cwd=str(project_root),
-            )
-            assert result.returncode == 0
+        result = subprocess.run(
+            [sys.executable, str(sync_script), "--check"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_root),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_sync_generates_clean_workspace(self, project_root, tmp_path):
+        """A generated workspace passes the same consistency check."""
+        sync_script = project_root / "scripts" / "sync-ide-config.py"
+        sync_result = subprocess.run(
+            [sys.executable, str(sync_script), "--target", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_root),
+        )
+        assert sync_result.returncode == 0, sync_result.stdout + sync_result.stderr
+
+        check_result = subprocess.run(
+            [
+                sys.executable,
+                str(sync_script),
+                "--check",
+                "--target",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_root),
+        )
+        assert check_result.returncode == 0, check_result.stdout + check_result.stderr
+
+    def test_sync_check_detects_workspace_drift(self, project_root, tmp_path):
+        """Check mode fails when a generated projection is edited."""
+        sync_script = project_root / "scripts" / "sync-ide-config.py"
+        subprocess.run(
+            [sys.executable, str(sync_script), "--target", str(tmp_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_root),
+        )
+        skill_file = tmp_path / ".qoder" / "skills" / "cold-start" / "SKILL.md"
+        skill_file.write_text("drift\n", encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(sync_script),
+                "--check",
+                "--target",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_root),
+        )
+        assert result.returncode == 1
+        assert "out of sync" in result.stdout
 
     def test_claude_md_generated(self, project_root):
         """CLAUDE.md is generated from IDE_ENTRY.md template."""

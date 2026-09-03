@@ -52,7 +52,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw }
     Write-Host "  Dependencies: OK" -ForegroundColor Green
 } catch {
-    Write-Host "  Dependencies: MISSING — run: pip install -r requirements.txt" -ForegroundColor Yellow
+    Write-Host "  Dependencies: MISSING — run: python -m pip install ." -ForegroundColor Yellow
 }
 
 # 1. Start Docker containers

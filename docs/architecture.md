@@ -16,6 +16,12 @@ distributed user client                 server product
 
 DeepSeek Harness is the independently distributed user client, not the server product's web frontend. Its academic mode packages the user-facing academic workflows, skills, plugins, local dashboard, and MCP integration. This repository owns the server product, including the Scholar data plane, Proxy Hub backend, and separate Proxy Hub administration frontend used by operators.
 
+### Source and generated assets
+
+Runtime source is divided by product boundary: `scholar/` contains academic domain code, `scholar_mcp/` contains the protocol adapter, and `services/proxy-hub/` contains the independently deployable control plane and console. Repository-wide checks are exposed from the root `Makefile`, while each nested service keeps its own build metadata.
+
+Shared IDE content has one authoring location: `.scholar/`. The `.qoder/` and `.claude/` directories are generated tool-specific projections. `scholar/templates/` is the packaged mirror used outside a source checkout and also contains package-only DSH templates. `scripts/sync-ide-config.py` generates and verifies these projections.
+
 ## Current Phase One
 
 ```text
