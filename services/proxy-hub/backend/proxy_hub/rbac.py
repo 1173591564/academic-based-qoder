@@ -106,9 +106,13 @@ def capability_names(context: AdminContext) -> list[str]:
                 "backend:manage",
                 "settings:manage",
                 "audit:read",
+                "usage:read",
             }
         )
     for grant in context.grants:
+        if grant.role == AUDITOR and grant.tenant_id is None:
+            capabilities.update({"audit:read", "usage:read"})
+            continue
         if grant.tenant_id is None:
             continue
         if grant.role == TENANT_ADMIN:
@@ -117,10 +121,11 @@ def capability_names(context: AdminContext) -> list[str]:
                     "membership:manage",
                     "policy:manage",
                     "quota:manage",
+                    "usage:read",
                 }
             )
         elif grant.role == OPERATOR:
-            capabilities.update({"backend:read", "backend:probe"})
+            capabilities.update({"backend:read", "backend:probe", "usage:read"})
         elif grant.role == AUDITOR:
-            capabilities.add("audit:read")
+            capabilities.update({"audit:read", "usage:read"})
     return sorted(capabilities)

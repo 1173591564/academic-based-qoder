@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from proxy_hub.admin_backends import build_backend_router
 from proxy_hub.admin_iam import build_iam_router
+from proxy_hub.admin_observability import build_observability_router
 from proxy_hub.admin_policies import build_policy_router
 from proxy_hub.auth import AuthComponents
 from proxy_hub.config import Settings
@@ -92,6 +93,7 @@ def build_admin_router(
         )
     )
     router.include_router(build_policy_router(database, auth, settings))
+    router.include_router(build_observability_router(database, auth))
 
     def get_session() -> Generator[Session, None, None]:
         yield from session_scope(database)
