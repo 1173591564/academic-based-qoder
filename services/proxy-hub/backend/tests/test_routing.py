@@ -121,6 +121,77 @@ def test_route_affinity_is_bound_to_tenant_and_capability() -> None:
                 mcp_session_digest="session_digest",
             )
         assert error.value.code == "session_affinity_mismatch"
+
+        session.add(Tenant(id="tenant_other", slug="tenant-other", name="Other"))
+        session.add(
+            TenantRoute(
+                tenant_id="tenant_other",
+                backend_id="backend_test",
+                corpus_version="corpus-v1",
+            )
+        )
+        session.commit()
+        with pytest.raises(RouteResolutionError) as error:
+            resolve_route(
+                session,
+                "tenant_other",
+                "cap_test",
+                utc_now(),
+                MAX_PROBE_AGE,
+                mcp_session_digest="session_digest",
+            )
+        assert error.value.code == "session_affinity_mismatch"
+    engine.dispose()
+
+
+def test_route_rejects_unknown_session_affinity() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        add_route_state(session)
+
+        with pytest.raises(RouteResolutionError) as error:
+            resolve_route(
+                session,
+                "tenant_test",
+                "cap_test",
+                utc_now(),
+                MAX_PROBE_AGE,
+                mcp_session_digest="unknown_session",
+            )
+
+        assert error.value.code == "session_affinity_missing"
+    engine.dispose()
+
+
+def test_route_rejects_expired_session_affinity() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        add_route_state(session)
+        session.add(
+            McpSessionAffinity(
+                session_digest="expired_session",
+                tenant_id="tenant_test",
+                backend_id="backend_test",
+                corpus_version="corpus-v1",
+                capability_id="cap_test",
+                expires_at=utc_now() - timedelta(seconds=1),
+            )
+        )
+        session.commit()
+
+        with pytest.raises(RouteResolutionError) as error:
+            resolve_route(
+                session,
+                "tenant_test",
+                "cap_test",
+                utc_now(),
+                MAX_PROBE_AGE,
+                mcp_session_digest="expired_session",
+            )
+
+        assert error.value.code == "session_affinity_missing"
     engine.dispose()
 
 

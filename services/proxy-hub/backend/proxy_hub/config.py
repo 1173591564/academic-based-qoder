@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     cookie_name: str = "proxy_hub_session"
     session_ttl_seconds: int = Field(default=28_800, ge=300, le=86_400)
     capability_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
+    backend_probe_max_age_seconds: int = Field(default=300, ge=5, le=3_600)
+    backend_connect_timeout_seconds: float = Field(default=5, ge=0.1, le=60)
+    backend_request_timeout_seconds: float = Field(default=300, ge=1, le=3_600)
+    mcp_request_max_bytes: int = Field(
+        default=1_048_576,
+        ge=1_024,
+        le=16_777_216,
+    )
     oidc_issuer_url: HttpUrl | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None

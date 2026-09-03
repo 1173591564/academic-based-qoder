@@ -37,22 +37,30 @@ Membership resolution happens during issuance and is rechecked whenever the
 capability is authenticated, so disabling a principal, tenant, membership or
 team immediately removes access. The client stores one credential reference
 for the returned capability and resolves it per request. The quota object is
-current control-plane metadata; request reservation and enforcement occur on
-the MCP route.
+current control-plane metadata; request reservation and enforcement are added
+in the next request-path policy stage.
 
-### `POST /v1/mcp/scholar`
+### `/v1/mcp/scholar`
 
-Accepts Streamable HTTP MCP traffic authenticated with the session capability.
+Accepts authenticated Streamable HTTP MCP `POST`, `GET` and `DELETE` traffic.
+The Hub consumes the DSH capability, injects the selected Scholar service
+credential upstream, and never returns either credential. JSON-RPC request and
+response bodies are relayed without rewriting.
 
 ```text
 verify capability
 → resolve tenant
-→ authorize exact tool name
-→ reserve quota when enabled
+→ authorize exact tools/call name against capability scopes
 → select a healthy backend with MCP session affinity
 → forward JSON-RPC frames without rewriting
 → append one audit record
 ```
+
+The raw `mcp-session-id` is forwarded only for protocol continuity and is
+stored and audited only as a digest bound to the tenant and capability.
+Unknown, expired or cross-capability affinity fails closed. Workspace-write
+tools remain denied on shared backends. Tenant policy and quota reservation
+are added at the request-path enforcement stage without changing this route.
 
 The Hub must not add model-visible tools, redirect requests, expose backend credentials, or return data from a different tenant when routing information is missing.
 
