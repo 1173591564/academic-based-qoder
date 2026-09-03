@@ -114,6 +114,9 @@ def test_gateway_state_migration_upgrades_and_downgrades(tmp_path: Path) -> None
     assert "active_count" in {
         column["name"] for column in inspector.get_columns("quota_windows")
     }
+    assert "last_probe_reason" in {
+        column["name"] for column in inspector.get_columns("scholar_backends")
+    }
 
     command.downgrade(config, "d737c231b0eb")
 

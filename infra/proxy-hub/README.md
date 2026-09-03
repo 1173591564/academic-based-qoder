@@ -15,6 +15,11 @@ Open `http://localhost:8080/console/`. The subject named by `PROXY_HUB_BOOTSTRAP
 
 The Nginx ingress exposes `/console/`, `/auth/*`, and `/v1/*`. Private health routes and PostgreSQL are available only on the Compose network.
 
+Scholar backend registration stores only a strict environment reference such
+as `env:SCHOLAR_SERVICE_TOKEN`. Inject the referenced value into the API
+container, register the Scholar Streamable HTTP endpoint and corpus version,
+run the authenticated probe, then activate the backend and tenant route.
+
 ## Operations
 
 Apply migrations as a one-shot operation before replacing API instances:

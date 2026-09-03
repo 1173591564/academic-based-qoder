@@ -58,10 +58,15 @@ SCHOLAR_MCP_TRANSPORT=streamable-http \
 SCHOLAR_MCP_HOST=127.0.0.1 \
 SCHOLAR_MCP_PORT=8000 \
 SCHOLAR_MCP_TOKEN='managed-secret' \
+SCHOLAR_CORPUS_VERSION='corpus-v1' \
+SCHOLAR_WORKSPACE_ISOLATION=shared \
 python -m scholar_mcp
 ```
 
 Non-loopback HTTP requires a Bearer token. Explicit loopback no-auth mode (`SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK=1`) is limited to local development or an SSH tunnel. Model-facing errors omit filesystem paths, credentials, database diagnostics, and provider details.
+The authenticated private readiness endpoint reports only the configured corpus
+version, workspace isolation mode, and bounded index counts; Proxy Hub uses it
+before activating a tenant route.
 
 The MCP server publishes exactly these 16 tools:
 

@@ -129,7 +129,15 @@ def create_app(
             resources.quota_service,
         )
     )
-    app.include_router(build_admin_router(resources.database, auth))
+    app.include_router(
+        build_admin_router(
+            resources.database,
+            auth,
+            resources.settings,
+            resources.http_client,
+            resources.secret_resolver,
+        )
+    )
     app.include_router(build_health_router(resources.database))
     return app
 

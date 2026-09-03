@@ -6,6 +6,10 @@ import os
 from dataclasses import dataclass
 
 from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+from scholar_mcp.health import readiness_payload
 
 
 @dataclass(frozen=True)
@@ -34,9 +38,7 @@ class TransportSettings:
     def validate(self) -> None:
         """Reject unsupported or unauthenticated network configurations."""
         if self.transport not in {"stdio", "streamable-http"}:
-            raise RuntimeError(
-                "SCHOLAR_MCP_TRANSPORT must be stdio or streamable-http"
-            )
+            raise RuntimeError("SCHOLAR_MCP_TRANSPORT must be stdio or streamable-http")
         if self.transport == "stdio" or self.bearer_token:
             return
         if not self.allow_insecure_loopback or not is_loopback_host(self.host):
@@ -97,6 +99,12 @@ def run_transport(mcp: FastMCP) -> None:
         return
 
     app = mcp.streamable_http_app()
+
+    async def readiness(_request: Request) -> JSONResponse:
+        status_code, body = readiness_payload()
+        return JSONResponse(body, status_code=status_code)
+
+    app.add_route("/private/health/ready", readiness, methods=["GET"])
     if settings.bearer_token:
         app.add_middleware(bearer_token_middleware(settings.bearer_token))
     else:

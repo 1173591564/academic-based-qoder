@@ -23,10 +23,16 @@ class EnvironmentSecretResolver:
 
     def resolve(self, reference: str) -> str:
         """Resolve one strict environment variable reference."""
-        match = ENV_REFERENCE.fullmatch(reference)
-        if match is None:
-            raise SecretResolutionError("unsupported secret reference")
+        match = validate_secret_reference(reference)
         value = os.environ.get(match.group(1))
         if not value:
             raise SecretResolutionError("secret reference is unavailable")
         return value
+
+
+def validate_secret_reference(reference: str) -> re.Match[str]:
+    """Validate a deployer-owned environment secret reference."""
+    match = ENV_REFERENCE.fullmatch(reference)
+    if match is None:
+        raise SecretResolutionError("unsupported secret reference")
+    return match

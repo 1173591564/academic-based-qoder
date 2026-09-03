@@ -35,6 +35,7 @@ export PROXY_HUB_OIDC_ISSUER_URL=https://identity.example.com
 export PROXY_HUB_OIDC_CLIENT_ID=proxy-hub-local
 export PROXY_HUB_OIDC_CLIENT_SECRET=replace-with-a-development-secret
 export SCHOLAR_SERVICE_TOKEN=replace-with-a-development-service-token
+export PROXY_HUB_BACKEND_PROBE_MAX_AGE_SECONDS=300
 export PROXY_HUB_QUOTA_RESERVATION_TTL_SECONDS=600
 alembic upgrade head
 uvicorn proxy_hub.app:app --reload
@@ -42,6 +43,10 @@ uvicorn proxy_hub.app:app --reload
 
 Registered Scholar backends reference service credentials as strict
 `env:NAME` values, for example `env:SCHOLAR_SERVICE_TOKEN`.
+Backend registration never stores or returns secret material. A platform
+administrator must run a successful authenticated readiness probe before
+activating a backend or an active tenant route; changes to the URL, corpus, or
+credential reference invalidate the previous observation.
 Quota enforcement remains disabled until a tenant quota policy explicitly
 enables it. The reservation TTL is refreshed for active response streams.
 
