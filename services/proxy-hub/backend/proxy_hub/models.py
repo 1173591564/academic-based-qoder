@@ -284,11 +284,121 @@ class DshCapability(Base):
         index=True,
     )
     scopes: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    issued_from_enrolment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("enrolment_tokens.id"),
+        index=True,
+    )
+    session_label: Mapped[str | None] = mapped_column(String(200))
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+
+
+class EnrolmentToken(Base):
+    """One-time credential used to issue a DSH capability."""
+
+    __tablename__ = "enrolment_tokens"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    token_digest: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    principal_id: Mapped[str] = mapped_column(
+        ForeignKey("principals.id"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    requested_scopes: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_principal_id: Mapped[str] = mapped_column(
+        ForeignKey("principals.id"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+
+
+class QuotaWindow(Base):
+    """Atomic tenant request counters for one quota period."""
+
+    __tablename__ = "quota_windows"
+
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"),
+        primary_key=True,
+    )
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        primary_key=True,
+    )
+    period_seconds: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reserved_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class McpSessionAffinity(Base):
+    """Stable backend selection for one MCP session."""
+
+    __tablename__ = "mcp_session_affinities"
+
+    session_digest: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    backend_id: Mapped[str] = mapped_column(
+        ForeignKey("scholar_backends.id"),
+        nullable=False,
+        index=True,
+    )
+    corpus_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    capability_id: Mapped[str] = mapped_column(
+        ForeignKey("dsh_capabilities.id"),
+        nullable=False,
+        index=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -341,10 +451,21 @@ class AuditEvent(Base):
     request_id: Mapped[str] = mapped_column(String(96), nullable=False)
     principal_id: Mapped[str | None] = mapped_column(String(48), index=True)
     tenant_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    capability_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    mcp_session_digest: Mapped[str | None] = mapped_column(String(128), index=True)
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(96))
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    tool_name: Mapped[str | None] = mapped_column(String(128), index=True)
+    argument_digest: Mapped[str | None] = mapped_column(String(128))
+    backend_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    corpus_version: Mapped[str | None] = mapped_column(String(128))
+    decision: Mapped[str | None] = mapped_column(String(32), index=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    result_class: Mapped[str | None] = mapped_column(String(64))
+    returned_bytes: Mapped[int | None] = mapped_column(Integer)
+    quota_delta: Mapped[int | None] = mapped_column(Integer)
     details: Mapped[dict[str, object]] = mapped_column(
         JSON,
         default=dict,
