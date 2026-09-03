@@ -54,7 +54,7 @@ export function GuidePage() {
   return (
     <section>
       <PageHeader
-        eyebrow="GUIDE"
+        eyebrow={t("GUIDE")}
         title={t("Setup guide")}
         description={t(
           "Follow these steps to onboard a tenant from zero to a working DSH capability.",

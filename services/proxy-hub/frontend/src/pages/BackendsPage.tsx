@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "../api";
 import {
+  activateOnKeyDown,
   EmptyState,
   InlineAlert,
   Modal,
@@ -245,6 +246,41 @@ export function BackendsPage({ me }: { me: AdminMe }) {
             : undefined
         }
       />
+      <section
+        className="workflow-strip"
+        aria-label={t("Backend setup workflow")}
+      >
+        <WorkflowStep
+          number="1"
+          title={t("Register service")}
+          detail={t(
+            "Store routing metadata and an environment credential reference.",
+          )}
+          complete={state.kind === "ready" && state.data.length > 0}
+        />
+        <WorkflowStep
+          number="2"
+          title={t("Verify readiness")}
+          detail={t(
+            "Probe the service after every URL, corpus, or credential change.",
+          )}
+          complete={
+            state.kind === "ready" &&
+            state.data.some((backend) => backend.probe.ready)
+          }
+        />
+        <WorkflowStep
+          number="3"
+          title={t("Activate routing")}
+          detail={t(
+            "Activate only after a current successful readiness probe.",
+          )}
+          complete={
+            state.kind === "ready" &&
+            state.data.some((backend) => backend.status === "active")
+          }
+        />
+      </section>
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
       ) : null}
@@ -267,6 +303,14 @@ export function BackendsPage({ me }: { me: AdminMe }) {
           <EmptyState
             title={t("No Scholar backends")}
             message={t("Register a backend before configuring tenant routes.")}
+            action={
+              canManage
+                ? {
+                    label: t("Register backend"),
+                    onClick: () => setModal("create"),
+                  }
+                : undefined
+            }
           />
         </section>
       ) : (
@@ -286,10 +330,18 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                   {state.data.map((backend) => (
                     <tr
                       key={backend.id}
-                      className={
-                        selected?.data.id === backend.id ? "selected" : undefined
-                      }
+                      tabIndex={0}
+                      aria-label={`${t("Open backend")} ${backend.name}`}
+                      aria-selected={selected?.data.id === backend.id}
+                      className={`interactive-row${
+                        selected?.data.id === backend.id ? " selected" : ""
+                      }`}
                       onClick={() => void selectBackend(backend.id)}
+                      onKeyDown={(event) =>
+                        activateOnKeyDown(event, () =>
+                          void selectBackend(backend.id),
+                        )
+                      }
                     >
                       <td>
                         <strong>{backend.name}</strong>
@@ -517,5 +569,33 @@ export function BackendsPage({ me }: { me: AdminMe }) {
         </Modal>
       ) : null}
     </>
+  );
+}
+
+function WorkflowStep({
+  number,
+  title,
+  detail,
+  complete,
+}: {
+  number: string;
+  title: string;
+  detail: string;
+  complete: boolean;
+}) {
+  const { t } = useI18n();
+  return (
+    <article className={complete ? "workflow-step complete" : "workflow-step"}>
+      <span className="workflow-number" aria-hidden="true">
+        {complete ? "✓" : number}
+      </span>
+      <div>
+        <strong>{title}</strong>
+        <p>{detail}</p>
+      </div>
+      <span className="workflow-state">
+        {complete ? t("Complete") : t("Pending")}
+      </span>
+    </article>
   );
 }

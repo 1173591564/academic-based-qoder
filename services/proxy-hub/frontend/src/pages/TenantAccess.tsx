@@ -277,9 +277,12 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
               <span className="eyebrow">{t("Organization")}</span>
               <h2>{t("Teams")}</h2>
             </div>
-            <button className="text-button" onClick={() => setModal("team")}>
-              {t("New team")}
-            </button>
+            <div className="panel-actions">
+              <span className="section-count">{state.data.teams.length}</span>
+              <button className="text-button" onClick={() => setModal("team")}>
+                {t("New team")}
+              </button>
+            </div>
           </div>
           {state.data.teams.length === 0 ? (
             <EmptyState title={t("No teams")} message={t("Create an optional team boundary.")} />
@@ -310,12 +313,15 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
               <span className="eyebrow">{t("Tenant access")}</span>
               <h2>{t("Memberships")}</h2>
             </div>
-            <button
-              className="text-button"
-              onClick={() => setModal("membership")}
-            >
-              {t("Add member")}
-            </button>
+            <div className="panel-actions">
+              <span className="section-count">{state.data.memberships.length}</span>
+              <button
+                className="text-button"
+                onClick={() => setModal("membership")}
+              >
+                {t("Add member")}
+              </button>
+            </div>
           </div>
           {state.data.memberships.length === 0 ? (
             <EmptyState
@@ -358,9 +364,12 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
               <span className="eyebrow">{t("Authorization")}</span>
               <h2>{t("Role bindings")}</h2>
             </div>
-            <button className="text-button" onClick={() => setModal("role")}>
-              {t("Bind role")}
-            </button>
+            <div className="panel-actions">
+              <span className="section-count">{state.data.roles.length}</span>
+              <button className="text-button" onClick={() => setModal("role")}>
+                {t("Bind role")}
+              </button>
+            </div>
           </div>
           {state.data.roles.length === 0 ? (
             <EmptyState

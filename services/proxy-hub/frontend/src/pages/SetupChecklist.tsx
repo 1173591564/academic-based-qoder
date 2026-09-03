@@ -158,33 +158,45 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
     },
   ];
 
-  const doneCount = steps.filter((s) => s.done).length;
-  const total = steps.length;
-  const allDone = doneCount >= total - 1; // step 8 completes outside the console
+  const trackedSteps = steps.slice(0, -1);
+  const doneCount = trackedSteps.filter((step) => step.done).length;
+  const total = trackedSteps.length;
+  const checking = backends === null || probe === null;
+  const nextStep = steps.findIndex((step) => !step.done);
+  const allDone = doneCount === total;
 
   if (dismissed) {
     return null;
   }
 
   return (
-    <section className="panel checklist" aria-label="Setup checklist">
+    <section
+      className="panel checklist"
+      aria-labelledby="setup-checklist-title"
+      aria-busy={checking}
+    >
       <div className="checklist-head">
         <div>
           <span className="eyebrow">{t("GETTING STARTED")}</span>
-          <h2>{t("Quick start")}</h2>
+          <h2 id="setup-checklist-title">{t("Quick start")}</h2>
         </div>
         <div className="checklist-actions">
           <span className="mono">
-            {doneCount}/{total}
+            {checking
+              ? t("Checking setup…")
+              : `${doneCount}/${total} ${t("checks")}`}
           </span>
           <button
             className="text-button"
+            type="button"
+            aria-expanded={!collapsed}
             onClick={() => setCollapsed((c) => !c)}
           >
             {collapsed ? t("Expand") : t("Collapse")}
           </button>
           <button
             className="text-button"
+            type="button"
             onClick={() => {
               setDismissed(true);
               try {
@@ -198,7 +210,14 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
           </button>
         </div>
       </div>
-      <div className="checklist-bar">
+      <div
+        className="checklist-bar"
+        role="progressbar"
+        aria-label={t("Setup progress")}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={doneCount}
+      >
         <div
           className="checklist-bar-fill"
           style={{ width: `${Math.round((doneCount / total) * 100)}%` }}
@@ -209,19 +228,37 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
           <ol className="checklist-grid">
             {steps.map((step, index) => (
               <li
-                className={step.done ? "checklist-step done" : "checklist-step"}
-                key={step.hint}
+                className={[
+                  "checklist-step",
+                  step.done ? "done" : "",
+                  !checking && index === nextStep ? "current" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                key={index}
               >
-                <span className="checklist-mark">{step.done ? "✓" : index + 1}</span>
+                <span className="checklist-mark" aria-hidden="true">
+                  {step.done ? "✓" : index + 1}
+                </span>
                 <div>
-                  <strong>{t(`checklist.s${index + 1}.title`)}</strong>
+                  <div className="checklist-title">
+                    <strong>{t(`checklist.s${index + 1}.title`)}</strong>
+                    {!checking && index === nextStep ? (
+                      <span>{t("Next step")}</span>
+                    ) : null}
+                  </div>
                   <p>{step.hint}</p>
                   {step.link ? (
                     <button
                       className="text-button"
-                      onClick={() => navigate(step.link!.path)}
+                      type="button"
+                      onClick={() => {
+                        if (step.link) {
+                          navigate(step.link.path);
+                        }
+                      }}
                     >
-                      {step.link.label} →
+                      {step.link.label} <span aria-hidden="true">→</span>
                     </button>
                   ) : null}
                 </div>
@@ -234,6 +271,7 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
             <p className="checklist-footer">
               <button
                 className="text-button"
+                type="button"
                 onClick={() => navigate("/console/guide")}
               >
                 {t("View the detailed guide")}

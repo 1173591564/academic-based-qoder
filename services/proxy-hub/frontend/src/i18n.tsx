@@ -22,6 +22,10 @@ const ZH: Record<string, string> = {
   "Guide": "引导指南",
   "Operations": "运营",
   "Identity": "身份",
+  "Skip to content": "跳到主要内容",
+  "Open menu": "打开菜单",
+  "Close menu": "关闭菜单",
+  "Primary navigation": "主导航",
   "Loading control plane": "控制面加载中",
   "Operator access": "管理员访问",
   "Sign in through the configured identity provider to manage Proxy Hub.":
@@ -44,6 +48,7 @@ const ZH: Record<string, string> = {
   "Disabled": "已停用",
   "Request": "请求",
   "Close": "关闭",
+  "Server mutation": "服务器变更",
   "Dismiss server response": "关闭提示",
   "Switch to English": "Switch to English",
   "Switch to Chinese": "切换到中文",
@@ -62,6 +67,7 @@ const ZH: Record<string, string> = {
   "Tenant activity": "租户动态",
   "Recently updated": "最近更新",
   "View all": "查看全部",
+  "Open tenant": "打开租户",
   "No tenants in scope": "范围内没有租户",
   "A platform administrator can create the first tenant.":
     "平台管理员可以创建第一个租户。",
@@ -211,6 +217,7 @@ const ZH: Record<string, string> = {
   "Register a backend before configuring tenant routes.":
     "请先注册后端，再配置租户路由。",
   "Backend detail": "后端详情",
+  "Open backend": "打开后端",
   "Service URL": "服务 URL",
   "Unversioned": "未标注版本",
   "Not probed": "未探测",
@@ -231,6 +238,18 @@ const ZH: Record<string, string> = {
   "Changing service or corpus identity invalidates the previous readiness result.":
     "修改服务或语料标识会使之前的就绪结果失效。",
   "Save registration": "保存注册信息",
+  "Backend setup workflow": "后端配置流程",
+  "Register service": "注册服务",
+  "Store routing metadata and an environment credential reference.":
+    "保存路由元数据和环境变量凭据引用。",
+  "Verify readiness": "验证就绪状态",
+  "Probe the service after every URL, corpus, or credential change.":
+    "每次修改 URL、语料或凭据后都要重新探测服务。",
+  "Activate routing": "激活路由",
+  "Activate only after a current successful readiness probe.":
+    "仅在当前就绪探测成功后激活。",
+  "Complete": "已完成",
+  "Pending": "待处理",
 
   // ── audit ──
   "Bounded observability": "有界可观测",
@@ -315,6 +334,10 @@ const ZH: Record<string, string> = {
   "Expand": "展开",
   "Collapse": "收起",
   "Hide": "不再显示",
+  "Checking setup…": "正在检查配置…",
+  "Setup progress": "配置进度",
+  "Next step": "下一步",
+  "checks": "项检查",
   "View the detailed guide": "查看完整图文引导 →",
   "checklist.allDone":
     "🎉 全部就绪！队友已在经网关使用学术平台。新增成员时按第 ②⑦ 步操作即可。",
@@ -336,6 +359,7 @@ const ZH: Record<string, string> = {
   "checklist.s8.hint": "队友安装 bundle 后运行 scholar gateway-login --code <兑换码>。",
 
   // ── guide ──
+  "GUIDE": "引导指南",
   "Setup guide": "配置指南",
   "Follow these steps to onboard a tenant from zero to a working DSH capability.":
     "按以下步骤把一个租户从零配到队友可用。",

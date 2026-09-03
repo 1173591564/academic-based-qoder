@@ -1,4 +1,5 @@
 import {
+  activateOnKeyDown,
   EmptyState,
   MetricCard,
   PageHeader,
@@ -55,18 +56,20 @@ export function OverviewPage({
             <span className="eyebrow">{t("Tenant activity")}</span>
             <h2>{t("Recently updated")}</h2>
           </div>
-          <button
-            className="text-button"
-            onClick={() => navigate("/console/guide")}
-          >
-            {t("Read the setup guide")}
-          </button>
-          <button
-            className="text-button"
-            onClick={() => navigate("/console/tenants")}
-          >
-            {t("View all")}
-          </button>
+          <div className="panel-actions">
+            <button
+              className="text-button"
+              onClick={() => navigate("/console/guide")}
+            >
+              {t("Read the setup guide")}
+            </button>
+            <button
+              className="text-button"
+              onClick={() => navigate("/console/tenants")}
+            >
+              {t("View all")}
+            </button>
+          </div>
         </div>
         {tenants.length === 0 ? (
           <EmptyState
@@ -88,9 +91,19 @@ export function OverviewPage({
                 {tenants.slice(0, 5).map((tenant) => (
                   <tr
                     key={tenant.id}
+                    className="interactive-row"
+                    tabIndex={0}
+                    aria-label={`${t("Open tenant")} ${tenant.name}`}
                     onClick={() =>
                       navigate(
                         `/console/tenants/${encodeURIComponent(tenant.id)}`,
+                      )
+                    }
+                    onKeyDown={(event) =>
+                      activateOnKeyDown(event, () =>
+                        navigate(
+                          `/console/tenants/${encodeURIComponent(tenant.id)}`,
+                        ),
                       )
                     }
                   >

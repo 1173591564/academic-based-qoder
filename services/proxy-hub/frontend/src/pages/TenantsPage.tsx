@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "../api";
 import {
+  activateOnKeyDown,
   EmptyState,
   InlineAlert,
   Modal,
@@ -190,7 +191,11 @@ export function TenantsPage({
       ) : null}
       {error ? <InlineAlert message={error} /> : null}
       {!route.tenantId ? (
-        <TenantList tenants={tenants} canCreate={canCreate} />
+        <TenantList
+          tenants={tenants}
+          canCreate={canCreate}
+          onCreate={() => setShowCreate(true)}
+        />
       ) : !detail ? (
         error ? null : <section className="panel detail-loading">{t("Loading tenant…")}</section>
       ) : (
@@ -276,9 +281,11 @@ export function TenantsPage({
 function TenantList({
   tenants,
   canCreate,
+  onCreate,
 }: {
   tenants: Tenant[];
   canCreate: boolean;
+  onCreate: () => void;
 }) {
   const { t } = useI18n();
   if (tenants.length === 0) {
@@ -290,6 +297,11 @@ function TenantList({
             canCreate
               ? t("Create the first tenant to establish a policy and corpus boundary.")
               : t("No tenants are assigned to this session.")
+          }
+          action={
+            canCreate
+              ? { label: t("Create tenant"), onClick: onCreate }
+              : undefined
           }
         />
       </section>
@@ -312,7 +324,15 @@ function TenantList({
             {tenants.map((tenant) => (
               <tr
                 key={tenant.id}
+                className="interactive-row"
+                tabIndex={0}
+                aria-label={`${t("Open tenant")} ${tenant.name}`}
                 onClick={() => navigate(tenantPath(tenant.id, "summary"))}
+                onKeyDown={(event) =>
+                  activateOnKeyDown(event, () =>
+                    navigate(tenantPath(tenant.id, "summary")),
+                  )
+                }
               >
                 <td>
                   <strong>{tenant.name}</strong>

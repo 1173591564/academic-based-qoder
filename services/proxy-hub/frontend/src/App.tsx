@@ -105,6 +105,7 @@ export function App() {
   const { t } = useI18n();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [path, setPath] = useState(window.location.pathname);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -130,7 +131,10 @@ export function App() {
   }, [load]);
 
   useEffect(() => {
-    const onPopState = () => setPath(window.location.pathname);
+    const onPopState = () => {
+      setPath(window.location.pathname);
+      setMobileNavigationOpen(false);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -176,15 +180,36 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <a className="skip-link" href="#main-content">
+        {t("Skip to content")}
+      </a>
+      <aside
+        className={
+          mobileNavigationOpen ? "sidebar mobile-open" : "sidebar"
+        }
+      >
         <div className="brand">
           <div className="brand-mark">S</div>
           <div>
             <strong>Scholar</strong>
             <span>Proxy Hub</span>
           </div>
+          <button
+            className="mobile-menu-button"
+            type="button"
+            aria-label={
+              mobileNavigationOpen ? t("Close menu") : t("Open menu")
+            }
+            aria-expanded={mobileNavigationOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setMobileNavigationOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
         </div>
-        <nav aria-label="Primary navigation">
+        <nav id="primary-navigation" aria-label={t("Primary navigation")}>
           {visibleNavigation.map((item, index) => (
             <div className="nav-entry" key={item.path}>
               {item.section &&
@@ -195,10 +220,15 @@ export function App() {
               ) : null}
               <button
                 className={isActive(path, item.path) ? "nav-item active" : "nav-item"}
+                type="button"
+                aria-current={isActive(path, item.path) ? "page" : undefined}
+                title={t(item.label)}
                 onClick={() => navigate(item.path)}
               >
-                <span className="nav-icon">{item.icon}</span>
-                {t(item.label)}
+                <span className="nav-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+                <span className="nav-label">{t(item.label)}</span>
               </button>
             </div>
           ))}
@@ -214,7 +244,7 @@ export function App() {
           <LanguageToggle />
         </div>
       </aside>
-      <main className="main">
+      <main className="main" id="main-content" tabIndex={-1}>
         <ConsolePage
           path={path}
           me={state.me}
