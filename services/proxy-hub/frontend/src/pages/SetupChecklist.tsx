@@ -7,6 +7,7 @@ import type { ListResponse, ScholarBackend, Tenant } from "../types";
 
 interface StepState {
   done: boolean;
+  title: string;
   hint: string;
   link?: { label: string; path: string };
 }
@@ -99,12 +100,18 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
   const steps: StepState[] = [
     {
       done: tenants.length > 0,
-      hint: t("checklist.s1.hint"),
+      title: t("Create a tenant"),
+      hint: t(
+        "Establish the organization boundary; tools, quotas, and routes belong to a tenant.",
+      ),
       link: { label: t("Tenants"), path: "/console/tenants" },
     },
     {
       done: probe?.members ?? false,
-      hint: t("checklist.s2.hint"),
+      title: t("Add members"),
+      hint: t(
+        "After a teammate signs in with OIDC, add their principal to the tenant.",
+      ),
       link: tenant
         ? {
             label: t("Members"),
@@ -114,7 +121,10 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
     },
     {
       done: (probe?.tools ?? false) && (probe?.quota ?? false),
-      hint: t("checklist.s3.hint"),
+      title: t("Configure policy and quota"),
+      hint: t(
+        "Start from deny-all, allow the required tools, and set request and concurrency limits.",
+      ),
       link: tenant
         ? {
             label: t("Policy, quota & route"),
@@ -124,17 +134,22 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
     },
     {
       done: (backends?.length ?? 0) > 0,
-      hint: t("checklist.s4.hint"),
+      title: t("Register a backend"),
+      hint: t("Register the Scholar data plane URL and corpus version."),
       link: { label: t("Backends"), path: "/console/backends" },
     },
     {
       done: activeBackend,
-      hint: t("checklist.s5.hint"),
+      title: t("Probe and activate"),
+      hint: t(
+        "Verify readiness and the corpus version before activating the backend.",
+      ),
       link: { label: t("Backends"), path: "/console/backends" },
     },
     {
       done: probe?.route ?? false,
-      hint: t("checklist.s6.hint"),
+      title: t("Bind the tenant route"),
+      hint: t("Route the tenant's MCP calls to the active backend."),
       link: tenant
         ? {
             label: t("Policy, quota & route"),
@@ -144,7 +159,10 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
     },
     {
       done: probe?.enrolment ?? false,
-      hint: t("checklist.s7.hint"),
+      title: t("Issue an enrolment code"),
+      hint: t(
+        "Issue a one-time access code and send it privately to the teammate.",
+      ),
       link: tenant
         ? {
             label: t("Enrolments"),
@@ -154,7 +172,10 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
     },
     {
       done: false,
-      hint: t("checklist.s8.hint"),
+      title: t("Connect a teammate"),
+      hint: t(
+        "After installing the bundle, run scholar gateway-login --code <enrolment-code>.",
+      ),
     },
   ];
 
@@ -242,7 +263,7 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
                 </span>
                 <div>
                   <div className="checklist-title">
-                    <strong>{t(`checklist.s${index + 1}.title`)}</strong>
+                    <strong>{step.title}</strong>
                     {!checking && index === nextStep ? (
                       <span>{t("Next step")}</span>
                     ) : null}
@@ -266,7 +287,11 @@ export function SetupChecklist({ tenants }: { tenants: Tenant[] }) {
             ))}
           </ol>
           {allDone ? (
-            <p className="checklist-footer">{t("checklist.allDone")}</p>
+            <p className="checklist-footer">
+              {t(
+                "Setup complete. Teammates can now use the academic platform through the gateway.",
+              )}
+            </p>
           ) : (
             <p className="checklist-footer">
               <button

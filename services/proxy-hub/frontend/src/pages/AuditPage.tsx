@@ -197,13 +197,12 @@ export function AuditPage({
                 }}
               />
             ) : (
-              <div className="table-wrap">
-                <table className="responsive-table">
+              <div className="table-wrap audit-table-wrap">
+                <table className="responsive-table audit-table">
                   <thead>
                     <tr>
                       <th>{t("Occurred")}</th>
-                      <th>{t("Action")}</th>
-                      <th>{t("Outcome")}</th>
+                      <th>{t("Action / outcome")}</th>
                       <th>{t("Tenant / resource")}</th>
                       <th>{t("Latency")}</th>
                     </tr>
@@ -211,27 +210,50 @@ export function AuditPage({
                   <tbody>
                     {filteredEvents.map((event) => (
                       <tr key={event.id}>
-                        <td data-label={t("Occurred")}>
+                        <td className="cell-stack" data-label={t("Occurred")}>
                           <strong>
                             {new Date(event.occurred_at).toLocaleString()}
                           </strong>
-                          <span className="mono">{event.request_id}</span>
+                          <span
+                            className="mono table-identifier"
+                            title={event.request_id}
+                          >
+                            {event.request_id}
+                          </span>
                         </td>
-                        <td data-label={t("Action")}>
-                          <strong>{event.action}</strong>
+                        <td
+                          className="cell-stack"
+                          data-label={t("Action / outcome")}
+                        >
+                          <strong className="action-name" title={event.action}>
+                            {event.action}
+                          </strong>
                           <span>
                             {event.tool_name ??
                               event.decision ??
                               event.result_class ??
                               "—"}
                           </span>
+                          <div className="cell-status">
+                            <StatusPill status={event.outcome} />
+                          </div>
                         </td>
-                        <td data-label={t("Outcome")}>
-                          <StatusPill status={event.outcome} />
-                        </td>
-                        <td data-label={t("Tenant / resource")}>
-                        <strong>{event.tenant_id ?? t("Platform")}</strong>
-                          <span>
+                        <td
+                          className="cell-stack"
+                          data-label={t("Tenant / resource")}
+                        >
+                          <strong
+                            className="table-identifier"
+                            title={event.tenant_id ?? t("Platform")}
+                          >
+                            {event.tenant_id ?? t("Platform")}
+                          </strong>
+                          <span
+                            className="mono table-identifier"
+                            title={
+                              event.resource_id ?? event.backend_id ?? undefined
+                            }
+                          >
                             {event.resource_id ?? event.backend_id ?? "—"}
                           </span>
                         </td>

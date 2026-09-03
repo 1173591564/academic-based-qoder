@@ -18,6 +18,8 @@ export function navigate(path: string): void {
   }
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  document.getElementById("main-content")?.focus({ preventScroll: true });
 }
 
 export function activateOnKeyDown(

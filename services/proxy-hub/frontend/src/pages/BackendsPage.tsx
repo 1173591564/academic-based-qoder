@@ -365,7 +365,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             ) : (
               <div className="table-wrap">
-                <table className="responsive-table">
+                <table className="responsive-table backend-table">
                   <thead>
                     <tr>
                       <th>{t("Backend")}</th>
@@ -391,9 +391,14 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                           )
                         }
                       >
-                        <td data-label={t("Backend")}>
+                        <td className="cell-stack" data-label={t("Backend")}>
                           <strong>{backend.name}</strong>
-                          <span>{backend.base_url}</span>
+                          <span
+                            className="table-identifier"
+                            title={backend.base_url}
+                          >
+                            {backend.base_url}
+                          </span>
                         </td>
                         <td data-label={t("Status")}>
                           <StatusPill status={backend.status} />
@@ -429,7 +434,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               <dl>
                 <div>
                   <dt>{t("Service URL")}</dt>
-                  <dd>{selected.data.base_url}</dd>
+                  <dd className="mono">{selected.data.base_url}</dd>
                 </div>
                 <div>
                   <dt>{t("Corpus")}</dt>

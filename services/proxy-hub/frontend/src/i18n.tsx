@@ -46,6 +46,12 @@ const ZH: Record<string, string> = {
   "Submitting…": "提交中…",
   "Operational": "运行中",
   "Disabled": "已停用",
+  "Forwarded": "已转发",
+  "Probing": "探测中",
+  "Failed": "失败",
+  "Rejected": "已拒绝",
+  "Revoked": "已撤销",
+  "Denied": "已拒绝",
   "Request": "请求",
   "Close": "关闭",
   "Server mutation": "服务器变更",
@@ -224,6 +230,8 @@ const ZH: Record<string, string> = {
   "Tenant sections": "租户分区",
   "Open": "打开",
   "Platform": "平台",
+  "Action / outcome": "操作 / 结果",
+  "Outcomes / latency": "结果 / 延迟",
   "bytes": "字节",
   "successful": "成功",
   "failed": "失败",
@@ -394,56 +402,64 @@ const ZH: Record<string, string> = {
   "Next step": "下一步",
   "checks": "项检查",
   "View the detailed guide": "查看完整图文引导 →",
-  "checklist.allDone":
+  "Setup complete. Teammates can now use the academic platform through the gateway.":
     "🎉 全部就绪！队友已在经网关使用学术平台。新增成员时按第 ②⑦ 步操作即可。",
-  "checklist.s1.title": "创建租户",
-  "checklist.s1.hint": "建立组织隔离边界：工具、配额、路由都挂在租户上。",
-  "checklist.s2.title": "拉入成员",
-  "checklist.s2.hint": "队友 OIDC 登录后，把其身份主体加入租户。",
-  "checklist.s3.title": "配策略与配额",
-  "checklist.s3.hint": "默认全拒：勾选放行工具，设置请求与并发上限。",
-  "checklist.s4.title": "注册后端",
-  "checklist.s4.hint": "登记 Scholar 数据面地址与语料库版本。",
-  "checklist.s5.title": "探测并激活",
-  "checklist.s5.hint": "校验就绪状态与语料版本一致后激活后端。",
-  "checklist.s6.title": "绑定租户路由",
-  "checklist.s6.hint": "把租户的 MCP 调用路由到已激活的后端。",
-  "checklist.s7.title": "发放兑换码",
-  "checklist.s7.hint": "给成员签发一次性接入码，私发给队友。",
-  "checklist.s8.title": "队友接入",
-  "checklist.s8.hint": "队友安装 bundle 后运行 scholar gateway-login --code <兑换码>。",
+  "Create a tenant": "创建租户",
+  "Establish the organization boundary; tools, quotas, and routes belong to a tenant.":
+    "建立组织隔离边界：工具、配额、路由都挂在租户上。",
+  "Add members": "拉入成员",
+  "After a teammate signs in with OIDC, add their principal to the tenant.":
+    "队友 OIDC 登录后，把其身份主体加入租户。",
+  "Configure policy and quota": "配策略与配额",
+  "Start from deny-all, allow the required tools, and set request and concurrency limits.":
+    "默认全拒：勾选放行工具，设置请求与并发上限。",
+  "Register a backend": "注册后端",
+  "Register the Scholar data plane URL and corpus version.":
+    "登记 Scholar 数据面地址与语料库版本。",
+  "Probe and activate": "探测并激活",
+  "Verify readiness and the corpus version before activating the backend.":
+    "校验就绪状态与语料版本一致后激活后端。",
+  "Bind the tenant route": "绑定租户路由",
+  "Route the tenant's MCP calls to the active backend.":
+    "把租户的 MCP 调用路由到已激活的后端。",
+  "Issue an enrolment code": "发放兑换码",
+  "Issue a one-time access code and send it privately to the teammate.":
+    "给成员签发一次性接入码，私发给队友。",
+  "Connect a teammate": "队友接入",
+  "After installing the bundle, run scholar gateway-login --code <enrolment-code>.":
+    "队友安装 bundle 后运行 scholar gateway-login --code <兑换码>。",
 
   // ── guide ──
   "GUIDE": "引导指南",
   "Setup guide": "配置指南",
   "Follow these steps to onboard a tenant from zero to a working DSH capability.":
     "按以下步骤把一个租户从零配到队友可用。",
-  "guide.step1.title": "① 创建租户",
-  "guide.step1.body":
+  "1. Create a tenant": "① 创建租户",
+  "On Tenants, select New tenant and enter a stable slug and display name. The tenant is the isolation boundary for tools, quotas, and routes.":
     "在「租户」页点「新建租户」，填写 slug（英文标识，如 scholar-lab）与名称。租户是隔离边界：工具、配额、路由都挂在租户上。",
-  "guide.step2.title": "② 拉入成员",
-  "guide.step2.body":
+  "2. Add members": "② 拉入成员",
+  "After a teammate signs in with OIDC, find their principal and add it from the tenant's Teams & memberships page. Teams are optional.":
     "队友首次 OIDC 登录后会自动出现在「身份主体」。回到租户详情 → 团队与成员 → 添加成员（填其身份主体 ID）。可选：先建团队再把成员归组。",
-  "guide.step3.title": "③ 配置工具策略与配额",
-  "guide.step3.body":
+  "3. Configure tool policy and quota": "③ 配置工具策略与配额",
+  "On Policy, quota & route, allow only the required tools, set request and concurrency limits, and enable enforcement when ready.":
     "租户详情 → 策略、配额与路由：工具策略默认全拒，勾选要放行的工具（只读起步建议勾 10 个 read 类工具）；配额按需设置每小时请求上限与并发上限，并勾选强制执行。",
-  "guide.step4.title": "④ 注册 Scholar 后端",
-  "guide.step4.body":
+  "4. Register a Scholar backend": "④ 注册 Scholar 后端",
+  "On Backends, register the data plane URL, the corpus version reported by readiness, and a credential reference such as env:SCHOLAR_SERVICE_TOKEN.":
     "「后端」页 → 注册后端：基础 URL 填数据面地址、语料库版本填 readiness 端点报告的版本、凭据引用填 env:SCHOLAR_SERVICE_TOKEN。",
-  "guide.step5.title": "⑤ 探测并激活",
-  "guide.step5.body":
+  "5. Probe and activate": "⑤ 探测并激活",
+  "Probe the backend to verify readiness and the corpus version, then activate it. Changing the URL or corpus version requires another probe.":
     "注册后先「探测就绪状态」（读取 readiness，校验语料版本一致），成功后「激活后端」。修改 URL 或语料版本会使探测失效，需重新探测再激活。",
-  "guide.step6.title": "⑥ 绑定租户路由",
-  "guide.step6.body":
+  "6. Bind the tenant route": "⑥ 绑定租户路由",
+  "On Policy, quota & route, select the active backend and corpus version, save the route, and activate it for the tenant.":
     "租户详情 → 策略、配额与路由 → 后端路由：选择目标后端与语料版本，保存并激活。此后该租户的所有 MCP 调用都路由到这个后端。",
-  "guide.step7.title": "⑦ 发放兑换码",
-  "guide.step7.body":
+  "7. Issue an enrolment code": "⑦ 发放兑换码",
+  "On the tenant's Access page, select a member, choose tools within the policy allowlist, and issue a time-limited code. It is shown only once.":
     "租户详情 → 访问控制 → 兑换码 → 发放：选成员、勾授权工具（不得超过工具策略白名单）、设有效期。兑换码只显示一次，请私发给队友。",
-  "guide.step8.title": "⑧ 队友接入",
-  "guide.step8.body":
+  "8. Connect a teammate": "⑧ 队友接入",
+  "After installing scholar-dsh-bundle, the teammate runs scholar gateway-login --code <enrolment-code> to use the authorized tools through the gateway.":
     "队友安装 scholar-dsh-bundle（Release 下载）后运行 scholar gateway-login --code <兑换码>，即可在 dsh 学术模式里经网关使用全部授权工具。到期前向管理员要新码重跑即可，配置无需改动。",
-  "guide.tip.title": "日常运维",
-  "guide.tip.body":
+  "Daily operations": "日常运维",
+  "Use Audit for redacted call records and Usage for quota levels. Revoke enrolments or sessions when access changes, and probe a backend again after corpus updates.":
     "「审计」看每次调用的脱敏记录；「用量」看配额水位；人员离职 = 撤销其兑换码/会话（连坐清理会话）。语料更新后到「后端」重新探测并激活。",
 };
 
@@ -497,11 +513,32 @@ export function useI18n(): I18nValue {
 }
 
 export function statusLabel(status: string, t: (key: string) => string): string {
-  if (status === "active" || status === "ready") {
+  if (status === "active" || status === "ready" || status === "operational") {
     return t("Operational");
   }
   if (status === "disabled") {
     return t("Disabled");
+  }
+  if (status === "forwarded") {
+    return t("Forwarded");
+  }
+  if (status === "pending") {
+    return t("Pending");
+  }
+  if (status === "probing") {
+    return t("Probing");
+  }
+  if (status === "failed") {
+    return t("Failed");
+  }
+  if (status === "rejected") {
+    return t("Rejected");
+  }
+  if (status === "revoked") {
+    return t("Revoked");
+  }
+  if (status === "denied") {
+    return t("Denied");
   }
   return status.replaceAll("_", " ");
 }

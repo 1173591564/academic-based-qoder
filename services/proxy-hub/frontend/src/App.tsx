@@ -190,7 +190,7 @@ export function App() {
       >
         <div className="brand">
           <div className="brand-mark">S</div>
-          <div>
+          <div className="brand-copy">
             <strong>Scholar</strong>
             <span>Proxy Hub</span>
           </div>
@@ -235,7 +235,7 @@ export function App() {
         </nav>
         <div className="identity">
           <div className="avatar">{principalLabel.slice(0, 1).toUpperCase()}</div>
-          <div>
+          <div className="identity-copy">
             <strong>{principalLabel}</strong>
             <span>
               {state.me.roles[0]?.role.replaceAll("_", " ") ?? "No role"}

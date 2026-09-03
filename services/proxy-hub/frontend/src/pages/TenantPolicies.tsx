@@ -470,7 +470,7 @@ export function TenantPolicies({
                     defaultChecked={toolPolicy?.allowed_tools.includes(tool) ?? false}
                     disabled={!canManagePolicy}
                   />
-                  <span>{tool}</span>
+                  <span title={tool}>{tool}</span>
                 </label>
               ))}
             </div>

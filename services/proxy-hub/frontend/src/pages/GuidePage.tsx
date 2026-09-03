@@ -12,43 +12,59 @@ export function GuidePage() {
   const { t } = useI18n();
   const steps: GuideStep[] = [
     {
-      title: t("guide.step1.title"),
-      body: t("guide.step1.body"),
+      title: t("1. Create a tenant"),
+      body: t(
+        "On Tenants, select New tenant and enter a stable slug and display name. The tenant is the isolation boundary for tools, quotas, and routes.",
+      ),
       link: { label: t("Tenants"), path: "/console/tenants" },
     },
     {
-      title: t("guide.step2.title"),
-      body: t("guide.step2.body"),
+      title: t("2. Add members"),
+      body: t(
+        "After a teammate signs in with OIDC, find their principal and add it from the tenant's Teams & memberships page. Teams are optional.",
+      ),
       link: { label: t("Principals"), path: "/console/principals" },
     },
     {
-      title: t("guide.step3.title"),
-      body: t("guide.step3.body"),
+      title: t("3. Configure tool policy and quota"),
+      body: t(
+        "On Policy, quota & route, allow only the required tools, set request and concurrency limits, and enable enforcement when ready.",
+      ),
       link: { label: t("Tenants"), path: "/console/tenants" },
     },
     {
-      title: t("guide.step4.title"),
-      body: t("guide.step4.body"),
+      title: t("4. Register a Scholar backend"),
+      body: t(
+        "On Backends, register the data plane URL, the corpus version reported by readiness, and a credential reference such as env:SCHOLAR_SERVICE_TOKEN.",
+      ),
       link: { label: t("Backends"), path: "/console/backends" },
     },
     {
-      title: t("guide.step5.title"),
-      body: t("guide.step5.body"),
+      title: t("5. Probe and activate"),
+      body: t(
+        "Probe the backend to verify readiness and the corpus version, then activate it. Changing the URL or corpus version requires another probe.",
+      ),
       link: { label: t("Backends"), path: "/console/backends" },
     },
     {
-      title: t("guide.step6.title"),
-      body: t("guide.step6.body"),
+      title: t("6. Bind the tenant route"),
+      body: t(
+        "On Policy, quota & route, select the active backend and corpus version, save the route, and activate it for the tenant.",
+      ),
       link: { label: t("Tenants"), path: "/console/tenants" },
     },
     {
-      title: t("guide.step7.title"),
-      body: t("guide.step7.body"),
+      title: t("7. Issue an enrolment code"),
+      body: t(
+        "On the tenant's Access page, select a member, choose tools within the policy allowlist, and issue a time-limited code. It is shown only once.",
+      ),
       link: { label: t("Tenants"), path: "/console/tenants" },
     },
     {
-      title: t("guide.step8.title"),
-      body: t("guide.step8.body"),
+      title: t("8. Connect a teammate"),
+      body: t(
+        "After installing scholar-dsh-bundle, the teammate runs scholar gateway-login --code <enrolment-code> to use the authorized tools through the gateway.",
+      ),
     },
   ];
   return (
@@ -77,8 +93,12 @@ export function GuidePage() {
           </li>
         ))}
         <li className="panel guide-step" key="tip">
-          <h3>{t("guide.tip.title")}</h3>
-          <p>{t("guide.tip.body")}</p>
+          <h3>{t("Daily operations")}</h3>
+          <p>
+            {t(
+              "Use Audit for redacted call records and Usage for quota levels. Revoke enrolments or sessions when access changes, and probe a backend again after corpus updates.",
+            )}
+          </p>
         </li>
       </ol>
     </section>

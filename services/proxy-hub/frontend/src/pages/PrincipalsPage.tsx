@@ -151,36 +151,46 @@ export function PrincipalsPage() {
               />
             ) : (
               <div className="table-wrap">
-                <table className="responsive-table">
+                <table className="responsive-table principal-table">
                   <thead>
                     <tr>
                       <th>{t("Principals")}</th>
                       <th>{t("Status")}</th>
                       <th>{t("Issuer / subject")}</th>
-                      <th>{t("Version")}</th>
                       <th>{t("Action")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPrincipals.map((principal) => (
                       <tr key={principal.id}>
-                        <td data-label={t("Principals")}>
+                        <td className="cell-stack" data-label={t("Principals")}>
                           <strong>
                             {principal.display_name ??
                               principal.email ??
                               principal.id}
                           </strong>
-                          <span>{principal.email ?? principal.id}</span>
+                          <span
+                            className="table-identifier"
+                            title={principal.email ?? principal.id}
+                          >
+                            {principal.email ?? principal.id}
+                          </span>
+                          <span className="mono">v{principal.version}</span>
                         </td>
                         <td data-label={t("Status")}>
                           <StatusPill status={principal.status} />
                         </td>
-                        <td data-label={t("Issuer / subject")}>
+                        <td
+                          className="cell-stack"
+                          data-label={t("Issuer / subject")}
+                        >
                           <strong>{principal.issuer}</strong>
-                          <span className="mono">{principal.subject}</span>
-                        </td>
-                        <td className="mono" data-label={t("Version")}>
-                          v{principal.version}
+                          <span
+                            className="mono table-identifier"
+                            title={principal.subject}
+                          >
+                            {principal.subject}
+                          </span>
                         </td>
                         <td data-label={t("Action")}>
                           <button

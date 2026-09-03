@@ -305,9 +305,11 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             <div className="record-list">
               {state.data.teams.map((team) => (
                 <article key={team.id}>
-                  <div>
+                  <div className="record-copy">
                     <strong>{team.name}</strong>
-                    <span className="mono">{team.id}</span>
+                    <span className="mono" title={team.id}>
+                      {team.id}
+                    </span>
                   </div>
                   <StatusPill status={team.status} />
                   <button
@@ -350,9 +352,16 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             <div className="record-list">
               {state.data.memberships.map((membership) => (
                 <article key={membership.id}>
-                  <div>
-                    <strong>{membership.principal_id}</strong>
-                    <span>{membership.team_id ?? t("Tenant-wide")}</span>
+                  <div className="record-copy">
+                    <strong title={membership.principal_id}>
+                      {membership.principal_id}
+                    </strong>
+                    <span
+                      className={membership.team_id ? "mono" : undefined}
+                      title={membership.team_id ?? undefined}
+                    >
+                      {membership.team_id ?? t("Tenant-wide")}
+                    </span>
                   </div>
                   <StatusPill status={membership.status} />
                   <div className="inline-actions">
@@ -406,8 +415,10 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             <div className="record-list">
               {state.data.roles.map((binding) => (
                 <article key={binding.id}>
-                  <div>
-                    <strong>{binding.principal_id}</strong>
+                  <div className="record-copy">
+                    <strong title={binding.principal_id}>
+                      {binding.principal_id}
+                    </strong>
                     <span>{binding.role.replaceAll("_", " ")}</span>
                   </div>
                   <span className="mono">v{binding.version}</span>

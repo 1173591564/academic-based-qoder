@@ -43,6 +43,10 @@ export function UsagePage({
   const range = useMemo(defaultTimeRange, []);
   const globalScope = hasGlobalScope(me);
   const { t } = useI18n();
+  const formatNumber = useCallback(
+    (value: number) => value.toLocaleString(),
+    [],
+  );
   const [tenantId, setTenantId] = useState(() => {
     const requestedTenant = currentQueryValue("tenant");
     if (
@@ -172,19 +176,19 @@ export function UsagePage({
         <section className="metric-grid">
           <MetricCard
             label={t("Requests")}
-            value={String(totals.requests)}
+            value={formatNumber(totals.requests)}
             detail={t("Gateway calls in range")}
             tone="blue"
           />
           <MetricCard
             label={t("Failed or rejected")}
-            value={String(totals.failures)}
+            value={formatNumber(totals.failures)}
             detail={t("Bounded result classes")}
             tone={totals.failures === 0 ? "green" : "amber"}
           />
           <MetricCard
             label={t("Returned bytes")}
-            value={totals.bytes.toLocaleString()}
+            value={formatNumber(totals.bytes)}
             detail={t("Model-visible response bytes")}
             tone="green"
           />
@@ -226,61 +230,65 @@ export function UsagePage({
               />
             ) : (
               <div className="table-wrap">
-                <table className="responsive-table">
+                <table className="responsive-table usage-table">
                   <thead>
                     <tr>
                       <th>{t("Tenant")}</th>
                       <th>{t("Requests")}</th>
-                      <th>{t("Outcomes")}</th>
-                      <th>{t("Latency")}</th>
+                      <th>{t("Outcomes / latency")}</th>
                       <th>{t("Quota")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredItems.map((item) => (
                       <tr key={item.tenant_id}>
-                        <td data-label={t("Tenant")}>
+                        <td className="cell-stack" data-label={t("Tenant")}>
                           <strong>
                             {tenants.find(
                               (tenant) => tenant.id === item.tenant_id,
                             )?.name ?? item.tenant_id}
                           </strong>
-                          <span className="mono">{item.tenant_id}</span>
-                        </td>
-                        <td data-label={t("Requests")}>
-                          <strong>{item.requests.total}</strong>
-                          <span>
-                            {item.returned_bytes.toLocaleString()} {t("bytes")}
+                          <span
+                            className="mono table-identifier"
+                            title={item.tenant_id}
+                          >
+                            {item.tenant_id}
                           </span>
                         </td>
-                        <td data-label={t("Outcomes")}>
+                        <td className="cell-stack" data-label={t("Requests")}>
+                          <strong>{formatNumber(item.requests.total)}</strong>
+                          <span>
+                            {formatNumber(item.returned_bytes)} {t("bytes")}
+                          </span>
+                        </td>
+                        <td
+                          className="cell-stack"
+                          data-label={t("Outcomes / latency")}
+                        >
                           <strong>
-                            {item.requests.successful} {t("successful")}
+                            {formatNumber(item.requests.successful)}{" "}
+                            {t("successful")}
                           </strong>
                           <span>
-                            {item.requests.failed} {t("failed")} ·{" "}
-                            {item.requests.rejected} {t("rejected")}
+                            {formatNumber(item.requests.failed)} {t("failed")} ·{" "}
+                            {formatNumber(item.requests.rejected)} {t("rejected")}
                           </span>
-                        </td>
-                        <td data-label={t("Latency")}>
-                          <strong>
+                          <span className="cell-detail">
                             {item.latency.average_ms === null
                               ? t("No samples")
                               : `${item.latency.average_ms} ${t("ms average")}`}
-                          </strong>
-                          <span>
                             {item.latency.maximum_ms === null
-                              ? "—"
-                              : `${item.latency.maximum_ms} ${t("ms maximum")}`}
+                              ? ""
+                              : ` · ${item.latency.maximum_ms} ${t("ms maximum")}`}
                           </span>
                         </td>
-                        <td data-label={t("Quota")}>
+                        <td className="cell-stack" data-label={t("Quota")}>
                           <strong>
-                            {item.quota.consumed} {t("consumed")}
+                            {formatNumber(item.quota.consumed)} {t("consumed")}
                           </strong>
                           <span>
                             {item.quota.configured
-                              ? `${item.quota.request_limit ?? 0} / ${item.quota.period_seconds ?? 0}s`
+                              ? `${formatNumber(item.quota.request_limit ?? 0)} / ${formatNumber(item.quota.period_seconds ?? 0)}s`
                               : t("Not configured")}
                           </span>
                         </td>
