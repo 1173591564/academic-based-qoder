@@ -24,7 +24,7 @@ from proxy_hub.models import (
 )
 from proxy_hub.quota import quota_window_start
 from proxy_hub.security import digest_token, token_matches
-from tests.conftest import ApiHarness
+from conftest import ApiHarness
 
 
 @dataclass(frozen=True)

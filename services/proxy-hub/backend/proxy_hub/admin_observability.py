@@ -4,6 +4,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Select, and_, case, func, or_, select
@@ -307,14 +308,18 @@ def usage_item(
 
 def integer_metric(value: object) -> int:
     """Convert a database integer aggregate without weakening its type."""
-    if isinstance(value, (int, float)):
+    if isinstance(value, bool):
+        raise RuntimeError("usage integer aggregate has an invalid type")
+    if isinstance(value, (int, float, Decimal)):
         return int(value)
     raise RuntimeError("usage integer aggregate has an invalid type")
 
 
 def numeric_metric(value: object) -> float:
     """Convert a database numeric aggregate without weakening its type."""
-    if isinstance(value, (int, float)):
+    if isinstance(value, bool):
+        raise RuntimeError("usage numeric aggregate has an invalid type")
+    if isinstance(value, (int, float, Decimal)):
         return float(value)
     raise RuntimeError("usage numeric aggregate has an invalid type")
 

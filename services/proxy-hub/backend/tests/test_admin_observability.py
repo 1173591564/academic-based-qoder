@@ -1,11 +1,15 @@
 """Audit and usage administration query tests."""
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+import pytest
 
 from conftest import ApiHarness
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from proxy_hub.admin_observability import integer_metric, numeric_metric
 from proxy_hub.models import (
     AuditEvent,
     BrowserSession,
@@ -33,6 +37,21 @@ def range_params(
         "to": end.isoformat(),
         **extra,
     }
+
+
+def test_usage_metrics_accept_postgres_numeric_aggregates() -> None:
+    """PostgreSQL returns Decimal for avg/sum over integers; they must convert."""
+    assert integer_metric(Decimal("42")) == 42
+    assert integer_metric(7) == 7
+    assert integer_metric(3.2) == 3
+    assert numeric_metric(Decimal("12.5")) == 12.5
+    assert numeric_metric(9) == 9.0
+    with pytest.raises(RuntimeError):
+        integer_metric("12")
+    with pytest.raises(RuntimeError):
+        numeric_metric(None)
+    with pytest.raises(RuntimeError):
+        integer_metric(True)
 
 
 def add_tenant(session: Session, slug: str) -> Tenant:
