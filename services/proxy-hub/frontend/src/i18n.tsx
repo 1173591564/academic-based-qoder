@@ -46,6 +46,11 @@ const ZH: Record<string, string> = {
   "Submitting…": "提交中…",
   "Operational": "运行中",
   "Disabled": "已停用",
+  "Disable": "停用",
+  "Role": "角色",
+  "Team": "团队",
+  "Memberships": "成员资格",
+  "Bind tenant role": "绑定租户角色",
   "Request": "请求",
   "Close": "关闭",
   "Server mutation": "服务器变更",
@@ -55,6 +60,7 @@ const ZH: Record<string, string> = {
 
   // ── overview ──
   "CONTROL PLANE": "控制面",
+  "Control plane": "控制面",
   "Operations overview": "运营总览",
   "Current health, tenant footprint, and routing readiness.":
     "当前健康状态、租户覆盖与路由就绪情况。",
