@@ -9,6 +9,7 @@ import {
   ServerNotice,
   StatusPill,
 } from "../components";
+import { useI18n } from "../i18n";
 import { loadFailure, type LoadFailure } from "../load";
 import type { AdminPrincipal, ListResponse } from "../types";
 
@@ -22,6 +23,7 @@ export function PrincipalsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -76,9 +78,9 @@ export function PrincipalsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Identity administration"
-        title="Principals"
-        description="Control login eligibility. Memberships and role bindings remain tenant-scoped resources."
+        eyebrow={t("Identity administration")}
+        title={t("Principals")}
+        description={t("Control login eligibility. Memberships and role bindings remain tenant-scoped resources.")}
       />
       {notice ? (
         <ServerNotice message={notice} onClose={() => setNotice(null)} />
@@ -96,19 +98,19 @@ export function PrincipalsPage() {
           />
         ) : state.data.length === 0 ? (
           <EmptyState
-            title="No principals"
-            message="Principals appear after the identity provider establishes them."
+            title={t("No principals")}
+            message={t("Principals appear after the identity provider establishes them.")}
           />
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Principal</th>
-                  <th>Status</th>
-                  <th>Issuer / subject</th>
-                  <th>Version</th>
-                  <th>Action</th>
+                  <th>{t("Principals")}</th>
+                  <th>{t("Status")}</th>
+                  <th>{t("Issuer / subject")}</th>
+                  <th>{t("Version")}</th>
+                  <th>{t("Action")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,7 +140,7 @@ export function PrincipalsPage() {
                         disabled={busyId === principal.id}
                         onClick={() => void togglePrincipal(principal)}
                       >
-                        {principal.status === "active" ? "Disable" : "Enable"}
+                        {principal.status === "active" ? t("Disable") : t("Enable")}
                       </button>
                     </td>
                   </tr>

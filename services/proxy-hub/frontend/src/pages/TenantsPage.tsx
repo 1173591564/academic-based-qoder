@@ -11,6 +11,7 @@ import {
   SubmitActions,
   navigate,
 } from "../components";
+import { useI18n } from "../i18n";
 import type {
   AdminMe,
   ResourceState,
@@ -61,6 +62,7 @@ export function TenantsPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { t } = useI18n();
 
   const canCreate = me.capabilities.includes("tenant:create");
   const canUpdate = me.capabilities.includes("tenant:update");
@@ -170,16 +172,16 @@ export function TenantsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Access boundaries"
-        title={detail ? detail.data.name : "Tenants"}
+        eyebrow={t("ACCESS BOUNDARIES")}
+        title={detail ? detail.data.name : t("Tenants")}
         description={
           detail
-            ? "Manage this tenant's identity, policy, quota, and Scholar routing boundaries."
-            : "Manage organization boundaries and their Scholar routing scope."
+            ? t("Manage this tenant's identity, policy, quota, and Scholar routing boundaries.")
+            : t("Manage organization boundaries and their Scholar routing scope.")
         }
         action={
           !route.tenantId && canCreate
-            ? { label: "New tenant", onClick: () => setShowCreate(true) }
+            ? { label: t("New tenant"), onClick: () => setShowCreate(true) }
             : undefined
         }
       />
@@ -190,7 +192,7 @@ export function TenantsPage({
       {!route.tenantId ? (
         <TenantList tenants={tenants} canCreate={canCreate} />
       ) : !detail ? (
-        error ? null : <section className="panel detail-loading">Loading tenant…</section>
+        error ? null : <section className="panel detail-loading">{t("Loading tenant…")}</section>
       ) : (
         <>
           <div className="subnav" aria-label="Tenant sections">
@@ -198,14 +200,14 @@ export function TenantsPage({
               className={route.section === "summary" ? "active" : undefined}
               onClick={() => navigate(tenantPath(detail.data.id, "summary"))}
             >
-              Summary
+              {t("Summary")}
             </button>
             {canManageAccess ? (
               <button
                 className={route.section === "access" ? "active" : undefined}
                 onClick={() => navigate(tenantPath(detail.data.id, "access"))}
               >
-                Teams & memberships
+                {t("Teams & memberships")}
               </button>
             ) : null}
             {canViewPolicies ? (
@@ -213,14 +215,14 @@ export function TenantsPage({
                 className={route.section === "policies" ? "active" : undefined}
                 onClick={() => navigate(tenantPath(detail.data.id, "policies"))}
               >
-                Policy, quota & route
+                {t("Policy, quota & route")}
               </button>
             ) : null}
             <button
               className="back-link"
               onClick={() => navigate("/console/tenants")}
             >
-              All tenants
+              {t("All tenants")}
             </button>
           </div>
           {route.section === "access" && canManageAccess ? (
@@ -239,17 +241,17 @@ export function TenantsPage({
       )}
       {showCreate ? (
         <Modal
-          title="Create tenant"
-          description="Tenant slugs are stable identifiers and cannot be changed."
+          title={t("Create tenant")}
+          description={t("Tenant slugs are stable identifiers and cannot be changed.")}
           onClose={() => setShowCreate(false)}
         >
           <form onSubmit={(event) => void createTenant(event)}>
             <label>
-              Display name
+              {t("Display name")}
               <input name="name" required maxLength={200} autoFocus />
             </label>
             <label>
-              Slug
+              {t("Slug")}
               <input
                 name="slug"
                 required
@@ -261,7 +263,7 @@ export function TenantsPage({
             </label>
             <SubmitActions
               busy={busy}
-              submitLabel="Create tenant"
+              submitLabel={t("Create tenant")}
               onCancel={() => setShowCreate(false)}
             />
           </form>
@@ -278,15 +280,16 @@ function TenantList({
   tenants: Tenant[];
   canCreate: boolean;
 }) {
+  const { t } = useI18n();
   if (tenants.length === 0) {
     return (
       <section className="panel">
         <EmptyState
-          title="No tenants available"
+          title={t("No tenants available")}
           message={
             canCreate
-              ? "Create the first tenant to establish a policy and corpus boundary."
-              : "No tenants are assigned to this session."
+              ? t("Create the first tenant to establish a policy and corpus boundary.")
+              : t("No tenants are assigned to this session.")
           }
         />
       </section>
@@ -298,10 +301,10 @@ function TenantList({
         <table>
           <thead>
             <tr>
-              <th>Tenant</th>
-              <th>Status</th>
-              <th>Version</th>
-              <th>Updated</th>
+              <th>{t("Tenant")}</th>
+              <th>{t("Status")}</th>
+              <th>{t("Version")}</th>
+              <th>{t("Updated")}</th>
               <th aria-label="Open" />
             </tr>
           </thead>
@@ -341,29 +344,30 @@ function TenantSummary({
   busy: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="summary-grid">
       <section className="panel summary-card">
-        <span className="eyebrow">Tenant identity</span>
+        <span className="eyebrow">{t("Tenant identity")}</span>
         <div className="summary-title">
           <h2>{tenant.name}</h2>
           <StatusPill status={tenant.status} />
         </div>
         <dl>
           <div>
-            <dt>Slug</dt>
+            <dt>{t("Slug")}</dt>
             <dd>{tenant.slug}</dd>
           </div>
           <div>
-            <dt>Resource ID</dt>
+            <dt>{t("Resource ID")}</dt>
             <dd className="mono">{tenant.id}</dd>
           </div>
           <div>
-            <dt>Version</dt>
+            <dt>{t("Version")}</dt>
             <dd>{tenant.version}</dd>
           </div>
           <div>
-            <dt>Last updated</dt>
+            <dt>{t("Last updated")}</dt>
             <dd>{new Date(tenant.updated_at).toLocaleString()}</dd>
           </div>
         </dl>
@@ -375,17 +379,17 @@ function TenantSummary({
             disabled={busy}
             onClick={onToggle}
           >
-            {tenant.status === "active" ? "Disable tenant" : "Enable tenant"}
+            {tenant.status === "active" ? t("Disable tenant") : t("Enable tenant")}
           </button>
         ) : null}
       </section>
       <section className="panel summary-card">
-        <span className="eyebrow">Security boundary</span>
-        <h2>Fail-closed administration</h2>
+        <span className="eyebrow">{t("Security boundary")}</span>
+        <h2>{t("Fail-closed administration")}</h2>
         <p>
-          Browser capabilities control presentation only. The Proxy Hub API
-          independently enforces role, tenant scope, CSRF, ETag, and idempotency
-          requirements on every mutation.
+          {t(
+            "Browser capabilities control presentation only. The Proxy Hub API independently enforces role, tenant scope, CSRF, ETag, and idempotency requirements on every mutation.",
+          )}
         </p>
       </section>
     </div>

@@ -1158,3 +1158,39 @@ input::placeholder {
     display: none;
   }
 }
+
+.lang-toggle {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lang-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.guide-step h3 {
+  margin: 0 0 8px;
+}
+
+.guide-step p {
+  margin: 0 0 12px;
+  opacity: 0.85;
+  line-height: 1.6;
+}
+

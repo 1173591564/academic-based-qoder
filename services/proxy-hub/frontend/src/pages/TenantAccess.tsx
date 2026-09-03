@@ -10,6 +10,7 @@ import {
   StatusPill,
   SubmitActions,
 } from "../components";
+import { useI18n } from "../i18n";
 import { loadFailure, type LoadFailure } from "../load";
 import type {
   ListResponse,
@@ -37,6 +38,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -272,15 +274,15 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Organization</span>
-              <h2>Teams</h2>
+              <span className="eyebrow">{t("Organization")}</span>
+              <h2>{t("Teams")}</h2>
             </div>
             <button className="text-button" onClick={() => setModal("team")}>
-              New team
+              {t("New team")}
             </button>
           </div>
           {state.data.teams.length === 0 ? (
-            <EmptyState title="No teams" message="Create an optional team boundary." />
+            <EmptyState title={t("No teams")} message={t("Create an optional team boundary.")} />
           ) : (
             <div className="record-list">
               {state.data.teams.map((team) => (
@@ -295,7 +297,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                     disabled={busy === team.id}
                     onClick={() => void toggleTeam(team)}
                   >
-                    {team.status === "active" ? "Disable" : "Enable"}
+                    {team.status === "active" ? t("Disable") : t("Enable")}
                   </button>
                 </article>
               ))}
@@ -305,20 +307,20 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Tenant access</span>
-              <h2>Memberships</h2>
+              <span className="eyebrow">{t("Tenant access")}</span>
+              <h2>{t("Memberships")}</h2>
             </div>
             <button
               className="text-button"
               onClick={() => setModal("membership")}
             >
-              Add member
+              {t("Add member")}
             </button>
           </div>
           {state.data.memberships.length === 0 ? (
             <EmptyState
-              title="No memberships"
-              message="Add an active principal to this tenant."
+              title={t("No memberships")}
+              message={t("Add an active principal to this tenant.")}
             />
           ) : (
             <div className="record-list">
@@ -326,7 +328,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                 <article key={membership.id}>
                   <div>
                     <strong>{membership.principal_id}</strong>
-                    <span>{membership.team_id ?? "Tenant-wide"}</span>
+                    <span>{membership.team_id ?? t("Tenant-wide")}</span>
                   </div>
                   <StatusPill status={membership.status} />
                   <div className="inline-actions">
@@ -335,14 +337,14 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                       disabled={busy === membership.id}
                       onClick={() => void toggleMembership(membership)}
                     >
-                      {membership.status === "active" ? "Disable" : "Enable"}
+                      {membership.status === "active" ? t("Disable") : t("Enable")}
                     </button>
                     <button
                       className="text-button danger-text"
                       disabled={busy === membership.id}
                       onClick={() => void removeMembership(membership)}
                     >
-                      Remove
+                      {t("Remove")}
                     </button>
                   </div>
                 </article>
@@ -353,17 +355,17 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Authorization</span>
-              <h2>Role bindings</h2>
+              <span className="eyebrow">{t("Authorization")}</span>
+              <h2>{t("Role bindings")}</h2>
             </div>
             <button className="text-button" onClick={() => setModal("role")}>
-              Bind role
+              {t("Bind role")}
             </button>
           </div>
           {state.data.roles.length === 0 ? (
             <EmptyState
-              title="No active bindings"
-              message="Bind a tenant role to an active member."
+              title={t("No active bindings")}
+              message={t("Bind a tenant role to an active member.")}
             />
           ) : (
             <div className="record-list">
@@ -379,7 +381,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
                     disabled={busy === binding.id}
                     onClick={() => void revokeRole(binding)}
                   >
-                    Revoke
+                    {t("Revoke")}
                   </button>
                 </article>
               ))}
@@ -389,18 +391,18 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       </div>
       {modal === "team" ? (
         <Modal
-          title="Create team"
-          description="Teams create an optional grouping boundary inside this tenant."
+          title={t("Create team")}
+          description={t("Teams create an optional grouping boundary inside this tenant.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void createTeam(event)}>
             <label>
-              Team name
+              {t("Team name")}
               <input name="name" required maxLength={200} autoFocus />
             </label>
             <SubmitActions
               busy={busy === "team"}
-              submitLabel="Create team"
+              submitLabel={t("Create team")}
               onCancel={() => setModal(null)}
             />
           </form>
@@ -408,19 +410,19 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       ) : null}
       {modal === "membership" ? (
         <Modal
-          title="Add membership"
-          description="The principal must already be active. Team assignment is optional."
+          title={t("Add membership")}
+          description={t("The principal must already be active. Team assignment is optional.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void createMembership(event)}>
             <label>
-              Principal ID
+              {t("Principal ID")}
               <input name="principal_id" required maxLength={48} autoFocus />
             </label>
             <label>
-              Team
+              {t("Team")}
               <select name="team_id" defaultValue="">
-                <option value="">Tenant-wide</option>
+                <option value="">{t("Tenant-wide")}</option>
                 {state.data.teams
                   .filter((team) => team.status === "active")
                   .map((team) => (
@@ -432,7 +434,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             </label>
             <SubmitActions
               busy={busy === "membership"}
-              submitLabel="Add membership"
+              submitLabel={t("Add membership")}
               onCancel={() => setModal(null)}
             />
           </form>
@@ -440,26 +442,26 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       ) : null}
       {modal === "role" ? (
         <Modal
-          title="Bind tenant role"
-          description="The principal must have an active membership in this tenant."
+          title={t("Bind tenant role")}
+          description={t("The principal must have an active membership in this tenant.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void createRole(event)}>
             <label>
-              Principal ID
+              {t("Principal ID")}
               <input name="principal_id" required maxLength={48} autoFocus />
             </label>
             <label>
-              Role
+              {t("Role")}
               <select name="role" defaultValue="operator">
-                <option value="tenant_admin">Tenant admin</option>
-                <option value="operator">Operator</option>
-                <option value="auditor">Auditor</option>
+                <option value="tenant_admin">{t("Tenant admin")}</option>
+                <option value="operator">{t("Operator")}</option>
+                <option value="auditor">{t("Auditor")}</option>
               </select>
             </label>
             <SubmitActions
               busy={busy === "role"}
-              submitLabel="Bind role"
+              submitLabel={t("Bind role")}
               onCancel={() => setModal(null)}
             />
           </form>

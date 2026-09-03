@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "./api";
 import { CenteredState, navigate } from "./components";
+import { LanguageToggle, useI18n } from "./i18n";
 import { AuditPage } from "./pages/AuditPage";
 import { BackendsPage } from "./pages/BackendsPage";
+import { GuidePage } from "./pages/GuidePage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PrincipalsPage } from "./pages/PrincipalsPage";
 import {
@@ -35,6 +37,7 @@ export interface NavigationItem {
 
 const NAVIGATION: NavigationItem[] = [
   { label: "Overview", icon: "⌂", path: "/console/" },
+  { label: "Guide", icon: "✦", path: "/console/guide" },
   { label: "Tenants", icon: "◇", path: "/console/tenants" },
   {
     label: "Backends",
@@ -100,6 +103,7 @@ function isActive(path: string, itemPath: string): boolean {
 }
 
 export function App() {
+  const { t } = useI18n();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [path, setPath] = useState(window.location.pathname);
 
@@ -144,31 +148,25 @@ export function App() {
   }, [state]);
 
   if (state.kind === "loading") {
-    return <CenteredState title="Loading control plane" pulse />;
+    return <CenteredLoading />;
   }
   if (state.kind === "unauthenticated") {
     const returnTo = encodeURIComponent(window.location.pathname);
     return (
-      <CenteredState
-        title="Operator access"
-        message="Sign in through the configured identity provider to manage Proxy Hub."
-        action={{
-          label: "Sign in with OIDC",
-          href: `/auth/login?return_to=${returnTo}`,
-        }}
+      <CenteredAuth
+        returnTo={returnTo}
       />
     );
   }
   if (state.kind === "denied") {
-    return <CenteredState title="Access denied" message={state.message} />;
+    return <CenteredDenied message={state.message} />;
   }
   if (state.kind === "unavailable") {
     return (
-      <CenteredState
-        title="Control plane unavailable"
+      <CenteredUnavailable
         message={state.message}
         requestId={state.requestId}
-        action={{ label: "Retry", onClick: () => void load() }}
+        onRetry={() => void load()}
       />
     );
   }
@@ -194,14 +192,14 @@ export function App() {
               visibleNavigation
                 .slice(0, index)
                 .every((previous) => previous.section !== item.section) ? (
-                <div className="nav-section">{item.section}</div>
+                <div className="nav-section">{t(item.section)}</div>
               ) : null}
               <button
                 className={isActive(path, item.path) ? "nav-item active" : "nav-item"}
                 onClick={() => navigate(item.path)}
               >
                 <span className="nav-icon">{item.icon}</span>
-                {item.label}
+                {t(item.label)}
               </button>
             </div>
           ))}
@@ -214,6 +212,7 @@ export function App() {
               {state.me.roles[0]?.role.replaceAll("_", " ") ?? "No role"}
             </span>
           </div>
+          <LanguageToggle />
         </div>
       </aside>
       <main className="main">
@@ -226,6 +225,52 @@ export function App() {
         />
       </main>
     </div>
+  );
+}
+
+function CenteredLoading() {
+  const { t } = useI18n();
+  return <CenteredState title={t("Loading control plane")} pulse />;
+}
+
+function CenteredAuth({ returnTo }: { returnTo: string }) {
+  const { t } = useI18n();
+  return (
+    <CenteredState
+      title={t("Operator access")}
+      message={t(
+        "Sign in through the configured identity provider to manage Proxy Hub.",
+      )}
+      action={{
+        label: t("Sign in with OIDC"),
+        href: `/auth/login?return_to=${returnTo}`,
+      }}
+    />
+  );
+}
+
+function CenteredDenied({ message }: { message: string }) {
+  const { t } = useI18n();
+  return <CenteredState title={t("Access denied")} message={message} />;
+}
+
+function CenteredUnavailable({
+  message,
+  requestId,
+  onRetry,
+}: {
+  message: string;
+  requestId: string | null;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <CenteredState
+      title={t("Control plane unavailable")}
+      message={t(message)}
+      requestId={requestId}
+      action={{ label: t("Retry"), onClick: onRetry }}
+    />
   );
 }
 
@@ -242,6 +287,9 @@ function ConsolePage({
   tenants: Tenant[];
   onReload: () => Promise<void>;
 }) {
+  if (path.startsWith("/console/guide")) {
+    return <GuidePage />;
+  }
   if (path.startsWith("/console/tenants")) {
     return (
       <TenantsPage
@@ -284,12 +332,17 @@ function ConsolePage({
 }
 
 function DeniedPage() {
+  const { t } = useI18n();
   return (
     <section className="panel panel-state">
-      <h3>Access denied</h3>
-      <p>This browser session does not advertise the capability for this page.</p>
+      <h3>{t("Access denied")}</h3>
+      <p>
+        {t(
+          "This browser session does not advertise the capability for this page.",
+        )}
+      </p>
       <button className="secondary-button" onClick={() => navigate("/console/")}>
-        Return to overview
+        {t("Return to overview")}
       </button>
     </section>
   );

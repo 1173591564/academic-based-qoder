@@ -4,8 +4,8 @@ import {
   PageHeader,
   StatusPill,
   navigate,
-  statusLabel,
 } from "../components";
+import { statusLabel, useI18n } from "../i18n";
 import type { Overview, Tenant } from "../types";
 
 export function OverviewPage({
@@ -15,33 +15,34 @@ export function OverviewPage({
   overview: Overview;
   tenants: Tenant[];
 }) {
+  const { t } = useI18n();
   return (
     <>
       <PageHeader
-        eyebrow="Control plane"
-        title="Operations overview"
-        description="Current health, tenant footprint, and routing readiness."
+        eyebrow={t("CONTROL PLANE")}
+        title={t("Operations overview")}
+        description={t("Current health, tenant footprint, and routing readiness.")}
       />
       <section className="metric-grid">
         <MetricCard
-          label="Control plane"
-          value={statusLabel(overview.control_plane.status)}
-          detail={`Observed ${new Date(overview.observed_at).toLocaleTimeString()}`}
+          label={t("Control plane")}
+          value={statusLabel(overview.control_plane.status, t)}
+          detail={`${t("Observed")} ${new Date(overview.observed_at).toLocaleTimeString()}`}
           tone="green"
         />
         <MetricCard
-          label="Visible tenants"
+          label={t("Visible tenants")}
           value={String(overview.tenants.visible)}
-          detail="Within your assigned scope"
+          detail={t("Within your assigned scope")}
           tone="blue"
         />
         <MetricCard
-          label="Recent failures"
+          label={t("Recent failures")}
           value={String(overview.recent_failures.length)}
           detail={
             overview.recent_failures.length === 0
-              ? "No active incidents reported"
-              : "Review audit decisions"
+              ? t("No active incidents reported")
+              : t("Review audit decisions")
           }
           tone={overview.recent_failures.length === 0 ? "green" : "amber"}
         />
@@ -49,30 +50,36 @@ export function OverviewPage({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <span className="eyebrow">Tenant activity</span>
-            <h2>Recently updated</h2>
+            <span className="eyebrow">{t("Tenant activity")}</span>
+            <h2>{t("Recently updated")}</h2>
           </div>
+          <button
+            className="text-button"
+            onClick={() => navigate("/console/guide")}
+          >
+            {t("Read the setup guide")}
+          </button>
           <button
             className="text-button"
             onClick={() => navigate("/console/tenants")}
           >
-            View all
+            {t("View all")}
           </button>
         </div>
         {tenants.length === 0 ? (
           <EmptyState
-            title="No tenants in scope"
-            message="A platform administrator can create the first tenant."
+            title={t("No tenants in scope")}
+            message={t("A platform administrator can create the first tenant.")}
           />
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Tenant</th>
-                  <th>Status</th>
-                  <th>Version</th>
-                  <th>Updated</th>
+                  <th>{t("Tenant")}</th>
+                  <th>{t("Status")}</th>
+                  <th>{t("Version")}</th>
+                  <th>{t("Updated")}</th>
                 </tr>
               </thead>
               <tbody>

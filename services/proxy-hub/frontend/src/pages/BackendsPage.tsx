@@ -11,6 +11,7 @@ import {
   StatusPill,
   SubmitActions,
 } from "../components";
+import { useI18n } from "../i18n";
 import { loadFailure, type LoadFailure } from "../load";
 import type {
   AdminMe,
@@ -36,6 +37,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
   const [modal, setModal] = useState<"create" | "edit" | "rotate" | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const canManage = me.capabilities.includes("backend:manage");
   const canProbe = me.capabilities.includes("backend:probe");
@@ -232,12 +234,14 @@ export function BackendsPage({ me }: { me: AdminMe }) {
   return (
     <>
       <PageHeader
-        eyebrow="Scholar routing"
-        title="Backend registry"
-        description="Register Scholar services, verify readiness, and rotate deployer-owned credential references."
+        eyebrow={t("Scholar routing")}
+        title={t("Backend registry")}
+        description={t(
+          "Register Scholar services, verify readiness, and rotate deployer-owned credential references.",
+        )}
         action={
           canManage
-            ? { label: "Register backend", onClick: () => setModal("create") }
+            ? { label: t("Register backend"), onClick: () => setModal("create") }
             : undefined
         }
       />
@@ -261,8 +265,8 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       ) : state.data.length === 0 ? (
         <section className="panel">
           <EmptyState
-            title="No Scholar backends"
-            message="Register a backend before configuring tenant routes."
+            title={t("No Scholar backends")}
+            message={t("Register a backend before configuring tenant routes.")}
           />
         </section>
       ) : (
@@ -272,10 +276,10 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Backend</th>
-                    <th>Status</th>
-                    <th>Probe</th>
-                    <th>Corpus</th>
+                    <th>{t("Backend")}</th>
+                    <th>{t("Status")}</th>
+                    <th>{t("Probe")}</th>
+                    <th>{t("Corpus")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,33 +315,33 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               >
                 ×
               </button>
-              <span className="eyebrow">Backend detail</span>
+              <span className="eyebrow">{t("Backend detail")}</span>
               <h2>{selected.data.name}</h2>
               <StatusPill
                 status={selected.data.probe.ready ? "ready" : selected.data.status}
               />
               <dl>
                 <div>
-                  <dt>Service URL</dt>
+                  <dt>{t("Service URL")}</dt>
                   <dd>{selected.data.base_url}</dd>
                 </div>
                 <div>
-                  <dt>Corpus</dt>
+                  <dt>{t("Corpus")}</dt>
                   <dd className="mono">{selected.data.corpus_version}</dd>
                 </div>
                 <div>
-                  <dt>Credential version</dt>
-                  <dd>{selected.data.credential.version ?? "Unversioned"}</dd>
+                  <dt>{t("Credential version")}</dt>
+                  <dd>{selected.data.credential.version ?? t("Unversioned")}</dd>
                 </div>
                 <div>
-                  <dt>Probe</dt>
+                  <dt>{t("Probe")}</dt>
                   <dd>
-                    {selected.data.probe.reason ?? "Not probed"} ·{" "}
+                    {selected.data.probe.reason ?? t("Not probed")} ·{" "}
                     {selected.data.probe.observed_at
                       ? new Date(
                           selected.data.probe.observed_at,
                         ).toLocaleString()
-                      : "never"}
+                      : t("never")}
                   </dd>
                 </div>
               </dl>
@@ -348,7 +352,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                     disabled={busy}
                     onClick={() => void probeBackend()}
                   >
-                    Probe readiness
+                    {t("Probe readiness")}
                   </button>
                 ) : null}
                 {canManage ? (
@@ -357,13 +361,13 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                       className="secondary-button"
                       onClick={() => setModal("edit")}
                     >
-                      Edit registration
+                      {t("Edit registration")}
                     </button>
                     <button
                       className="secondary-button"
                       onClick={() => setModal("rotate")}
                     >
-                      Rotate credential reference
+                      {t("Rotate credential reference")}
                     </button>
                     <button
                       className={
@@ -380,13 +384,13 @@ export function BackendsPage({ me }: { me: AdminMe }) {
                                 ? "disabled"
                                 : "active",
                           },
-                          `${selected.data.status === "active" ? "Disable" : "Activate"} this backend?`,
+                          `${selected.data.status === "active" ? t("Disable") : t("Activate")} ${t("this backend?")}`,
                         )
                       }
                     >
                       {selected.data.status === "active"
-                        ? "Disable backend"
-                        : "Activate backend"}
+                        ? t("Disable backend")
+                        : t("Activate backend")}
                     </button>
                   </>
                 ) : null}
@@ -397,17 +401,17 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       )}
       {modal === "create" ? (
         <Modal
-          title="Register Scholar backend"
-          description="Only env:NAME credential references are accepted. Secret material stays outside the Hub database."
+          title={t("Register Scholar backend")}
+          description={t("Only env:NAME credential references are accepted. Secret material stays outside the Hub database.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void createBackend(event)}>
             <label>
-              Display name
+              {t("Display name")}
               <input name="name" required maxLength={200} autoFocus />
             </label>
             <label>
-              HTTPS base URL
+              {t("Base URL")}
               <input
                 name="base_url"
                 required
@@ -416,11 +420,11 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             </label>
             <label>
-              Corpus version
+              {t("Corpus version")}
               <input name="corpus_version" required maxLength={128} />
             </label>
             <label>
-              Credential reference
+              {t("Credential reference")}
               <input
                 name="credential_ref"
                 required
@@ -429,12 +433,12 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             </label>
             <label>
-              Credential version
+              {t("Credential version")}
               <input name="credential_version" maxLength={128} />
             </label>
             <SubmitActions
               busy={busy}
-              submitLabel="Register backend"
+              submitLabel={t("Register backend")}
               onCancel={() => setModal(null)}
             />
           </form>
@@ -442,13 +446,13 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       ) : null}
       {modal === "rotate" && selected ? (
         <Modal
-          title="Rotate credential reference"
-          description="The existing readiness result will be invalidated until the backend is probed again."
+          title={t("Rotate credential reference")}
+          description={t("The existing readiness result will be invalidated until the backend is probed again.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void rotateCredential(event)}>
             <label>
-              New credential reference
+              {t("New credential reference")}
               <input
                 name="credential_ref"
                 required
@@ -458,12 +462,12 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             </label>
             <label>
-              Credential version
+              {t("Credential version")}
               <input name="credential_version" maxLength={128} />
             </label>
             <SubmitActions
               busy={busy}
-              submitLabel="Rotate reference"
+              submitLabel={t("Rotate reference")}
               onCancel={() => setModal(null)}
             />
           </form>
@@ -471,13 +475,13 @@ export function BackendsPage({ me }: { me: AdminMe }) {
       ) : null}
       {modal === "edit" && selected ? (
         <Modal
-          title="Edit backend registration"
-          description="Changing service or corpus identity invalidates the previous readiness result."
+          title={t("Edit backend registration")}
+          description={t("Changing service or corpus identity invalidates the previous readiness result.")}
           onClose={() => setModal(null)}
         >
           <form onSubmit={(event) => void editBackend(event)}>
             <label>
-              Display name
+              {t("Display name")}
               <input
                 name="name"
                 required
@@ -487,7 +491,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             </label>
             <label>
-              HTTPS base URL
+              {t("Base URL")}
               <input
                 name="base_url"
                 required
@@ -496,7 +500,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
               />
             </label>
             <label>
-              Corpus version
+              {t("Corpus version")}
               <input
                 name="corpus_version"
                 required
@@ -506,7 +510,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
             </label>
             <SubmitActions
               busy={busy}
-              submitLabel="Save registration"
+              submitLabel={t("Save registration")}
               onCancel={() => setModal(null)}
             />
           </form>

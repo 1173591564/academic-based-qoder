@@ -7,6 +7,7 @@ import {
   PanelState,
   StatusPill,
 } from "../components";
+import { useI18n } from "../i18n";
 import {
   defaultTimeRange,
   loadFailure,
@@ -37,6 +38,7 @@ export function AuditPage({
 }) {
   const range = useMemo(defaultTimeRange, []);
   const globalScope = hasGlobalScope(me);
+  const { t } = useI18n();
   const [tenantId, setTenantId] = useState(globalScope ? "" : (tenants[0]?.id ?? ""));
   const [cursor, setCursor] = useState<string | null>(null);
   const [state, setState] = useState<AuditLoad>({ kind: "loading" });
@@ -76,13 +78,13 @@ export function AuditPage({
   return (
     <>
       <PageHeader
-        eyebrow="Bounded observability"
-        title="Audit events"
-        description="Authorization and operational metadata from the last 24 hours. Research content, request bodies, digests, and credentials are never returned."
+        eyebrow={t("Bounded observability")}
+        title={t("Audit events")}
+        description={t("Authorization and operational metadata from the last 24 hours. Research content, request bodies, digests, and credentials are never returned.")}
       />
       <div className="filter-bar">
         <label>
-          Scope
+          {t("Scope")}
           <select
             value={tenantId}
             onChange={(event) => {
@@ -90,7 +92,7 @@ export function AuditPage({
               setTenantId(event.target.value);
             }}
           >
-            {globalScope ? <option value="">All tenants</option> : null}
+            {globalScope ? <option value="">{t("All tenants")}</option> : null}
             {tenants.map((tenant) => (
               <option key={tenant.id} value={tenant.id}>
                 {tenant.name}
@@ -115,8 +117,8 @@ export function AuditPage({
           />
         ) : state.data.items.length === 0 ? (
           <EmptyState
-            title="No audit events"
-            message="No bounded operational events were recorded in this scope."
+            title={t("No audit events")}
+            message={t("No bounded operational events were recorded in this scope.")}
           />
         ) : (
           <>
@@ -124,11 +126,11 @@ export function AuditPage({
               <table>
                 <thead>
                   <tr>
-                    <th>Occurred</th>
-                    <th>Action</th>
-                    <th>Outcome</th>
-                    <th>Tenant / resource</th>
-                    <th>Latency</th>
+                    <th>{t("Occurred")}</th>
+                    <th>{t("Action")}</th>
+                    <th>{t("Outcome")}</th>
+                    <th>{t("Tenant / resource")}</th>
+                    <th>{t("Latency")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,7 +168,7 @@ export function AuditPage({
                   className="secondary-button"
                   onClick={() => setCursor(state.data.next_cursor)}
                 >
-                  Next page
+                  {t("Next page")}
                 </button>
               </div>
             ) : null}

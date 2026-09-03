@@ -1,18 +1,10 @@
 import type { FormEvent, ReactNode } from "react";
 
+import { statusLabel, useI18n } from "./i18n";
+
 export function navigate(path: string): void {
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-export function statusLabel(status: string): string {
-  if (status === "active" || status === "ready") {
-    return "Operational";
-  }
-  if (status === "disabled") {
-    return "Disabled";
-  }
-  return status.replaceAll("_", " ");
 }
 
 export function PageHeader({
@@ -64,12 +56,13 @@ export function MetricCard({
 }
 
 export function StatusPill({ status }: { status: string }) {
+  const { t } = useI18n();
   const active =
     status === "active" || status === "ready" || status === "forwarded";
   return (
     <span className={active ? "status active" : "status disabled"}>
       <i />
-      {statusLabel(status)}
+      {statusLabel(status, t)}
     </span>
   );
 }
@@ -133,22 +126,23 @@ export function PanelState({
   requestId?: string | null;
   onRetry?: () => void;
 }) {
+  const { t } = useI18n();
   if (kind === "loading") {
-    return <div className="panel-state loading-lines">Loading server data…</div>;
+    return <div className="panel-state loading-lines">{t("Loading server data…")}</div>;
   }
   if (kind === "empty") {
     return (
-      <EmptyState title="No records" message={message ?? "Nothing to show."} />
+      <EmptyState title={t("No records")} message={message ?? t("Nothing to show.")} />
     );
   }
   return (
     <div className="panel-state">
-      <h3>{kind === "denied" ? "Access denied" : "Service unavailable"}</h3>
+      <h3>{kind === "denied" ? t("Access denied") : t("Service unavailable")}</h3>
       <p>{message}</p>
-      {requestId ? <code>Request {requestId}</code> : null}
+      {requestId ? <code>{t("Request")} {requestId}</code> : null}
       {onRetry ? (
         <button className="secondary-button" onClick={onRetry}>
-          Retry
+          {t("Retry")}
         </button>
       ) : null}
     </div>
@@ -223,13 +217,14 @@ export function SubmitActions({
   submitLabel: string;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="modal-actions">
       <button type="button" className="secondary-button" onClick={onCancel}>
-        Cancel
+        {t("Cancel")}
       </button>
       <button type="submit" className="primary-button" disabled={busy}>
-        {busy ? "Submitting…" : submitLabel}
+        {busy ? t("Submitting…") : submitLabel}
       </button>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   PageHeader,
   PanelState,
 } from "../components";
+import { useI18n } from "../i18n";
 import {
   defaultTimeRange,
   loadFailure,
@@ -37,6 +38,7 @@ export function UsagePage({
 }) {
   const range = useMemo(defaultTimeRange, []);
   const globalScope = hasGlobalScope(me);
+  const { t } = useI18n();
   const [tenantId, setTenantId] = useState(globalScope ? "" : (tenants[0]?.id ?? ""));
   const [cursor, setCursor] = useState<string | null>(null);
   const [state, setState] = useState<UsageLoad>({ kind: "loading" });
@@ -88,13 +90,13 @@ export function UsagePage({
   return (
     <>
       <PageHeader
-        eyebrow="Immutable reporting"
-        title="Usage"
-        description="Request outcomes, latency, returned bytes, and quota consumption for the last 24 hours. Reporting never changes quota counters."
+        eyebrow={t("Immutable reporting")}
+        title={t("Usage")}
+        description={t("Request outcomes, latency, returned bytes, and quota consumption for the last 24 hours. Reporting never changes quota counters.")}
       />
       <div className="filter-bar">
         <label>
-          Scope
+          {t("Scope")}
           <select
             value={tenantId}
             onChange={(event) => {
@@ -102,7 +104,7 @@ export function UsagePage({
               setTenantId(event.target.value);
             }}
           >
-            {globalScope ? <option value="">All tenants</option> : null}
+            {globalScope ? <option value="">{t("All tenants")}</option> : null}
             {tenants.map((tenant) => (
               <option key={tenant.id} value={tenant.id}>
                 {tenant.name}
@@ -118,21 +120,21 @@ export function UsagePage({
       {state.kind === "ready" ? (
         <section className="metric-grid">
           <MetricCard
-            label="Requests"
+            label={t("Requests")}
             value={String(totals.requests)}
-            detail="Gateway calls in range"
+            detail={t("Gateway calls in range")}
             tone="blue"
           />
           <MetricCard
-            label="Failed or rejected"
+            label={t("Failed or rejected")}
             value={String(totals.failures)}
-            detail="Bounded result classes"
+            detail={t("Bounded result classes")}
             tone={totals.failures === 0 ? "green" : "amber"}
           />
           <MetricCard
-            label="Returned bytes"
+            label={t("Returned bytes")}
             value={totals.bytes.toLocaleString()}
-            detail="Model-visible response bytes"
+            detail={t("Model-visible response bytes")}
             tone="green"
           />
         </section>
@@ -149,8 +151,8 @@ export function UsagePage({
           />
         ) : state.data.items.length === 0 ? (
           <EmptyState
-            title="No usage rows"
-            message="No tenants are available in this reporting scope."
+            title={t("No usage rows")}
+            message={t("No tenants are available in this reporting scope.")}
           />
         ) : (
           <>
@@ -158,11 +160,11 @@ export function UsagePage({
               <table>
                 <thead>
                   <tr>
-                    <th>Tenant</th>
-                    <th>Requests</th>
-                    <th>Outcomes</th>
-                    <th>Latency</th>
-                    <th>Quota</th>
+                    <th>{t("Tenant")}</th>
+                    <th>{t("Requests")}</th>
+                    <th>{t("Outcomes")}</th>
+                    <th>{t("Latency")}</th>
+                    <th>{t("Quota")}</th>
                   </tr>
                 </thead>
                 <tbody>

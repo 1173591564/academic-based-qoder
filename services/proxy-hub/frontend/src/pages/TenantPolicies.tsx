@@ -7,6 +7,7 @@ import {
   ServerNotice,
   StatusPill,
 } from "../components";
+import { useI18n } from "../i18n";
 import { loadFailure, type LoadFailure } from "../load";
 import type {
   AdminMe,
@@ -82,6 +83,7 @@ export function TenantPolicies({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const canManagePolicy = me.capabilities.includes("policy:manage");
   const canManageQuota = me.capabilities.includes("quota:manage");
@@ -269,8 +271,8 @@ export function TenantPolicies({
         <section className="panel settings-panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Deny by default</span>
-              <h2>Tool policy</h2>
+              <span className="eyebrow">{t("Deny by default")}</span>
+              <h2>{t("Tool policy")}</h2>
             </div>
             {toolPolicy ? <span className="mono">v{toolPolicy.version}</span> : null}
           </div>
@@ -294,7 +296,7 @@ export function TenantPolicies({
                 type="submit"
                 disabled={busy === "tools"}
               >
-                {busy === "tools" ? "Saving…" : "Save exact allowlist"}
+                {busy === "tools" ? t("Saving…") : t("Save exact allowlist")}
               </button>
             ) : null}
           </form>
@@ -303,8 +305,8 @@ export function TenantPolicies({
           <section className="panel settings-panel">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">Request enforcement</span>
-                <h2>Quota policy</h2>
+                <span className="eyebrow">{t("Request enforcement")}</span>
+                <h2>{t("Quota policy")}</h2>
               </div>
               {quotaPolicy ? (
                 <StatusPill
@@ -314,7 +316,7 @@ export function TenantPolicies({
             </div>
             <form className="settings-form" onSubmit={(event) => void saveQuotaPolicy(event)}>
               <label>
-                Quota class
+                {t("Quota class")}
                 <input
                   name="quota_class"
                   required
@@ -325,7 +327,7 @@ export function TenantPolicies({
               </label>
               <div className="field-grid">
                 <label>
-                  Request limit
+                  {t("Request limit")}
                   <input
                     name="request_limit"
                     type="number"
@@ -336,7 +338,7 @@ export function TenantPolicies({
                   />
                 </label>
                 <label>
-                  Period seconds
+                  {t("Period seconds")}
                   <input
                     name="period_seconds"
                     type="number"
@@ -347,7 +349,7 @@ export function TenantPolicies({
                   />
                 </label>
                 <label>
-                  Concurrency limit
+                  {t("Concurrency limit")}
                   <input
                     name="concurrency_limit"
                     type="number"
@@ -365,7 +367,7 @@ export function TenantPolicies({
                   defaultChecked={quotaPolicy?.enforcement_enabled ?? true}
                   disabled={!canManageQuota}
                 />
-                <span>Enforce request and concurrency limits</span>
+                <span>{t("Enforce request and concurrency limits")}</span>
               </label>
               {canManageQuota ? (
                 <button
@@ -373,7 +375,7 @@ export function TenantPolicies({
                   type="submit"
                   disabled={busy === "quota"}
                 >
-                  {busy === "quota" ? "Saving…" : "Save quota"}
+                  {busy === "quota" ? t("Saving…") : t("Save quota")}
                 </button>
               ) : null}
             </form>
@@ -381,22 +383,22 @@ export function TenantPolicies({
           <section className="panel settings-panel">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">Explicit affinity</span>
-                <h2>Backend route</h2>
+                <span className="eyebrow">{t("Explicit affinity")}</span>
+                <h2>{t("Backend route")}</h2>
               </div>
               {route ? <StatusPill status={route.status} /> : null}
             </div>
             {canManageRoute ? (
               <form className="settings-form" onSubmit={(event) => void saveRoute(event)}>
                 <label>
-                  Scholar backend
+                  {t("Scholar backend")}
                   <select
                     name="backend_id"
                     required
                     defaultValue={route?.backend_id ?? ""}
                   >
                     <option value="" disabled>
-                      Select backend
+                      {t("Select backend")}
                     </option>
                     {state.data.backends.map((backend) => (
                       <option key={backend.id} value={backend.id}>
@@ -406,7 +408,7 @@ export function TenantPolicies({
                   </select>
                 </label>
                 <label>
-                  Corpus version
+                  {t("Corpus version")}
                   <input
                     name="corpus_version"
                     required
@@ -414,10 +416,10 @@ export function TenantPolicies({
                   />
                 </label>
                 <label>
-                  Route status
+                  {t("Route status")}
                   <select name="status" defaultValue={route?.status ?? "disabled"}>
-                    <option value="disabled">Disabled</option>
-                    <option value="active">Active</option>
+                    <option value="disabled">{t("Disabled")}</option>
+                    <option value="active">{t("Operational")}</option>
                   </select>
                 </label>
                 <button
@@ -425,22 +427,22 @@ export function TenantPolicies({
                   type="submit"
                   disabled={busy === "route"}
                 >
-                  {busy === "route" ? "Saving…" : "Save route"}
+                  {busy === "route" ? t("Saving…") : t("Save route")}
                 </button>
               </form>
             ) : route ? (
               <dl className="compact-definition">
                 <div>
-                  <dt>Backend</dt>
+                  <dt>{t("Backend")}</dt>
                   <dd>{route.backend_id}</dd>
                 </div>
                 <div>
-                  <dt>Corpus</dt>
+                  <dt>{t("Corpus")}</dt>
                   <dd>{route.corpus_version}</dd>
                 </div>
               </dl>
             ) : (
-              <div className="panel-state">No explicit route is configured.</div>
+              <div className="panel-state">{t("No explicit route is configured.")}</div>
             )}
           </section>
         </div>
