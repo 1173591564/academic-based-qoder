@@ -1,8 +1,6 @@
 """Initial browser-session administration API."""
 
 from collections.abc import Generator
-from hashlib import sha256
-from json import dumps
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse
@@ -10,16 +8,20 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from proxy_hub.audit import AuditEntry, append_audit_event
+from proxy_hub.admin_iam import build_iam_router
 from proxy_hub.auth import AuthComponents
 from proxy_hub.database import Database, session_scope
-from proxy_hub.errors import HubError, request_id
-from proxy_hub.models import (
-    IdempotencyRecord,
-    Principal,
-    Tenant,
-    new_id,
-    utc_now,
+from proxy_hub.enrolment import build_enrolment_router
+from proxy_hub.errors import HubError
+from proxy_hub.models import Principal, Tenant, new_id, utc_now
+from proxy_hub.mutations import (
+    append_mutation_audit,
+    find_idempotency_record,
+    idempotency_response,
+    request_digest,
+    require_current_etag,
+    require_idempotency_key,
+    store_idempotency_record,
 )
 from proxy_hub.rbac import (
     AdminContext,
@@ -64,22 +66,14 @@ def tenant_body(tenant: Tenant) -> dict[str, object]:
     }
 
 
-def request_digest(payload: BaseModel) -> str:
-    """Hash validated mutation input for audit and idempotency."""
-    encoded = dumps(
-        payload.model_dump(mode="json"),
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return sha256(encoded).hexdigest()
-
-
 def build_admin_router(
     database: Database,
     auth: AuthComponents,
 ) -> APIRouter:
     """Build administration routes bound to application resources."""
     router = APIRouter(prefix="/v1/admin", tags=["administration"])
+    router.include_router(build_iam_router(database, auth))
+    router.include_router(build_enrolment_router(database, auth))
 
     def get_session() -> Generator[Session, None, None]:
         yield from session_scope(database)
@@ -160,49 +154,20 @@ def build_admin_router(
         session: Session = Depends(get_session),
     ) -> JSONResponse:
         require_platform_admin(context)
-        if not idempotency_key or len(idempotency_key) > 255:
-            raise HubError(
-                400,
-                "idempotency_key_required",
-                "A valid Idempotency-Key header is required.",
-            )
+        key = require_idempotency_key(idempotency_key)
         digest = request_digest(payload)
         operation = "tenant:create"
-        existing_record = session.scalar(
-            select(IdempotencyRecord).where(
-                IdempotencyRecord.principal_id == context.principal_id,
-                IdempotencyRecord.operation == operation,
-                IdempotencyRecord.key == idempotency_key,
-            )
+        existing_record = find_idempotency_record(
+            session,
+            context.principal_id,
+            operation,
+            key,
+            digest,
         )
         if existing_record is not None:
-            if existing_record.request_digest != digest:
-                raise HubError(
-                    409,
-                    "idempotency_conflict",
-                    "The idempotency key was used for a different request.",
-                )
-            replay_id = existing_record.response_body.get("id")
-            replay_version = existing_record.response_body.get("version")
-            if not isinstance(replay_id, str) or not isinstance(
-                replay_version,
-                int,
-            ):
-                raise HubError(
-                    500,
-                    "idempotency_record_invalid",
-                    "The stored operation result is invalid.",
-                )
-            return JSONResponse(
-                status_code=existing_record.response_status,
-                content=existing_record.response_body,
-                headers={
-                    "ETag": resource_etag(
-                        "tenant",
-                        replay_id,
-                        replay_version,
-                    )
-                },
+            return idempotency_response(
+                existing_record,
+                etag_resource_type="tenant",
             )
         if session.scalar(select(Tenant.id).where(Tenant.slug == payload.slug)):
             raise HubError(
@@ -218,31 +183,24 @@ def build_admin_router(
         session.add(tenant)
         session.flush()
         body = tenant_body(tenant)
-        append_audit_event(
+        append_mutation_audit(
             session,
-            AuditEntry(
-                request_id=request_id(request),
-                principal_id=context.principal_id,
-                tenant_id=tenant.id,
-                action=operation,
-                resource_type="tenant",
-                resource_id=tenant.id,
-                outcome="accepted",
-                argument_digest=digest,
-                result_class="success",
-                details={"argument_digest": digest, "result_class": "success"},
-            ),
+            request,
+            context,
+            action=operation,
+            resource_type="tenant",
+            resource_id=tenant.id,
+            tenant_id=tenant.id,
+            digest=digest,
         )
-        session.add(
-            IdempotencyRecord(
-                id=new_id("idem"),
-                principal_id=context.principal_id,
-                operation=operation,
-                key=idempotency_key,
-                request_digest=digest,
-                response_status=201,
-                response_body=body,
-            )
+        store_idempotency_record(
+            session,
+            context.principal_id,
+            operation,
+            key,
+            digest,
+            201,
+            body,
         )
         return JSONResponse(
             status_code=201,
@@ -278,19 +236,7 @@ def build_admin_router(
         tenant = session.get(Tenant, tenant_id)
         if tenant is None or not can_read_tenant(context, tenant_id):
             raise HubError(404, "tenant_not_found", "The tenant does not exist.")
-        expected_etag = resource_etag("tenant", tenant.id, tenant.version)
-        if if_match is None:
-            raise HubError(
-                400,
-                "if_match_required",
-                "The current resource ETag is required.",
-            )
-        if if_match != expected_etag:
-            raise HubError(
-                412,
-                "etag_mismatch",
-                "The resource changed after it was loaded.",
-            )
+        require_current_etag("tenant", tenant.id, tenant.version, if_match)
         next_name = payload.name if payload.name is not None else tenant.name
         next_status = payload.status if payload.status is not None else tenant.status
         updated_id = session.scalar(
@@ -313,20 +259,15 @@ def build_admin_router(
         session.expire(tenant)
         session.refresh(tenant)
         digest = request_digest(payload)
-        append_audit_event(
+        append_mutation_audit(
             session,
-            AuditEntry(
-                request_id=request_id(request),
-                principal_id=context.principal_id,
-                tenant_id=tenant.id,
-                action="tenant:update",
-                resource_type="tenant",
-                resource_id=tenant.id,
-                outcome="accepted",
-                argument_digest=digest,
-                result_class="success",
-                details={"argument_digest": digest, "result_class": "success"},
-            ),
+            request,
+            context,
+            action="tenant:update",
+            resource_type="tenant",
+            resource_id=tenant.id,
+            tenant_id=tenant.id,
+            digest=digest,
         )
         return JSONResponse(
             content=tenant_body(tenant),

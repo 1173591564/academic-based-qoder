@@ -70,6 +70,25 @@ def require_tenant_read(context: AdminContext, tenant_id: str) -> None:
         )
 
 
+def can_mutate_tenant(context: AdminContext, tenant_id: str) -> bool:
+    """Return whether a principal can administer one tenant."""
+    return context.is_platform_admin or any(
+        grant.role == TENANT_ADMIN and grant.tenant_id == tenant_id
+        for grant in context.grants
+    )
+
+
+def require_tenant_mutation(context: AdminContext, tenant_id: str) -> None:
+    """Require tenant administration while hiding unassigned tenants."""
+    require_tenant_read(context, tenant_id)
+    if not can_mutate_tenant(context, tenant_id):
+        raise HubError(
+            403,
+            "tenant_role_denied",
+            "This operation requires tenant administration.",
+        )
+
+
 def capability_names(context: AdminContext) -> list[str]:
     """Return frontend hints derived from effective grants."""
     capabilities = {"overview:read", "tenant:read"}

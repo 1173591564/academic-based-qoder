@@ -121,9 +121,14 @@ PATCH  /v1/admin/principals/{principal_id}
 GET    /v1/admin/platform-role-bindings
 POST   /v1/admin/platform-role-bindings
 DELETE /v1/admin/platform-role-bindings/{binding_id}
+GET    /v1/admin/tenants/{tenant_id}/enrolments
+POST   /v1/admin/tenants/{tenant_id}/enrolments
+DELETE /v1/admin/tenants/{tenant_id}/enrolments/{enrolment_id}
 ```
 
 Delete operations revoke or disable control-plane records; they do not erase audit history.
+Enrolment creation returns its opaque token once. Lists, idempotent replays,
+audit events, and persisted idempotency responses contain metadata only.
 
 ### Policy and quota
 

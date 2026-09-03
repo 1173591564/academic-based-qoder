@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from proxy_hub.models import (
     AuditEvent,
     BrowserSession,
+    Membership,
     Principal,
     RoleBinding,
     Tenant,
@@ -170,6 +171,13 @@ def test_operator_sees_only_assigned_tenant(api_harness: ApiHarness) -> None:
         session.add_all([visible, hidden, operator])
         session.flush()
         session.add(
+            Membership(
+                id=new_id("membership"),
+                principal_id=operator.id,
+                tenant_id=visible.id,
+            )
+        )
+        session.add(
             RoleBinding(
                 id=new_id("role"),
                 principal_id=operator.id,
@@ -194,6 +202,7 @@ def test_operator_sees_only_assigned_tenant(api_harness: ApiHarness) -> None:
     operator_client.cookies.set("proxy_hub_csrf", "operator-csrf")
     listed = operator_client.get("/v1/admin/tenants")
     denied = operator_client.get(f"/v1/admin/tenants/{hidden_id}")
+    iam_denied = operator_client.get(f"/v1/admin/tenants/{visible_id}/teams")
     create = operator_client.post(
         "/v1/admin/tenants",
         json={"slug": "operator-create", "name": "Operator Create"},
@@ -206,5 +215,7 @@ def test_operator_sees_only_assigned_tenant(api_harness: ApiHarness) -> None:
 
     assert [tenant["id"] for tenant in listed.json()["items"]] == [visible_id]
     assert denied.status_code == 404
+    assert iam_denied.status_code == 403
+    assert iam_denied.json()["error"]["code"] == "tenant_role_denied"
     assert create.status_code == 403
     assert create.json()["error"]["code"] == "platform_role_denied"

@@ -174,7 +174,7 @@ class Membership(Base, Timestamped, Versioned):
     )
 
 
-class RoleBinding(Base, Timestamped):
+class RoleBinding(Base, Timestamped, Versioned):
     """Platform-wide or tenant-scoped role assignment."""
 
     __tablename__ = "role_bindings"
@@ -187,6 +187,7 @@ class RoleBinding(Base, Timestamped):
     )
     tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenants.id"), index=True)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint(
@@ -302,7 +303,7 @@ class DshCapability(Base):
     )
 
 
-class EnrolmentToken(Base):
+class EnrolmentToken(Base, Versioned):
     """One-time credential used to issue a DSH capability."""
 
     __tablename__ = "enrolment_tokens"
