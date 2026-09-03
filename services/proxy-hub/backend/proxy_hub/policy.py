@@ -42,12 +42,19 @@ class InvalidToolPolicy(ValueError):
     """A policy contains names outside the frozen Scholar catalog."""
 
 
-def validate_tool_policy(tool_names: Collection[str]) -> tuple[str, ...]:
+def validate_tool_policy(tool_names: object) -> tuple[str, ...]:
     """Return a stable policy after rejecting unknown tool names."""
-    unknown = sorted(set(tool_names) - SCHOLAR_TOOL_CATALOG.keys())
+    if not isinstance(tool_names, (list, tuple, set, frozenset)):
+        raise InvalidToolPolicy("Scholar tool policy must be a collection")
+    normalized: set[str] = set()
+    for tool_name in tool_names:
+        if not isinstance(tool_name, str):
+            raise InvalidToolPolicy("Scholar tool names must be strings")
+        normalized.add(tool_name)
+    unknown = sorted(normalized - SCHOLAR_TOOL_CATALOG.keys())
     if unknown:
         raise InvalidToolPolicy(f"unknown Scholar tools: {', '.join(unknown)}")
-    return tuple(sorted(set(tool_names)))
+    return tuple(sorted(normalized))
 
 
 def decide_tool(
@@ -65,3 +72,28 @@ def decide_tool(
     if effect == "workspace_write" and not allow_workspace_writes:
         return PolicyDecision(False, "workspace_write_denied", effect)
     return PolicyDecision(True, "allowed", effect)
+
+
+def decide_effective_tool(
+    tool_name: str,
+    capability_tools: Collection[str],
+    tenant_tools: Collection[str],
+    *,
+    allow_workspace_writes: bool,
+) -> PolicyDecision:
+    """Apply capability, tenant, and backend restrictions to one exact tool."""
+    effect = SCHOLAR_TOOL_CATALOG.get(tool_name)
+    if effect is None:
+        return PolicyDecision(False, "tool_unknown", None)
+    if tool_name not in capability_tools:
+        return PolicyDecision(False, "capability_tool_denied", effect)
+    if tool_name not in tenant_tools:
+        return PolicyDecision(False, "tenant_tool_denied", effect)
+    if effect == "workspace_write" and not allow_workspace_writes:
+        return PolicyDecision(False, "workspace_write_denied", effect)
+    return PolicyDecision(True, "allowed", effect)
+
+
+def backend_allows_workspace_writes(capacity: Mapping[str, object]) -> bool:
+    """Allow writes only when backend metadata declares tenant isolation."""
+    return capacity.get("workspace_isolation") == "tenant"

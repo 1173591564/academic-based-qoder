@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -215,6 +216,14 @@ class QuotaPolicy(Base, Timestamped, Versioned):
     """Quota class and limit allocation for one tenant."""
 
     __tablename__ = "quota_policies"
+    __table_args__ = (
+        CheckConstraint("request_limit > 0", name="ck_quota_policy_request_limit"),
+        CheckConstraint("period_seconds > 0", name="ck_quota_policy_period"),
+        CheckConstraint(
+            "concurrency_limit > 0",
+            name="ck_quota_policy_concurrency_limit",
+        ),
+    )
 
     tenant_id: Mapped[str] = mapped_column(
         ForeignKey("tenants.id"),
@@ -223,6 +232,12 @@ class QuotaPolicy(Base, Timestamped, Versioned):
     quota_class: Mapped[str] = mapped_column(String(64), nullable=False)
     request_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     period_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    concurrency_limit: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    enforcement_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
 
 
 class ScholarBackend(Base, Timestamped, Versioned):
@@ -358,12 +373,57 @@ class QuotaWindow(Base):
     )
     period_seconds: Mapped[int] = mapped_column(Integer, primary_key=True)
     reserved_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    active_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class QuotaReservationRecord(Base):
+    """One durable in-flight quota reservation lease."""
+
+    __tablename__ = "quota_reservations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'completed', 'failed')",
+            name="ck_quota_reservation_status",
+        ),
+        Index(
+            "ix_quota_reservations_active_expiry",
+            "status",
+            "expires_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    period_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        default="active",
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
         nullable=False,
     )
 

@@ -32,6 +32,10 @@ def test_gateway_limits_are_bounded() -> None:
         Settings(backend_request_timeout_seconds=3_601)
     with pytest.raises(ValidationError):
         Settings(mcp_request_max_bytes=1_023)
+    with pytest.raises(ValidationError):
+        Settings(quota_reservation_ttl_seconds=29)
+    with pytest.raises(ValidationError):
+        Settings(quota_reservation_ttl_seconds=7_201)
 
 
 def test_production_requires_https_oidc_issuer() -> None:

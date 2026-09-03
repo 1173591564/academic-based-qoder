@@ -50,17 +50,22 @@ response bodies are relayed without rewriting.
 ```text
 verify capability
 → resolve tenant
-→ authorize exact tools/call name against capability scopes
+→ intersect capability scopes with the tenant's exact tool allowlist
 → select a healthy backend with MCP session affinity
+→ reject workspace writes unless the backend declares tenant isolation
+→ atomically reserve the tenant request and concurrency quota
 → forward JSON-RPC frames without rewriting
-→ append one audit record
+→ append minimized audit metadata
+→ settle the quota lease when the response stream terminates
 ```
 
 The raw `mcp-session-id` is forwarded only for protocol continuity and is
 stored and audited only as a digest bound to the tenant and capability.
 Unknown, expired or cross-capability affinity fails closed. Workspace-write
-tools remain denied on shared backends. Tenant policy and quota reservation
-are added at the request-path enforcement stage without changing this route.
+tools remain denied on shared backends. Missing or invalid tenant tool policy
+also fails closed. Enforced quotas use durable leases so abandoned streams can
+be recovered, while long-lived streams refresh their lease until completion.
+Policies with enforcement disabled do not create quota counters.
 
 The Hub must not add model-visible tools, redirect requests, expose backend credentials, or return data from a different tenant when routing information is missing.
 

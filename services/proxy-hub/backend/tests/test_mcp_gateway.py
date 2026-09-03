@@ -8,7 +8,7 @@ from json import dumps
 
 import httpx
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import Engine, create_engine, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -21,9 +21,13 @@ from proxy_hub.models import (
     McpSessionAffinity,
     Membership,
     Principal,
+    QuotaPolicy,
+    QuotaReservationRecord,
+    QuotaWindow,
     ScholarBackend,
     Tenant,
     TenantRoute,
+    ToolPolicy,
     utc_now,
 )
 from proxy_hub.secrets import SecretResolutionError
@@ -72,6 +76,7 @@ class GatewayHarness:
 def seed_gateway_state(engine: Engine, scopes: list[str] | None = None) -> None:
     """Create one active capability with an explicit healthy backend route."""
     now = utc_now()
+    effective_scopes = scopes or ["scholar_info", "scholar_search"]
     with Session(engine) as session:
         session.add(
             Principal(
@@ -100,7 +105,7 @@ def seed_gateway_state(engine: Engine, scopes: list[str] | None = None) -> None:
                 token_digest=digest_token(CAPABILITY),
                 principal_id="principal_gateway",
                 tenant_id="tenant_gateway",
-                scopes=scopes or ["scholar_info", "scholar_search"],
+                scopes=effective_scopes,
                 expires_at=now + timedelta(hours=1),
             )
         )
@@ -121,6 +126,33 @@ def seed_gateway_state(engine: Engine, scopes: list[str] | None = None) -> None:
                 tenant_id="tenant_gateway",
                 backend_id="backend_gateway",
                 corpus_version="corpus-v1",
+            )
+        )
+        session.add(
+            ToolPolicy(
+                tenant_id="tenant_gateway",
+                allowed_tools=list(effective_scopes),
+            )
+        )
+        session.commit()
+
+
+def enable_gateway_quota(
+    engine: Engine,
+    *,
+    request_limit: int,
+    concurrency_limit: int = 1,
+) -> None:
+    """Enable one enforced tenant quota policy."""
+    with Session(engine) as session:
+        session.add(
+            QuotaPolicy(
+                tenant_id="tenant_gateway",
+                quota_class="test",
+                request_limit=request_limit,
+                period_seconds=3600,
+                concurrency_limit=concurrency_limit,
+                enforcement_enabled=True,
             )
         )
         session.commit()
@@ -389,9 +421,235 @@ def test_credentials_and_tool_policy_fail_before_backend_contact() -> None:
                 "private-unknown-tool" not in str(audit.tool_name) for audit in audits
             )
             reasons = {audit.details["reason"] for audit in audits}
-            assert "tool_denied" in reasons
+            assert "capability_tool_denied" in reasons
             assert "workspace_write_denied" in reasons
             assert "tool_unknown" in reasons
+
+
+def test_tenant_policy_revocation_and_missing_policy_fail_closed() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    with gateway_harness(handler) as gateway:
+        with Session(gateway.engine) as session:
+            policy = session.get(ToolPolicy, "tenant_gateway")
+            assert policy is not None
+            policy.allowed_tools = ["scholar_info"]
+            session.commit()
+
+        revoked = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        with Session(gateway.engine) as session:
+            policy = session.get(ToolPolicy, "tenant_gateway")
+            assert policy is not None
+            session.delete(policy)
+            session.commit()
+
+        missing = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert revoked.status_code == 403
+        assert missing.status_code == 403
+        assert gateway.upstream_requests == []
+        with Session(gateway.engine) as session:
+            reasons = {
+                audit.details["reason"]
+                for audit in session.scalars(select(AuditEvent)).all()
+            }
+            assert {"tenant_tool_denied", "tenant_policy_missing"} <= reasons
+
+
+def test_invalid_persisted_tenant_policy_fails_closed() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    with gateway_harness(handler) as gateway:
+        with Session(gateway.engine) as session:
+            session.execute(
+                update(ToolPolicy)
+                .where(ToolPolicy.tenant_id == "tenant_gateway")
+                .values(allowed_tools={"scholar_search": True})
+            )
+            session.commit()
+
+        response = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 403
+        assert gateway.upstream_requests == []
+        with Session(gateway.engine) as session:
+            audit = session.scalar(select(AuditEvent))
+            assert audit is not None
+            assert audit.details["reason"] == "tenant_policy_invalid"
+
+
+def test_workspace_write_requires_isolated_backend() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=request.content,
+            headers={"Content-Type": "application/json"},
+        )
+
+    with gateway_harness(handler, scopes=["scholar_auto_notes"]) as gateway:
+        with Session(gateway.engine) as session:
+            backend = session.get(ScholarBackend, "backend_gateway")
+            assert backend is not None
+            backend.capacity = {"workspace_isolation": "tenant"}
+            session.commit()
+
+        response = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body(
+                "scholar_auto_notes",
+                {"paper_id": "private-paper"},
+            ),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 200
+        assert len(gateway.upstream_requests) == 1
+
+
+def test_gateway_reserves_completes_and_enforces_request_quota() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=request.content,
+            headers={"Content-Type": "application/json"},
+        )
+
+    with gateway_harness(handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
+
+        first = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+        second = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 429
+        assert second.headers["Retry-After"]
+        assert second.json()["error"]["code"] == "quota_exceeded"
+        assert len(gateway.upstream_requests) == 1
+        with Session(gateway.engine) as session:
+            window = session.scalar(select(QuotaWindow))
+            reservation = session.scalar(select(QuotaReservationRecord))
+            audits = session.scalars(
+                select(AuditEvent).order_by(AuditEvent.occurred_at)
+            ).all()
+            assert window is not None
+            assert window.reserved_count == 1
+            assert window.active_count == 0
+            assert window.completed_count == 1
+            assert reservation is not None
+            assert reservation.status == "completed"
+            assert [audit.quota_delta for audit in audits] == [1, 0]
+
+
+def test_gateway_failure_releases_concurrency_and_keeps_charge() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectError("unavailable", request=request)
+        return httpx.Response(
+            200,
+            content=request.content,
+            headers={"Content-Type": "application/json"},
+        )
+
+    with gateway_harness(handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=2)
+        headers = {
+            **authorization_headers(),
+            "Content-Type": "application/json",
+        }
+
+        failed = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers=headers,
+        )
+        succeeded = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers=headers,
+        )
+
+        assert failed.status_code == 502
+        assert succeeded.status_code == 200
+        with Session(gateway.engine) as session:
+            window = session.scalar(select(QuotaWindow))
+            assert window is not None
+            assert window.reserved_count == 2
+            assert window.active_count == 0
+            assert window.completed_count == 1
+            assert window.failed_count == 1
+
+
+def test_preflight_denial_does_not_consume_quota() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    with gateway_harness(handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
+        with Session(gateway.engine) as session:
+            policy = session.get(ToolPolicy, "tenant_gateway")
+            assert policy is not None
+            policy.allowed_tools = []
+            session.commit()
+
+        response = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=tool_call_body("scholar_search", {"query": "query"}),
+            headers={
+                **authorization_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 403
+        assert gateway.upstream_requests == []
+        with Session(gateway.engine) as session:
+            assert session.scalar(select(QuotaWindow)) is None
+            assert session.scalar(select(QuotaReservationRecord)) is None
 
 
 def test_unknown_affinity_and_disabled_route_fail_without_backend_contact() -> None:
@@ -497,6 +755,7 @@ def test_backend_redirect_and_transport_failure_are_not_exposed() -> None:
         )
 
     with gateway_harness(redirect_handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
         redirected = gateway.client.post(
             "/v1/mcp/scholar",
             content=initialize_body(),
@@ -508,6 +767,11 @@ def test_backend_redirect_and_transport_failure_are_not_exposed() -> None:
         assert redirected.status_code == 502
         assert "location" not in redirected.headers
         assert len(gateway.upstream_requests) == 1
+        with Session(gateway.engine) as session:
+            window = session.scalar(select(QuotaWindow))
+            assert window is not None
+            assert window.active_count == 0
+            assert window.failed_count == 1
 
     def failing_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("unavailable", request=request)
@@ -541,6 +805,7 @@ def test_backend_server_error_body_is_not_exposed() -> None:
         )
 
     with gateway_harness(handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
         failed = gateway.client.post(
             "/v1/mcp/scholar",
             content=initialize_body(),
@@ -556,6 +821,10 @@ def test_backend_server_error_body_is_not_exposed() -> None:
             audit = session.scalar(select(AuditEvent))
             assert audit is not None
             assert internal_detail not in str(audit.details)
+            window = session.scalar(select(QuotaWindow))
+            assert window is not None
+            assert window.active_count == 0
+            assert window.failed_count == 1
 
 
 def test_backend_session_mismatch_and_secret_failure_fail_closed() -> None:
@@ -570,6 +839,7 @@ def test_backend_session_mismatch_and_secret_failure_fail_closed() -> None:
         )
 
     with gateway_harness(mismatch_handler) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
         with Session(gateway.engine) as session:
             session.add(
                 McpSessionAffinity(
@@ -592,6 +862,11 @@ def test_backend_session_mismatch_and_secret_failure_fail_closed() -> None:
         )
         assert mismatch.status_code == 502
         assert mismatch.json()["error"]["code"] == "backend_protocol_error"
+        with Session(gateway.engine) as session:
+            window = session.scalar(select(QuotaWindow))
+            assert window is not None
+            assert window.active_count == 0
+            assert window.failed_count == 1
 
     def unused_handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(500)
@@ -600,6 +875,7 @@ def test_backend_session_mismatch_and_secret_failure_fail_closed() -> None:
         unused_handler,
         secret_resolver=StaticSecretResolver(unavailable=True),
     ) as gateway:
+        enable_gateway_quota(gateway.engine, request_limit=1)
         unavailable = gateway.client.post(
             "/v1/mcp/scholar",
             content=initialize_body(),
@@ -610,6 +886,8 @@ def test_backend_session_mismatch_and_secret_failure_fail_closed() -> None:
         )
         assert unavailable.status_code == 503
         assert gateway.upstream_requests == []
+        with Session(gateway.engine) as session:
+            assert session.scalar(select(QuotaWindow)) is None
 
 
 def test_request_size_limit_fails_before_backend_contact() -> None:

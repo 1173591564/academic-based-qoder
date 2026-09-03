@@ -13,6 +13,9 @@ database, evaluate authorization, or append audit records.
 It resolves deployment-owned Scholar credentials only while forwarding an MCP
 request; raw DSH capabilities, Scholar credentials, MCP session identifiers,
 and research arguments are not persisted in control-plane records.
+Each MCP tool call is intersected with the tenant's exact tool allowlist.
+Optional tenant quotas reserve request and concurrency capacity atomically
+before Scholar is contacted, then settle a durable lease when streaming ends.
 
 ## Local development
 
@@ -32,12 +35,15 @@ export PROXY_HUB_OIDC_ISSUER_URL=https://identity.example.com
 export PROXY_HUB_OIDC_CLIENT_ID=proxy-hub-local
 export PROXY_HUB_OIDC_CLIENT_SECRET=replace-with-a-development-secret
 export SCHOLAR_SERVICE_TOKEN=replace-with-a-development-service-token
+export PROXY_HUB_QUOTA_RESERVATION_TTL_SECONDS=600
 alembic upgrade head
 uvicorn proxy_hub.app:app --reload
 ```
 
 Registered Scholar backends reference service credentials as strict
 `env:NAME` values, for example `env:SCHOLAR_SERVICE_TOKEN`.
+Quota enforcement remains disabled until a tenant quota policy explicitly
+enables it. The reservation TTL is refreshed for active response streams.
 
 Production configuration fails closed unless the public origin uses HTTPS, PostgreSQL is configured, and all OIDC settings are present.
 

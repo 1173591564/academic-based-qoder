@@ -80,6 +80,7 @@ def test_route_requires_explicit_ready_version_matched_backend() -> None:
 
         assert selection.backend_id == "backend_test"
         assert selection.corpus_version == "corpus-v1"
+        assert selection.workspace_writes_allowed is False
         assert selection.from_affinity is False
     engine.dispose()
 

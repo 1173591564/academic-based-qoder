@@ -15,6 +15,7 @@ from proxy_hub.capabilities import CapabilityContext, authenticate_capability
 from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
 from proxy_hub.errors import HubError, request_id
+from proxy_hub.mcp_quota import stream_with_quota
 from proxy_hub.mcp_transport import (
     MCP_SESSION_HEADER,
     McpRequestMetadata,
@@ -25,12 +26,23 @@ from proxy_hub.mcp_transport import (
     response_headers,
     response_size,
     result_class,
-    stream_body,
     validated_backend_url,
     validated_service_credential,
 )
-from proxy_hub.models import DshCapability, McpSessionAffinity, utc_now
-from proxy_hub.policy import SCHOLAR_TOOL_CATALOG, decide_tool
+from proxy_hub.models import DshCapability, McpSessionAffinity, ToolPolicy, utc_now
+from proxy_hub.policy import (
+    SCHOLAR_TOOL_CATALOG,
+    InvalidToolPolicy,
+    decide_effective_tool,
+    validate_tool_policy,
+)
+from proxy_hub.quota import (
+    QuotaConfigurationError,
+    QuotaExceeded,
+    QuotaReservation,
+    QuotaService,
+    load_quota_limit,
+)
 from proxy_hub.routing import RouteResolutionError, RouteSelection, resolve_route
 from proxy_hub.secrets import SecretResolutionError, SecretResolver
 from proxy_hub.security import digest_token
@@ -60,6 +72,7 @@ def append_gateway_audit(
     latency_ms: int | None = None,
     result_class: str | None = None,
     returned_bytes: int | None = None,
+    quota_delta: int | None = None,
 ) -> None:
     """Append minimized MCP authorization and forwarding metadata."""
     audited_tool_name = (
@@ -97,6 +110,7 @@ def append_gateway_audit(
             latency_ms=latency_ms,
             result_class=result_class,
             returned_bytes=returned_bytes,
+            quota_delta=quota_delta,
             details={
                 "reason": reason,
                 "protocol_method": audited_protocol_method,
@@ -115,8 +129,17 @@ def deny_gateway(
     metadata: McpRequestMetadata | None = None,
     selection: RouteSelection | None = None,
     mcp_session_digest: str | None = None,
+    quota_service: QuotaService | None = None,
+    reservation: QuotaReservation | None = None,
 ) -> NoReturn:
     """Commit a denial audit before returning a fail-closed gateway error."""
+    if quota_service is not None and reservation is not None:
+        quota_service.complete(
+            session,
+            reservation,
+            succeeded=False,
+            at=utc_now(),
+        )
     append_gateway_audit(
         session,
         request,
@@ -127,6 +150,7 @@ def deny_gateway(
         metadata=metadata,
         selection=selection,
         mcp_session_digest=mcp_session_digest,
+        quota_delta=(1 if reservation is not None and reservation.enforced else None),
     )
     session.commit()
     raise error
@@ -137,6 +161,7 @@ def build_mcp_gateway_router(
     settings: Settings,
     client: httpx.AsyncClient,
     secret_resolver: SecretResolver,
+    quota_service: QuotaService,
 ) -> APIRouter:
     """Create the authenticated Scholar Streamable HTTP gateway."""
     router = APIRouter()
@@ -211,8 +236,43 @@ def build_mcp_gateway_router(
                 context=context,
                 reason=error.code,
             )
+        tenant_tools: tuple[str, ...] = ()
         if metadata.tool_name is not None:
-            decision = decide_tool(metadata.tool_name, context.scopes)
+            tenant_policy = session.get(ToolPolicy, context.tenant_id)
+            if tenant_policy is None:
+                deny_gateway(
+                    session,
+                    request,
+                    HubError(
+                        403,
+                        "tool_denied",
+                        "The Scholar tool is not authorized for this tenant.",
+                    ),
+                    context=context,
+                    reason="tenant_policy_missing",
+                    metadata=metadata,
+                )
+            try:
+                tenant_tools = validate_tool_policy(tenant_policy.allowed_tools)
+            except InvalidToolPolicy:
+                deny_gateway(
+                    session,
+                    request,
+                    HubError(
+                        403,
+                        "tool_denied",
+                        "The Scholar tool is not authorized for this tenant.",
+                    ),
+                    context=context,
+                    reason="tenant_policy_invalid",
+                    metadata=metadata,
+                )
+            decision = decide_effective_tool(
+                metadata.tool_name,
+                context.scopes,
+                tenant_tools,
+                allow_workspace_writes=True,
+            )
             if not decision.allowed:
                 deny_gateway(
                     session,
@@ -254,6 +314,28 @@ def build_mcp_gateway_router(
                 metadata=metadata,
                 mcp_session_digest=session_digest,
             )
+        if metadata.tool_name is not None:
+            decision = decide_effective_tool(
+                metadata.tool_name,
+                context.scopes,
+                tenant_tools,
+                allow_workspace_writes=selection.workspace_writes_allowed,
+            )
+            if not decision.allowed:
+                deny_gateway(
+                    session,
+                    request,
+                    HubError(
+                        403,
+                        "tool_denied",
+                        "The Scholar tool is not authorized for this session.",
+                    ),
+                    context=context,
+                    reason=decision.reason,
+                    metadata=metadata,
+                    selection=selection,
+                    mcp_session_digest=session_digest,
+                )
         try:
             service_credential = validated_service_credential(
                 secret_resolver.resolve(selection.credential_ref)
@@ -283,16 +365,70 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
             )
 
+        upstream_request = client.build_request(
+            request.method,
+            backend_url,
+            headers=request_headers(request, service_credential),
+            content=body,
+        )
+        try:
+            reservation = quota_service.reserve(
+                session,
+                context.tenant_id,
+                load_quota_limit(session, context.tenant_id),
+                now,
+            )
+        except QuotaExceeded as error:
+            append_gateway_audit(
+                session,
+                request,
+                context=context,
+                outcome="rejected",
+                decision="deny",
+                reason=error.reason,
+                metadata=metadata,
+                selection=selection,
+                mcp_session_digest=session_digest,
+                quota_delta=0,
+            )
+            session.commit()
+            raise HubError(
+                429,
+                "quota_exceeded",
+                "The tenant request quota is currently exhausted.",
+                headers={"Retry-After": str(error.retry_after_seconds)},
+            ) from error
+        except QuotaConfigurationError as error:
+            append_gateway_audit(
+                session,
+                request,
+                context=context,
+                outcome="failed",
+                decision="deny",
+                reason=str(error),
+                metadata=metadata,
+                selection=selection,
+                mcp_session_digest=session_digest,
+                quota_delta=0,
+            )
+            session.commit()
+            raise HubError(
+                503,
+                "quota_unavailable",
+                "The tenant quota policy cannot be enforced.",
+            ) from error
+        session.commit()
+
         started_at = monotonic()
         try:
-            upstream_request = client.build_request(
-                request.method,
-                backend_url,
-                headers=request_headers(request, service_credential),
-                content=body,
-            )
             upstream = await client.send(upstream_request, stream=True)
         except httpx.HTTPError as error:
+            quota_service.complete(
+                session,
+                reservation,
+                succeeded=False,
+                at=utc_now(),
+            )
             append_gateway_audit(
                 session,
                 request,
@@ -305,6 +441,7 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
                 latency_ms=int((monotonic() - started_at) * 1000),
                 result_class="transport_error",
+                quota_delta=1 if reservation.enforced else None,
             )
             session.commit()
             raise HubError(
@@ -314,6 +451,12 @@ def build_mcp_gateway_router(
             ) from error
         if 300 <= upstream.status_code < 400:
             await upstream.aclose()
+            quota_service.complete(
+                session,
+                reservation,
+                succeeded=False,
+                at=utc_now(),
+            )
             append_gateway_audit(
                 session,
                 request,
@@ -326,6 +469,7 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
                 latency_ms=int((monotonic() - started_at) * 1000),
                 result_class=result_class(upstream.status_code),
+                quota_delta=1 if reservation.enforced else None,
             )
             session.commit()
             raise HubError(
@@ -335,6 +479,12 @@ def build_mcp_gateway_router(
             )
         if upstream.status_code >= 500 or upstream.status_code in {401, 403}:
             await upstream.aclose()
+            quota_service.complete(
+                session,
+                reservation,
+                succeeded=False,
+                at=utc_now(),
+            )
             append_gateway_audit(
                 session,
                 request,
@@ -347,6 +497,7 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
                 latency_ms=int((monotonic() - started_at) * 1000),
                 result_class=result_class(upstream.status_code),
+                quota_delta=1 if reservation.enforced else None,
             )
             session.commit()
             raise HubError(
@@ -375,6 +526,8 @@ def build_mcp_gateway_router(
                 metadata=metadata,
                 selection=selection,
                 mcp_session_digest=session_digest,
+                quota_service=quota_service,
+                reservation=reservation,
             )
         if (
             raw_mcp_session is not None
@@ -395,6 +548,8 @@ def build_mcp_gateway_router(
                 metadata=metadata,
                 selection=selection,
                 mcp_session_digest=session_digest,
+                quota_service=quota_service,
+                reservation=reservation,
             )
 
         if response_session is not None and 200 <= upstream.status_code < 300:
@@ -431,6 +586,8 @@ def build_mcp_gateway_router(
                     metadata=metadata,
                     selection=selection,
                     mcp_session_digest=response_digest,
+                    quota_service=quota_service,
+                    reservation=reservation,
                 )
             else:
                 affinity.last_seen_at = now
@@ -457,6 +614,8 @@ def build_mcp_gateway_router(
                     metadata=metadata,
                     selection=selection,
                     mcp_session_digest=session_digest,
+                    quota_service=quota_service,
+                    reservation=reservation,
                 )
             capability.last_used_at = now
             append_gateway_audit(
@@ -476,13 +635,28 @@ def build_mcp_gateway_router(
                 latency_ms=int((monotonic() - started_at) * 1000),
                 result_class=result_class(upstream.status_code),
                 returned_bytes=response_size(upstream),
+                quota_delta=1 if reservation.enforced else None,
             )
             session.commit()
         except Exception:
             await upstream.aclose()
+            session.rollback()
+            quota_service.complete(
+                session,
+                reservation,
+                succeeded=False,
+                at=utc_now(),
+            )
+            session.commit()
             raise
         return StreamingResponse(
-            stream_body(upstream),
+            stream_with_quota(
+                upstream,
+                database,
+                quota_service,
+                reservation,
+                refresh_seconds=settings.quota_reservation_ttl_seconds / 2,
+            ),
             status_code=upstream.status_code,
             headers=response_headers(upstream),
         )

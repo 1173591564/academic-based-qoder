@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         ge=1_024,
         le=16_777_216,
     )
+    quota_reservation_ttl_seconds: int = Field(default=600, ge=30, le=7_200)
     oidc_issuer_url: HttpUrl | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None

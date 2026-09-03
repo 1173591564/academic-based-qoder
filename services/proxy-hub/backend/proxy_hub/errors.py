@@ -14,6 +14,7 @@ class HubError(Exception):
     status_code: int
     code: str
     message: str
+    headers: dict[str, str] | None = None
 
 
 def request_id(request: Request) -> str:
@@ -26,6 +27,7 @@ def error_response(
     status_code: int,
     code: str,
     message: str,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Build the public error envelope."""
     return JSONResponse(
@@ -37,6 +39,7 @@ def error_response(
                 "request_id": request_id(request),
             }
         },
+        headers=headers,
     )
 
 
@@ -49,6 +52,7 @@ async def hub_error_handler(request: Request, error: Exception) -> JSONResponse:
         error.status_code,
         error.code,
         error.message,
+        error.headers,
     )
 
 
