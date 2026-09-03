@@ -23,6 +23,7 @@ from proxy_hub.errors import (
     validation_error_handler,
 )
 from proxy_hub.health import build_health_router
+from proxy_hub.session import build_session_router
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def create_app(
     app.add_exception_handler(Exception, unexpected_error_handler)
     auth = build_auth_components(resources.database, resources.settings)
     app.include_router(auth.router)
+    app.include_router(build_session_router(resources.database, resources.settings))
     app.include_router(build_admin_router(resources.database, auth))
     app.include_router(build_health_router(resources.database))
     return app

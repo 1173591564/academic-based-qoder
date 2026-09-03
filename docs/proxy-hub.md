@@ -6,7 +6,16 @@ Proxy Hub is a control-plane product in this repository. Its backend authenticat
 
 ### `POST /v1/session`
 
-Authenticates an operator-issued enrolment token or an approved identity-provider token and returns a short-lived session capability.
+Authenticates an operator-issued enrolment token and returns a short-lived
+session capability. The enrolment credential is single-use and is never
+stored or logged in plaintext.
+
+```json
+{
+  "enrolment_token": "<one-time-opaque-credential>",
+  "session_label": "research-workstation"
+}
+```
 
 ```json
 {
@@ -19,7 +28,17 @@ Authenticates an operator-issued enrolment token or an approved identity-provide
 }
 ```
 
-Membership resolution happens only on this route. The client stores one credential reference for the returned capability and resolves it per request.
+Successful responses use `Cache-Control: no-store`. The returned capability
+is also opaque and only its digest is persisted. Issuance fails closed unless
+the principal, tenant, membership and optional team are active, and the
+enrolment scopes still match the fixed Scholar tool catalog.
+
+Membership resolution happens during issuance and is rechecked whenever the
+capability is authenticated, so disabling a principal, tenant, membership or
+team immediately removes access. The client stores one credential reference
+for the returned capability and resolves it per request. The quota object is
+current control-plane metadata; request reservation and enforcement occur on
+the MCP route.
 
 ### `POST /v1/mcp/scholar`
 
