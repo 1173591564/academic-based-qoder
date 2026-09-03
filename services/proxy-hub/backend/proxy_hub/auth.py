@@ -26,6 +26,7 @@ from proxy_hub.database import Database, session_scope
 from proxy_hub.errors import HubError, request_id
 from proxy_hub.models import (
     BrowserSession,
+    Membership,
     OidcLoginState,
     Principal,
     RoleBinding,
@@ -112,8 +113,17 @@ def build_auth_components(database: Database, settings: Settings) -> AuthCompone
         bindings = session.scalars(
             select(RoleBinding).where(
                 RoleBinding.principal_id == principal.id,
+                RoleBinding.revoked_at.is_(None),
             )
         ).all()
+        active_tenant_ids = frozenset(
+            session.scalars(
+                select(Membership.tenant_id).where(
+                    Membership.principal_id == principal.id,
+                    Membership.status == "active",
+                )
+            ).all()
+        )
         return AdminContext(
             principal_id=principal.id,
             session_id=browser_session.id,
@@ -121,6 +131,7 @@ def build_auth_components(database: Database, settings: Settings) -> AuthCompone
             grants=tuple(
                 RoleGrant(role=binding.role, tenant_id=binding.tenant_id)
                 for binding in bindings
+                if binding.tenant_id is None or binding.tenant_id in active_tenant_ids
             ),
         )
 

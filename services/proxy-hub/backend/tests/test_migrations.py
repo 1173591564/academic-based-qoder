@@ -101,6 +101,12 @@ def test_gateway_state_migration_upgrades_and_downgrades(tmp_path: Path) -> None
     assert "corpus_version" in {
         column["name"] for column in inspector.get_columns("mcp_session_affinities")
     }
+    assert {"version", "revoked_at"}.issubset(
+        {column["name"] for column in inspector.get_columns("role_bindings")}
+    )
+    assert "version" in {
+        column["name"] for column in inspector.get_columns("enrolment_tokens")
+    }
 
     command.downgrade(config, "d737c231b0eb")
 
@@ -113,5 +119,8 @@ def test_gateway_state_migration_upgrades_and_downgrades(tmp_path: Path) -> None
     }
     assert "issued_from_enrolment_id" not in {
         column["name"] for column in inspector.get_columns("dsh_capabilities")
+    }
+    assert "revoked_at" not in {
+        column["name"] for column in inspector.get_columns("role_bindings")
     }
     engine.dispose()
