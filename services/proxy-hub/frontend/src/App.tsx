@@ -37,7 +37,6 @@ export interface NavigationItem {
 
 const NAVIGATION: NavigationItem[] = [
   { label: "Overview", icon: "⌂", path: "/console/" },
-  { label: "Guide", icon: "✦", path: "/console/guide" },
   { label: "Tenants", icon: "◇", path: "/console/tenants" },
   {
     label: "Backends",

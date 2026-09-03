@@ -6,6 +6,7 @@ import {
   navigate,
 } from "../components";
 import { statusLabel, useI18n } from "../i18n";
+import { SetupChecklist } from "./SetupChecklist";
 import type { Overview, Tenant } from "../types";
 
 export function OverviewPage({
@@ -23,6 +24,7 @@ export function OverviewPage({
         title={t("Operations overview")}
         description={t("Current health, tenant footprint, and routing readiness.")}
       />
+      <SetupChecklist tenants={tenants} />
       <section className="metric-grid">
         <MetricCard
           label={t("Control plane")}

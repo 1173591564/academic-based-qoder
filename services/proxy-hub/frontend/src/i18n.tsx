@@ -309,6 +309,32 @@ const ZH: Record<string, string> = {
   "Revoke sessions": "撤销会话",
   "Sessions revoked.": "会话已撤销。",
 
+  // ── quick-start checklist ──
+  "GETTING STARTED": "快速开始",
+  "Quick start": "快速开始",
+  "Expand": "展开",
+  "Collapse": "收起",
+  "Hide": "不再显示",
+  "View the detailed guide": "查看完整图文引导 →",
+  "checklist.allDone":
+    "🎉 全部就绪！队友已在经网关使用学术平台。新增成员时按第 ②⑦ 步操作即可。",
+  "checklist.s1.title": "创建租户",
+  "checklist.s1.hint": "建立组织隔离边界：工具、配额、路由都挂在租户上。",
+  "checklist.s2.title": "拉入成员",
+  "checklist.s2.hint": "队友 OIDC 登录后，把其身份主体加入租户。",
+  "checklist.s3.title": "配策略与配额",
+  "checklist.s3.hint": "默认全拒：勾选放行工具，设置请求与并发上限。",
+  "checklist.s4.title": "注册后端",
+  "checklist.s4.hint": "登记 Scholar 数据面地址与语料库版本。",
+  "checklist.s5.title": "探测并激活",
+  "checklist.s5.hint": "校验就绪状态与语料版本一致后激活后端。",
+  "checklist.s6.title": "绑定租户路由",
+  "checklist.s6.hint": "把租户的 MCP 调用路由到已激活的后端。",
+  "checklist.s7.title": "发放兑换码",
+  "checklist.s7.hint": "给成员签发一次性接入码，私发给队友。",
+  "checklist.s8.title": "队友接入",
+  "checklist.s8.hint": "队友安装 bundle 后运行 scholar gateway-login --code <兑换码>。",
+
   // ── guide ──
   "Setup guide": "配置指南",
   "Follow these steps to onboard a tenant from zero to a working DSH capability.":
