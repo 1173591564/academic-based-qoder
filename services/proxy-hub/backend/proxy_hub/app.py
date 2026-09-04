@@ -12,6 +12,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.base import RequestResponseEndpoint
@@ -37,6 +38,9 @@ from proxy_hub.simple_tokens import build_token_user_router
 from proxy_hub.single_lab import bootstrap_single_lab, maintain_single_lab_backend
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
+DSH_LOOPBACK_ORIGIN_PATTERN = (
+    r"^http://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$"
+)
 
 
 @dataclass(frozen=True)
@@ -128,6 +132,12 @@ def create_app(
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=DSH_LOOPBACK_ORIGIN_PATTERN,
+        allow_methods=["GET"],
+        allow_headers=["Authorization"],
     )
 
     @app.middleware("http")
