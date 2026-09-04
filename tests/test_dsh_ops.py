@@ -371,6 +371,47 @@ def test_init_dsh_remote_clean_home_stores_special_token_safely(tmp_path):
         assert dsh_home.stat().st_mode & 0o777 == 0o700
 
 
+def test_init_dsh_prepares_http_onboarding_without_storing_token(tmp_path):
+    scholar_home = tmp_path / "scholar"
+    dsh_home = tmp_path / "dsh"
+    result = invoke_init_dsh(
+        [
+            "--remote",
+            dsh_ops.DEFAULT_GATEWAY_URL,
+            "--allow-insecure-http",
+            "--scholar-home",
+            str(scholar_home),
+            "--dsh-home",
+            str(dsh_home),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert not (dsh_home / ".credentials.yaml").exists()
+    preset_text = (
+        dsh_home / ".agent-presets" / "academic" / "agent.cordis.yml"
+    ).read_text(encoding="utf-8")
+    assert dsh_ops.DEFAULT_GATEWAY_URL in preset_text
+    assert "bearerTokenEnv: SCHOLAR_REMOTE_TOKEN" in preset_text
+    assert "allowInsecureHttp: true" in preset_text
+
+
+def test_init_dsh_rejects_public_http_without_explicit_opt_in(tmp_path):
+    result = invoke_init_dsh(
+        [
+            "--remote",
+            dsh_ops.DEFAULT_GATEWAY_URL,
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(tmp_path / "dsh"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "must use HTTPS" in result.output
+
+
 def test_init_dsh_check_does_not_provision_clean_home(tmp_path):
     scholar_home = tmp_path / "scholar"
     dsh_home = tmp_path / "dsh"

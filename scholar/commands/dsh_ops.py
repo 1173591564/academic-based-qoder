@@ -544,6 +544,11 @@ def init_dsh(
         "--token-stdin",
         help="从标准输入读取 Bearer token 并写入 dsh 的 owner-only credentials 文件",
     ),
+    allow_insecure_http: bool = typer.Option(
+        False,
+        "--allow-insecure-http",
+        help="开发环境显式允许公网 HTTP Scholar endpoint",
+    ),
 ):
     """把 Scholar Studio 挂进 dsh（学术模式预设 + headless one-shot patch）。"""
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
@@ -558,10 +563,16 @@ def init_dsh(
         _remove_preset(dsh_home)
         return
 
-    remote = _validated_remote_url(remote) if remote else None
+    remote = (
+        _validated_remote_url(remote, allow_http=allow_insecure_http)
+        if remote
+        else None
+    )
     token_ref = _validated_credential_ref(token_env) if remote else None
     if token_stdin and not remote:
         raise typer.BadParameter("--token-stdin requires --remote")
+    if allow_insecure_http and not remote:
+        raise typer.BadParameter("--allow-insecure-http requires --remote")
     if check and token_stdin:
         raise typer.BadParameter("--check cannot store a credential")
 
@@ -584,6 +595,7 @@ def init_dsh(
         workspace=workspace,
         remote_url=remote,
         token_ref=token_ref,
+        allow_insecure_http=allow_insecure_http,
     )
     if check:
         console.print(Panel(block, title=f"{patch} (preview)", border_style="cyan"))
@@ -615,6 +627,7 @@ def init_dsh(
             dev_tree,
             remote_url=remote,
             token_ref=token_ref,
+            allow_insecure_http=allow_insecure_http,
         )
         rules_actions = _ensure_rules(scholar_home)
         if token_value is not None:
