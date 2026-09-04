@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError, idempotencyKey } from "../api";
+import { copyText } from "../clipboard";
 import {
   EmptyState,
   InlineAlert,
@@ -222,7 +223,7 @@ export function TokensPage() {
       return;
     }
     try {
-      await navigator.clipboard.writeText(issuedToken.token);
+      await copyText(issuedToken.token);
       setCopied(true);
       setNotice(t("Token copied."));
     } catch {

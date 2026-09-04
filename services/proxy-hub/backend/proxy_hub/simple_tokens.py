@@ -175,6 +175,7 @@ def _latest_facade_tokens(
         .where(
             AccessKey.tenant_id == tenant_id,
             AccessKey.token_name_key.is_not(None),
+            Principal.status == "active",
         )
         .order_by(AccessKey.created_at.desc(), AccessKey.id.desc())
     ).all()
@@ -590,6 +591,7 @@ def build_token_admin_router(
             access_key.version += 1
         if disable_identity:
             principal.status = "disabled"
+            principal.managed_name_key = None
             membership.status = "disabled"
             principal.version += 1
             membership.version += 1
