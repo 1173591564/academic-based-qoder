@@ -2,11 +2,11 @@
 
 import io
 import json
-
 from pathlib import Path
 
-import yaml
 import typer
+import yaml
+from click import unstyle
 from typer.testing import CliRunner
 
 from scholar.commands import dsh_ops
@@ -226,7 +226,7 @@ def test_gateway_login_rejects_custom_gateway_for_primary_token_flow(tmp_path):
         input="token\n",
     )
     assert result.exit_code != 0
-    assert "--gateway 仅用于兼容" in result.output
+    assert "--gateway 仅用于兼容" in unstyle(result.output)
 
 
 def test_gateway_login_surfaces_hub_error(tmp_path, monkeypatch):
