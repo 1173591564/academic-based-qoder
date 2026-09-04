@@ -1,10 +1,15 @@
 """Single-lab control-plane bootstrap and lookup."""
 
+import logging
 from datetime import timedelta
+from uuid import uuid4
 
+import anyio
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from proxy_hub.backend_probe import probe_scholar_backend
 from proxy_hub.config import Settings
 from proxy_hub.database import Database
 from proxy_hub.models import (
@@ -17,6 +22,9 @@ from proxy_hub.models import (
     utc_now,
 )
 from proxy_hub.policy import SCHOLAR_TOOL_CATALOG
+from proxy_hub.secrets import SecretResolver
+
+LOGGER = logging.getLogger(__name__)
 
 
 def resolve_single_lab_tenant(session: Session, settings: Settings) -> Tenant:
@@ -106,3 +114,90 @@ def bootstrap_single_lab(database: Database, settings: Settings) -> None:
         _configure_backend(session, settings, tenant)
         cutoff = utc_now() - timedelta(days=settings.audit_retention_days)
         session.execute(delete(AuditEvent).where(AuditEvent.occurred_at < cutoff))
+
+
+async def refresh_single_lab_backend(
+    database: Database,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+    secret_resolver: SecretResolver,
+) -> None:
+    """Refresh the configured Scholar Backend readiness observation."""
+    with database.sessions() as session:
+        tenant = (
+            session.get(Tenant, settings.single_lab_tenant_id)
+            if settings.single_lab_tenant_id is not None
+            else session.scalar(
+                select(Tenant).where(Tenant.slug == settings.single_lab_tenant_slug)
+            )
+        )
+        route = session.get(TenantRoute, tenant.id) if tenant is not None else None
+        backend = (
+            session.get(ScholarBackend, route.backend_id) if route is not None else None
+        )
+        if route is None or backend is None:
+            return
+        tenant_id = route.tenant_id
+        backend_id = backend.id
+        configuration = (
+            backend.base_url,
+            backend.credential_ref,
+            backend.corpus_version,
+        )
+
+    result = await probe_scholar_backend(
+        http_client,
+        secret_resolver,
+        base_url=configuration[0],
+        credential_ref=configuration[1],
+        expected_corpus_version=configuration[2],
+        production=settings.environment == "production",
+        request_id=f"probe_{uuid4().hex}",
+        maximum_bytes=settings.backend_probe_max_bytes,
+    )
+
+    with database.sessions.begin() as session:
+        backend = session.get(ScholarBackend, backend_id)
+        route = session.get(TenantRoute, tenant_id)
+        if (
+            backend is None
+            or route is None
+            or route.backend_id != backend.id
+            or (
+                backend.base_url,
+                backend.credential_ref,
+                backend.corpus_version,
+            )
+            != configuration
+        ):
+            return
+        backend.last_probe_at = utc_now()
+        backend.last_probe_ready = result.ready
+        backend.last_probe_reason = result.reason
+        backend.capacity = result.capacity if result.ready else {}
+        backend.status = "active" if result.ready else "disabled"
+        backend.version += 1
+        route.status = "active" if result.ready else "disabled"
+        route.corpus_version = backend.corpus_version
+        route.version += 1
+
+
+async def maintain_single_lab_backend(
+    database: Database,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+    secret_resolver: SecretResolver,
+) -> None:
+    """Keep the single Scholar Backend probe fresh while Proxy Hub is running."""
+    interval_seconds = max(1.0, settings.backend_probe_max_age_seconds / 2)
+    while True:
+        try:
+            await refresh_single_lab_backend(
+                database,
+                settings,
+                http_client,
+                secret_resolver,
+            )
+        except Exception:
+            LOGGER.exception("single-lab Scholar Backend refresh failed")
+        await anyio.sleep(interval_seconds)

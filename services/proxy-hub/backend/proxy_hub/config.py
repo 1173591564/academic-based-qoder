@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, HttpUrl, model_validator
+from pydantic import Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
     bootstrap_platform_admin_subjects: str = ""
+
+    @field_validator(
+        "single_lab_backend_url",
+        "single_lab_corpus_version",
+        "single_lab_backend_credential_ref",
+        mode="before",
+    )
+    @classmethod
+    def empty_single_lab_value_is_unset(cls, value: object) -> object:
+        """Treat empty Compose substitutions as absent optional settings."""
+        return None if value == "" else value
 
     @model_validator(mode="after")
     def validate_security(self) -> "Settings":

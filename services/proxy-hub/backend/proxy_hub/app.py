@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
 
+import anyio
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
@@ -33,7 +34,7 @@ from proxy_hub.quota import DatabaseQuotaService, QuotaService
 from proxy_hub.secrets import EnvironmentSecretResolver, SecretResolver
 from proxy_hub.session import build_session_router
 from proxy_hub.simple_tokens import build_token_user_router
-from proxy_hub.single_lab import bootstrap_single_lab
+from proxy_hub.single_lab import bootstrap_single_lab, maintain_single_lab_backend
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
 
@@ -100,7 +101,22 @@ def create_app(
             resources.database.engine
         ).has_table("tenants"):
             bootstrap_single_lab(resources.database, resources.settings)
-        yield
+        async with anyio.create_task_group() as task_group:
+            if (
+                resources.settings.environment != "test"
+                and resources.settings.single_lab_backend_url is not None
+            ):
+                task_group.start_soon(
+                    maintain_single_lab_backend,
+                    resources.database,
+                    resources.settings,
+                    resources.http_client,
+                    resources.secret_resolver,
+                )
+            try:
+                yield
+            finally:
+                task_group.cancel_scope.cancel()
         if resources.owns_http_client:
             await resources.http_client.aclose()
         resources.database.engine.dispose()
