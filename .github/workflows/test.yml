@@ -79,6 +79,9 @@ jobs:
           cache: npm
           cache-dependency-path: services/proxy-hub/frontend/package-lock.json
 
+      - name: Install npm
+        run: npm install --global npm@11.6.2
+
       - name: Install Proxy Hub frontend
         working-directory: services/proxy-hub/frontend
         run: npm ci
