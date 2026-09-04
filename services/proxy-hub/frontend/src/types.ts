@@ -233,3 +233,38 @@ export interface ResourceState<T> {
   data: T;
   etag: string;
 }
+
+export interface ScholarToken {
+  id: string;
+  name: string;
+  token: string | null;
+  token_prefix: string;
+  token_last_four: string;
+  status: "active" | "revoked" | "expired";
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  expires_at: string | null;
+  version: number;
+  etag: string;
+}
+
+export interface ServiceStatus {
+  available: boolean;
+  corpus_version: string | null;
+  checked_at: string | null;
+  reason: string | null;
+  transport: {
+    secure: boolean;
+    development_http: boolean;
+  };
+}
+
+export interface TokenAuditEvent {
+  token_name: string | null;
+  mcp_tool: string | null;
+  occurred_at: string;
+  result: string;
+  duration_ms: number | null;
+  request_id: string;
+}

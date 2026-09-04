@@ -39,6 +39,7 @@ from proxy_hub.rbac import (
 )
 from proxy_hub.secrets import SecretResolver
 from proxy_hub.security import resource_etag
+from proxy_hub.simple_tokens import build_token_admin_router
 
 
 class TenantCreate(BaseModel):
@@ -98,6 +99,15 @@ def build_admin_router(
     )
     router.include_router(build_policy_router(database, auth, settings))
     router.include_router(build_observability_router(database, auth))
+    router.include_router(
+        build_token_admin_router(
+            database,
+            auth,
+            settings,
+            http_client,
+            secret_resolver,
+        )
+    )
 
     def get_session() -> Generator[Session, None, None]:
         yield from session_scope(database)

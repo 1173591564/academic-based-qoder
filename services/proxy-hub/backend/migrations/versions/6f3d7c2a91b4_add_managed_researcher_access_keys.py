@@ -159,9 +159,7 @@ def downgrade() -> None:
             "fk_mcp_session_affinities_access_key",
             type_="foreignkey",
         )
-        batch_op.drop_index(
-            op.f("ix_mcp_session_affinities_access_key_id")
-        )
+        batch_op.drop_index(op.f("ix_mcp_session_affinities_access_key_id"))
         batch_op.drop_column("access_key_id")
         batch_op.alter_column(
             "capability_id",

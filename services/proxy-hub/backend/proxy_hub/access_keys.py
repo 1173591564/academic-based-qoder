@@ -131,7 +131,7 @@ class ResearcherPatch(BaseModel):
 def _key_status(access_key: AccessKey, now: datetime) -> str:
     if access_key.revoked_at is not None:
         return "revoked"
-    if _aware(access_key.expires_at) <= now:
+    if access_key.expires_at is not None and _aware(access_key.expires_at) <= now:
         return "expired"
     return "active"
 
@@ -162,7 +162,11 @@ def access_key_body(
         "request_limit": access_key.request_limit,
         "period_seconds": access_key.period_seconds,
         "status": _key_status(access_key, now),
-        "expires_at": access_key.expires_at.isoformat(),
+        "expires_at": (
+            access_key.expires_at.isoformat()
+            if access_key.expires_at is not None
+            else None
+        ),
         "last_used_at": (
             access_key.last_used_at.isoformat()
             if access_key.last_used_at is not None
@@ -200,6 +204,73 @@ def researcher_body(
         "created_at": principal.created_at.isoformat(),
         "updated_at": principal.updated_at.isoformat(),
     }
+
+
+def validate_allowed_tools(
+    session: Session,
+    tenant_id: str,
+    allowed_tools: list[str],
+) -> None:
+    """Require an Access Key tool set within the tenant policy."""
+    policy = session.get(ToolPolicy, tenant_id)
+    if policy is None:
+        raise HubError(
+            409,
+            "tool_policy_missing",
+            "Configure the tenant tool policy before issuing Access Keys.",
+        )
+    try:
+        tenant_tools = set(validate_tool_policy(policy.allowed_tools))
+    except InvalidToolPolicy as error:
+        raise HubError(
+            409,
+            "tool_policy_invalid",
+            "The tenant tool policy must be repaired before issuing keys.",
+        ) from error
+    if not set(allowed_tools).issubset(tenant_tools):
+        raise HubError(
+            409,
+            "access_key_scope_exceeds_tenant",
+            "Access Key tools cannot exceed the tenant tool policy.",
+        )
+
+
+def issue_access_key(
+    session: Session,
+    context: AdminContext,
+    *,
+    tenant_id: str,
+    principal_id: str,
+    label: str,
+    allowed_tools: list[str],
+    expires_at: datetime | None,
+    request_limit: int | None,
+    period_seconds: int | None,
+    token_name_key: str | None = None,
+    active_name_key: str | None = None,
+) -> tuple[AccessKey, str]:
+    """Issue one digest-only Access Key and return its one-time secret."""
+    validate_allowed_tools(session, tenant_id, allowed_tools)
+    raw_token = f"{ACCESS_KEY_PREFIX}{new_token()}"
+    access_key = AccessKey(
+        id=new_id("key"),
+        token_digest=digest_token(raw_token),
+        token_prefix=raw_token[:24],
+        token_last_four=raw_token[-4:],
+        principal_id=principal_id,
+        tenant_id=tenant_id,
+        label=label,
+        token_name_key=token_name_key,
+        active_name_key=active_name_key,
+        allowed_tools=allowed_tools,
+        request_limit=request_limit,
+        period_seconds=period_seconds,
+        expires_at=expires_at,
+        created_by_principal_id=context.principal_id,
+    )
+    session.add(access_key)
+    session.flush()
+    return access_key, raw_token
 
 
 def build_access_key_router(
@@ -291,61 +362,6 @@ def build_access_key_router(
                 "Researcher creation requires an active tenant team.",
             )
 
-    def validate_allowed_tools(
-        session: Session,
-        tenant_id: str,
-        allowed_tools: list[str],
-    ) -> None:
-        policy = session.get(ToolPolicy, tenant_id)
-        if policy is None:
-            raise HubError(
-                409,
-                "tool_policy_missing",
-                "Configure the tenant tool policy before issuing Access Keys.",
-            )
-        try:
-            tenant_tools = set(validate_tool_policy(policy.allowed_tools))
-        except InvalidToolPolicy as error:
-            raise HubError(
-                409,
-                "tool_policy_invalid",
-                "The tenant tool policy must be repaired before issuing keys.",
-            ) from error
-        if not set(allowed_tools).issubset(tenant_tools):
-            raise HubError(
-                409,
-                "access_key_scope_exceeds_tenant",
-                "Access Key tools cannot exceed the tenant tool policy.",
-            )
-
-    def issue_access_key(
-        session: Session,
-        context: AdminContext,
-        tenant_id: str,
-        principal_id: str,
-        settings: KeySettings,
-    ) -> tuple[AccessKey, str]:
-        validate_allowed_tools(session, tenant_id, settings.allowed_tools)
-        raw_token = f"{ACCESS_KEY_PREFIX}{new_token()}"
-        access_key = AccessKey(
-            id=new_id("key"),
-            token_digest=digest_token(raw_token),
-            token_prefix=raw_token[:24],
-            token_last_four=raw_token[-4:],
-            principal_id=principal_id,
-            tenant_id=tenant_id,
-            label=settings.label,
-            allowed_tools=settings.allowed_tools,
-            request_limit=settings.request_limit,
-            period_seconds=settings.period_seconds,
-            expires_at=utc_now()
-            + timedelta(seconds=settings.expires_in_seconds),
-            created_by_principal_id=context.principal_id,
-        )
-        session.add(access_key)
-        session.flush()
-        return access_key, raw_token
-
     @router.get("/tenants/{tenant_id}/researchers")
     def list_researchers(
         tenant_id: str,
@@ -364,8 +380,7 @@ def build_access_key_router(
         ).all()
         return {
             "items": [
-                researcher_body(principal, membership)
-                for principal, membership in rows
+                researcher_body(principal, membership) for principal, membership in rows
             ]
         }
 
@@ -425,9 +440,13 @@ def build_access_key_router(
         access_key, raw_token = issue_access_key(
             session,
             context,
-            tenant_id,
-            principal_id,
-            payload,
+            tenant_id=tenant_id,
+            principal_id=principal_id,
+            label=payload.label,
+            allowed_tools=payload.allowed_tools,
+            expires_at=utc_now() + timedelta(seconds=payload.expires_in_seconds),
+            request_limit=payload.request_limit,
+            period_seconds=payload.period_seconds,
         )
         response_body = {
             "researcher": researcher_body(principal, membership),
@@ -539,9 +558,7 @@ def build_access_key_router(
         ).all()
         return {"items": [access_key_body(access_key) for access_key in access_keys]}
 
-    @router.post(
-        "/tenants/{tenant_id}/researchers/{principal_id}/access-keys"
-    )
+    @router.post("/tenants/{tenant_id}/researchers/{principal_id}/access-keys")
     def create_access_key(
         tenant_id: str,
         principal_id: str,
@@ -589,9 +606,13 @@ def build_access_key_router(
         access_key, raw_token = issue_access_key(
             session,
             context,
-            tenant_id,
-            principal_id,
-            payload,
+            tenant_id=tenant_id,
+            principal_id=principal_id,
+            label=payload.label,
+            allowed_tools=payload.allowed_tools,
+            expires_at=utc_now() + timedelta(seconds=payload.expires_in_seconds),
+            request_limit=payload.request_limit,
+            period_seconds=payload.period_seconds,
         )
         response_body = access_key_body(access_key, raw_token=raw_token)
         stored_body = access_key_body(access_key)
@@ -666,7 +687,7 @@ def build_access_key_router(
             if payload.expires_at is not None
             else access_key.expires_at
         )
-        if _aware(next_expires_at) <= utc_now():
+        if next_expires_at is not None and _aware(next_expires_at) <= utc_now():
             raise HubError(
                 409,
                 "access_key_expiry_invalid",
@@ -767,10 +788,13 @@ def build_access_key_router(
                 "access_key_inactive",
                 "Only an active Access Key can be rotated.",
             )
-        remaining_seconds = max(
-            300,
-            int((_aware(access_key.expires_at) - utc_now()).total_seconds()),
-        )
+        if access_key.expires_at is None:
+            remaining_seconds = 31_536_000
+        else:
+            remaining_seconds = max(
+                300,
+                int((_aware(access_key.expires_at) - utc_now()).total_seconds()),
+            )
         settings = AccessKeyCreate(
             label=payload.label or access_key.label,
             allowed_tools=access_key.allowed_tools,
@@ -781,9 +805,13 @@ def build_access_key_router(
         replacement, raw_token = issue_access_key(
             session,
             context,
-            tenant_id,
-            access_key.principal_id,
-            settings,
+            tenant_id=tenant_id,
+            principal_id=access_key.principal_id,
+            label=settings.label,
+            allowed_tools=settings.allowed_tools,
+            expires_at=utc_now() + timedelta(seconds=settings.expires_in_seconds),
+            request_limit=settings.request_limit,
+            period_seconds=settings.period_seconds,
         )
         access_key.revoked_at = utc_now()
         access_key.revoked_by_principal_id = context.principal_id
@@ -846,9 +874,7 @@ def build_access_key_router(
         )
         if access_key.revoked_at is not None:
             return Response(status_code=204)
-        digest = request_digest(
-            AccessKeyRotate(label=access_key.label)
-        )
+        digest = request_digest(AccessKeyRotate(label=access_key.label))
         access_key.revoked_at = utc_now()
         access_key.revoked_by_principal_id = context.principal_id
         access_key.revoke_reason = "revoked_by_admin"

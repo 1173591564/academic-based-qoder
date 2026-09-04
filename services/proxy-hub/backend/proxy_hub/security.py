@@ -1,5 +1,6 @@
 """Opaque token, request-integrity, and ETag helpers."""
 
+from datetime import datetime
 from hashlib import sha256
 from hmac import compare_digest
 from secrets import token_urlsafe
@@ -20,6 +21,13 @@ def token_matches(token: str, digest: str) -> bool:
     return compare_digest(digest_token(token), digest)
 
 
-def resource_etag(resource_type: str, resource_id: str, version: int) -> str:
+def resource_etag(
+    resource_type: str,
+    resource_id: str,
+    version: int | datetime,
+) -> str:
     """Build a strong ETag for one control-plane resource version."""
-    return f'"{resource_type}:{resource_id}:{version}"'
+    version_text = (
+        version.isoformat() if isinstance(version, datetime) else str(version)
+    )
+    return f'"{resource_type}:{resource_id}:{version_text}"'

@@ -163,4 +163,14 @@ export const api = {
       headers: mutationHeaders(document.cookie, { "If-Match": etag }),
     });
   },
+
+  postEmpty(
+    path: string,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<ApiResult<void>> {
+    return request<void>(path, {
+      method: "POST",
+      headers: mutationHeaders(document.cookie, extraHeaders),
+    });
+  },
 };

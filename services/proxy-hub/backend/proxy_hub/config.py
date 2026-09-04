@@ -42,6 +42,24 @@ class Settings(BaseSettings):
     backend_circuit_failure_threshold: int = Field(default=3, ge=1, le=100)
     backend_circuit_recovery_seconds: int = Field(default=30, ge=1, le=3_600)
     audit_failure_policy: Literal["fail_closed"] = "fail_closed"
+    audit_retention_days: Literal[180] = 180
+    allow_insecure_public_http: bool = False
+    single_lab_tenant_id: str | None = None
+    single_lab_tenant_slug: str = Field(
+        default="scholar-lab",
+        pattern=r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+    )
+    single_lab_tenant_name: str = Field(
+        default="Scholar Lab", min_length=1, max_length=200
+    )
+    single_lab_backend_name: str = Field(
+        default="Scholar Backend",
+        min_length=1,
+        max_length=200,
+    )
+    single_lab_backend_url: str | None = None
+    single_lab_corpus_version: str | None = None
+    single_lab_backend_credential_ref: str | None = None
     oidc_issuer_url: HttpUrl | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
@@ -58,6 +76,25 @@ class Settings(BaseSettings):
         if any(oidc_values) and not all(oidc_values):
             raise ValueError(
                 "OIDC issuer, client ID, and client secret are required together"
+            )
+        backend_values = (
+            self.single_lab_backend_url,
+            self.single_lab_corpus_version,
+            self.single_lab_backend_credential_ref,
+        )
+        if any(backend_values) and not all(backend_values):
+            raise ValueError(
+                "single-lab backend URL, corpus version, and credential reference "
+                "are required together"
+            )
+        if (
+            self.environment != "test"
+            and self.public_origin.scheme == "http"
+            and self.public_origin.host not in {"127.0.0.1", "localhost", "::1"}
+            and not self.allow_insecure_public_http
+        ):
+            raise ValueError(
+                "public HTTP requires PROXY_HUB_ALLOW_INSECURE_PUBLIC_HTTP=true"
             )
         if self.environment == "production":
             if self.public_origin.scheme != "https":
