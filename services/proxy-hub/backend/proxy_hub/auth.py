@@ -104,7 +104,11 @@ def build_auth_components(database: Database, settings: Settings) -> AuthCompone
                 "The browser session is absent, expired, or revoked.",
             )
         principal = session.get(Principal, browser_session.principal_id)
-        if principal is None or principal.status != "active":
+        if (
+            principal is None
+            or principal.kind != "oidc_operator"
+            or principal.status != "active"
+        ):
             raise HubError(
                 403,
                 "principal_inactive",

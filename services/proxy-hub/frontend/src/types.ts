@@ -82,6 +82,42 @@ export interface AdminPrincipal extends Versioned {
   etag: string;
 }
 
+export interface ManagedResearcher extends Versioned {
+  id: string;
+  display_name: string;
+  email: string | null;
+  kind: "managed_researcher";
+  status: "active" | "disabled";
+  membership_id: string;
+  membership_status: "active" | "disabled";
+  team_id: string | null;
+  etag: string;
+}
+
+export interface ScholarAccessKey extends Versioned {
+  id: string;
+  access_key: string | null;
+  principal_id: string;
+  tenant_id: string;
+  label: string;
+  token_prefix: string;
+  token_last_four: string;
+  allowed_tools: string[];
+  request_limit: number | null;
+  period_seconds: number | null;
+  status: "active" | "revoked" | "expired";
+  expires_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  etag: string;
+}
+
+export interface ResearcherCreateResponse {
+  researcher: ManagedResearcher;
+  access_key: ScholarAccessKey;
+}
+
 export interface ToolPolicy extends Versioned {
   tenant_id: string;
   allowed_tools: string[];

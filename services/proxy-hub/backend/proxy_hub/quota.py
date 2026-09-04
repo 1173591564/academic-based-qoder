@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from proxy_hub.models import (
+    AccessKeyUsageWindow,
     QuotaPolicy,
     QuotaReservationRecord,
     QuotaWindow,
@@ -332,6 +333,62 @@ def load_quota_limit(session: Session, tenant_id: str) -> QuotaLimit | None:
     )
     validate_quota_limit(limit)
     return limit
+
+
+def reserve_access_key_request(
+    session: Session,
+    access_key_id: str,
+    request_limit: int | None,
+    period_seconds: int | None,
+    at: datetime,
+) -> bool:
+    """Consume one optional per-key request allowance."""
+    _require_aware(at)
+    if request_limit is None and period_seconds is None:
+        return False
+    if (
+        request_limit is None
+        or period_seconds is None
+        or request_limit <= 0
+        or period_seconds <= 0
+    ):
+        raise QuotaConfigurationError("access_key_quota_invalid")
+    window_start = quota_window_start(at, period_seconds)
+    key = (access_key_id, window_start, period_seconds)
+    if session.get(AccessKeyUsageWindow, key) is None:
+        try:
+            with session.begin_nested():
+                session.add(
+                    AccessKeyUsageWindow(
+                        access_key_id=access_key_id,
+                        window_start=window_start,
+                        period_seconds=period_seconds,
+                    )
+                )
+                session.flush()
+        except IntegrityError:
+            session.expire_all()
+    updated = session.scalar(
+        update(AccessKeyUsageWindow)
+        .where(
+            AccessKeyUsageWindow.access_key_id == access_key_id,
+            AccessKeyUsageWindow.window_start == window_start,
+            AccessKeyUsageWindow.period_seconds == period_seconds,
+            AccessKeyUsageWindow.request_count < request_limit,
+        )
+        .values(
+            request_count=AccessKeyUsageWindow.request_count + 1,
+            updated_at=at,
+        )
+        .returning(AccessKeyUsageWindow.request_count)
+        .execution_options(synchronize_session=False)
+    )
+    if updated is None:
+        raise QuotaExceeded(
+            "access_key_request_limit_exceeded",
+            retry_after_seconds(window_start, period_seconds, at),
+        )
+    return True
 
 
 def validate_quota_limit(limit: QuotaLimit) -> None:

@@ -172,6 +172,7 @@ def principal_body(principal: Principal) -> dict[str, object]:
         "subject": principal.subject,
         "email": principal.email,
         "display_name": principal.display_name,
+        "kind": principal.kind,
         "status": principal.status,
         "version": principal.version,
         "etag": resource_etag(

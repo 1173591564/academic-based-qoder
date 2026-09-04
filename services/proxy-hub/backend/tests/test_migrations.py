@@ -117,10 +117,6 @@ def test_gateway_state_migration_upgrades_and_downgrades(tmp_path: Path) -> None
     assert "last_probe_reason" in {
         column["name"] for column in inspector.get_columns("scholar_backends")
     }
-    assert "admin_rate_limits" in inspector.get_table_names()
-    assert "version" in {
-        column["name"] for column in inspector.get_columns("dsh_capabilities")
-    }
 
     command.downgrade(config, "d737c231b0eb")
 

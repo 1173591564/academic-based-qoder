@@ -64,7 +64,6 @@ def test_valid_production_configuration_enforces_hardened_defaults() -> None:
     )
 
     assert settings.audit_failure_policy == "fail_closed"
-    assert settings.admin_rate_limit_requests == 120
     assert settings.backend_safe_retry_attempts == 1
 
 

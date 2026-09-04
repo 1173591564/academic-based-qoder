@@ -51,6 +51,7 @@ const ZH: Record<string, string> = {
   "Failed": "失败",
   "Rejected": "已拒绝",
   "Revoked": "已撤销",
+  "Expired": "已过期",
   "Denied": "已拒绝",
   "Request": "请求",
   "Close": "关闭",
@@ -169,6 +170,67 @@ const ZH: Record<string, string> = {
   "Tenant admin": "租户管理员",
   "Operator": "运营者",
   "Auditor": "审计员",
+  "Scholar access": "Scholar 访问",
+  "Research users": "研究用户",
+  "Create users and issue revocable Access Keys without Dex or enrolment codes.":
+    "无需 Dex 或兑换码，直接创建用户并签发可撤销的 Access Key。",
+  "Create research user": "创建研究用户",
+  "No research users": "暂无研究用户",
+  "Create a user and their first Access Key in one step.":
+    "一步创建用户及其首个 Access Key。",
+  "Researcher and Access Key created.": "研究用户和 Access Key 已创建。",
+  "Researcher creation failed.": "研究用户创建失败。",
+  "Access Key created.": "Access Key 已创建。",
+  "Access Key creation failed.": "Access Key 创建失败。",
+  "Access Key updated.": "Access Key 已更新。",
+  "Access Key update failed.": "Access Key 更新失败。",
+  "Access Key rotated.": "Access Key 已轮换。",
+  "Access Key rotation failed.": "Access Key 轮换失败。",
+  "Research user enabled.": "研究用户已启用。",
+  "Research user disabled.": "研究用户已停用。",
+  "Research user update failed.": "研究用户更新失败。",
+  "Change this research user's access?": "确定更改该研究用户的访问状态吗？",
+  "Revoke this Access Key immediately?": "确定立即撤销该 Access Key 吗？",
+  "Access Key revoked.": "Access Key 已撤销。",
+  "Access Key revocation failed.": "Access Key 撤销失败。",
+  "Shown once": "仅显示一次",
+  "Save this Access Key now": "立即保存此 Access Key",
+  "Proxy Hub stores only a digest. This full key cannot be shown again.":
+    "Proxy Hub 只保存摘要，完整 Key 之后无法再次显示。",
+  "Copy Access Key": "复制 Access Key",
+  "I saved it": "我已保存",
+  "No email": "无邮箱",
+  "New Access Key": "新建 Access Key",
+  "No Access Keys for this user.": "该用户暂无 Access Key。",
+  "Expires": "到期",
+  "No key quota": "无 Key 级配额",
+  "Last used": "最后使用",
+  "Never used": "从未使用",
+  "Edit": "编辑",
+  "Rotate": "轮换",
+  "Create the user, tenant membership, and first Access Key together.":
+    "同时创建用户、租户成员关系和首个 Access Key。",
+  "Email (optional)": "邮箱（可选）",
+  "Access Key label": "Access Key 标签",
+  "Primary device": "主要设备",
+  "Expires in days": "有效天数",
+  "Request limit (optional)": "请求上限（可选）",
+  "Allowed Scholar tools": "允许的 Scholar 工具",
+  "Access Keys can only use tools allowed by tenant policy.":
+    "Access Key 只能使用租户策略允许的工具。",
+  "Configure the tenant tool policy first.": "请先配置租户工具策略。",
+  "Create user and Access Key": "创建用户和 Access Key",
+  "Create Access Key": "创建 Access Key",
+  "The full key is shown once.": "完整 Key 仅显示一次。",
+  "Edit Access Key": "编辑 Access Key",
+  "Changes take effect on the next request and cannot exceed tenant policy.":
+    "更改从下一次请求起生效，且不能超过租户策略。",
+  "Expires at": "到期时间",
+  "Save Access Key": "保存 Access Key",
+  "Rotate Access Key": "轮换 Access Key",
+  "The current key is revoked immediately when the replacement is created.":
+    "替代 Key 创建后，当前 Key 会立即撤销。",
+  "New label (optional)": "新标签（可选）",
 
   // ── policies ──
   "Deny by default": "默认拒绝",
@@ -536,6 +598,9 @@ export function statusLabel(status: string, t: (key: string) => string): string 
   }
   if (status === "revoked") {
     return t("Revoked");
+  }
+  if (status === "expired") {
+    return t("Expired");
   }
   if (status === "denied") {
     return t("Denied");

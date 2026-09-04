@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from proxy_hub.audit import AuditEntry, append_audit_event
-from proxy_hub.capabilities import CapabilityContext, authenticate_capability
+from proxy_hub.capabilities import CredentialContext, authenticate_credential
 from proxy_hub.circuit import BackendCircuitBreaker
 from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
@@ -31,7 +31,13 @@ from proxy_hub.mcp_transport import (
     validated_backend_url,
     validated_service_credential,
 )
-from proxy_hub.models import DshCapability, McpSessionAffinity, ToolPolicy, utc_now
+from proxy_hub.models import (
+    AccessKey,
+    DshCapability,
+    McpSessionAffinity,
+    ToolPolicy,
+    utc_now,
+)
 from proxy_hub.policy import (
     SCHOLAR_TOOL_CATALOG,
     InvalidToolPolicy,
@@ -44,6 +50,7 @@ from proxy_hub.quota import (
     QuotaReservation,
     QuotaService,
     load_quota_limit,
+    reserve_access_key_request,
 )
 from proxy_hub.routing import RouteResolutionError, RouteSelection, resolve_route
 from proxy_hub.secrets import SecretResolutionError, SecretResolver
@@ -120,7 +127,7 @@ def append_gateway_audit(
     session: Session,
     request: Request,
     *,
-    context: CapabilityContext | None,
+    context: CredentialContext | None,
     outcome: str,
     decision: str,
     reason: str,
@@ -151,6 +158,7 @@ def append_gateway_audit(
             principal_id=context.principal_id if context is not None else None,
             tenant_id=context.tenant_id if context is not None else None,
             capability_id=context.capability_id if context is not None else None,
+            access_key_id=context.access_key_id if context is not None else None,
             mcp_session_digest=mcp_session_digest,
             action="mcp:tool" if metadata and metadata.tool_name else "mcp:forward",
             resource_type="scholar_backend",
@@ -182,7 +190,7 @@ def deny_gateway(
     request: Request,
     error: HubError,
     *,
-    context: CapabilityContext | None,
+    context: CredentialContext | None,
     reason: str,
     metadata: McpRequestMetadata | None = None,
     selection: RouteSelection | None = None,
@@ -237,7 +245,7 @@ def build_mcp_gateway_router(
         session: Session = Depends(get_session),
     ) -> StreamingResponse:
         try:
-            context = authenticate_capability(
+            context = authenticate_credential(
                 session,
                 request.headers.get("authorization"),
             )
@@ -354,9 +362,10 @@ def build_mcp_gateway_router(
             selection = resolve_route(
                 session,
                 context.tenant_id,
-                context.capability_id,
+                context.credential_id,
                 now,
                 timedelta(seconds=settings.backend_probe_max_age_seconds),
+                credential_kind=context.credential_kind,
                 mcp_session_digest=session_digest,
             )
         except RouteResolutionError as error:
@@ -424,6 +433,54 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
             )
 
+        if context.access_key_id is not None:
+            try:
+                reserve_access_key_request(
+                    session,
+                    context.access_key_id,
+                    context.request_limit,
+                    context.period_seconds,
+                    now,
+                )
+            except QuotaExceeded as error:
+                append_gateway_audit(
+                    session,
+                    request,
+                    context=context,
+                    outcome="rejected",
+                    decision="deny",
+                    reason=error.reason,
+                    metadata=metadata,
+                    selection=selection,
+                    mcp_session_digest=session_digest,
+                    quota_delta=0,
+                )
+                session.commit()
+                raise HubError(
+                    429,
+                    "quota_exceeded",
+                    "The Access Key request quota is currently exhausted.",
+                    headers={"Retry-After": str(error.retry_after_seconds)},
+                ) from error
+            except QuotaConfigurationError as error:
+                append_gateway_audit(
+                    session,
+                    request,
+                    context=context,
+                    outcome="failed",
+                    decision="deny",
+                    reason=str(error),
+                    metadata=metadata,
+                    selection=selection,
+                    mcp_session_digest=session_digest,
+                    quota_delta=0,
+                )
+                session.commit()
+                raise HubError(
+                    503,
+                    "quota_unavailable",
+                    "The Access Key quota cannot be enforced.",
+                ) from error
         try:
             reservation = quota_service.reserve(
                 session,
@@ -596,6 +653,7 @@ def build_mcp_gateway_router(
                 "backend_request_failed",
                 "The Scholar backend request failed.",
             )
+
         declared_size = response_size(upstream)
         if (
             declared_size is not None
@@ -618,7 +676,6 @@ def build_mcp_gateway_router(
                 quota_service=quota_service,
                 reservation=reservation,
             )
-
         try:
             response_session = mcp_session_id(
                 upstream.headers.get(MCP_SESSION_HEADER),
@@ -675,6 +732,7 @@ def build_mcp_gateway_router(
                     backend_id=selection.backend_id,
                     corpus_version=selection.corpus_version,
                     capability_id=context.capability_id,
+                    access_key_id=context.access_key_id,
                     expires_at=context.expires_at,
                     last_seen_at=now,
                 )
@@ -682,6 +740,7 @@ def build_mcp_gateway_router(
             elif (
                 affinity.tenant_id != context.tenant_id
                 or affinity.capability_id != context.capability_id
+                or affinity.access_key_id != context.access_key_id
                 or affinity.backend_id != selection.backend_id
                 or affinity.corpus_version != selection.corpus_version
             ):
@@ -711,26 +770,30 @@ def build_mcp_gateway_router(
                 session.delete(affinity)
 
         try:
-            capability = session.get(DshCapability, context.capability_id)
-            if capability is None:
+            credential = (
+                session.get(DshCapability, context.capability_id)
+                if context.capability_id is not None
+                else session.get(AccessKey, context.access_key_id)
+            )
+            if credential is None:
                 await upstream.aclose()
                 deny_gateway(
                     session,
                     request,
                     HubError(
                         403,
-                        "capability_denied",
-                        "The DSH session is no longer available.",
+                        "credential_denied",
+                        "The Scholar credential is no longer available.",
                     ),
                     context=context,
-                    reason="capability_missing",
+                    reason="credential_missing",
                     metadata=metadata,
                     selection=selection,
                     mcp_session_digest=session_digest,
                     quota_service=quota_service,
                     reservation=reservation,
                 )
-            capability.last_used_at = now
+            credential.last_used_at = now
             append_gateway_audit(
                 session,
                 request,

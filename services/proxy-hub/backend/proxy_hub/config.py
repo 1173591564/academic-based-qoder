@@ -37,8 +37,6 @@ class Settings(BaseSettings):
         le=67_108_864,
     )
     quota_reservation_ttl_seconds: int = Field(default=600, ge=30, le=7_200)
-    admin_rate_limit_requests: int = Field(default=120, ge=1, le=10_000)
-    admin_rate_limit_period_seconds: int = Field(default=60, ge=1, le=3_600)
     backend_safe_retry_attempts: int = Field(default=1, ge=0, le=3)
     backend_retry_backoff_seconds: float = Field(default=0.1, ge=0, le=1)
     backend_circuit_failure_threshold: int = Field(default=3, ge=1, le=100)

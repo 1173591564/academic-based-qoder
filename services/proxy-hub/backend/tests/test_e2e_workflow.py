@@ -2,11 +2,11 @@
 
 from datetime import timedelta
 
+from conftest import ApiHarness
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from proxy_hub.models import AuditEvent, Principal, new_id, utc_now
-from tests.conftest import ApiHarness
 
 
 def test_tenant_onboarding_gateway_audit_and_usage_workflow(

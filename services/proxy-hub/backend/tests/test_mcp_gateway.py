@@ -15,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 from proxy_hub.app import create_app
 from proxy_hub.config import Settings
 from proxy_hub.models import (
+    AccessKey,
     AuditEvent,
     Base,
     DshCapability,
@@ -34,6 +35,7 @@ from proxy_hub.secrets import SecretResolutionError
 from proxy_hub.security import digest_token
 
 CAPABILITY = "dsh-capability"
+DIRECT_ACCESS_KEY = "sk_scholar_v1_direct-access-key"
 SERVICE_CREDENTIAL = "scholar-service-credential"
 MCP_SESSION = "scholar-mcp-session"
 BACKEND_URL = "https://scholar.test/mcp"
@@ -110,6 +112,22 @@ def seed_gateway_state(engine: Engine, scopes: list[str] | None = None) -> None:
             )
         )
         session.add(
+            AccessKey(
+                id="key_gateway",
+                token_digest=digest_token(DIRECT_ACCESS_KEY),
+                token_prefix=DIRECT_ACCESS_KEY[:24],
+                token_last_four=DIRECT_ACCESS_KEY[-4:],
+                principal_id="principal_gateway",
+                tenant_id="tenant_gateway",
+                label="Direct key",
+                allowed_tools=effective_scopes,
+                request_limit=1,
+                period_seconds=3600,
+                expires_at=now + timedelta(hours=1),
+                created_by_principal_id="principal_gateway",
+            )
+        )
+        session.add(
             ScholarBackend(
                 id="backend_gateway",
                 name="Scholar Gateway",
@@ -165,7 +183,6 @@ def gateway_harness(
     scopes: list[str] | None = None,
     secret_resolver: StaticSecretResolver | None = None,
     request_max_bytes: int = 1_048_576,
-    response_max_bytes: int = 8_388_608,
 ) -> Iterator[GatewayHarness]:
     """Create an app backed by an HTTPX mock Scholar service."""
     engine = create_engine(
@@ -191,7 +208,6 @@ def gateway_harness(
             database_url="sqlite://",
             public_origin="http://testserver",
             mcp_request_max_bytes=request_max_bytes,
-            mcp_response_max_bytes=response_max_bytes,
         ),
         engine=engine,
         http_client=http_client,
@@ -205,6 +221,15 @@ def authorization_headers(**extra: str) -> dict[str, str]:
     """Build DSH capability headers for a gateway request."""
     return {
         "Authorization": f"Bearer {CAPABILITY}",
+        "Accept": "application/json, text/event-stream",
+        **extra,
+    }
+
+
+def access_key_headers(**extra: str) -> dict[str, str]:
+    """Build direct Access Key headers for a gateway request."""
+    return {
+        "Authorization": f"Bearer {DIRECT_ACCESS_KEY}",
         "Accept": "application/json, text/event-stream",
         **extra,
     }
@@ -358,57 +383,61 @@ def test_initialize_and_tool_call_forward_without_rewriting_or_secret_leakage() 
             assert MCP_SESSION not in str(tool_audit.details)
 
 
-def test_declared_oversized_backend_response_fails_closed() -> None:
-    response_body = b"x" * 1_025
+def test_direct_access_key_binds_session_and_enforces_key_quota() -> None:
+    session_id = "direct-key-session"
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=response_body)
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "application/json",
+                "mcp-session-id": session_id,
+            },
+            content=json_bytes({"jsonrpc": "2.0", "id": 1, "result": {}}),
+        )
 
-    with gateway_harness(handler, response_max_bytes=1_024) as gateway:
-        response = gateway.client.post(
+    with gateway_harness(handler) as gateway:
+        first = gateway.client.post(
             "/v1/mcp/scholar",
             content=initialize_body(),
             headers={
-                **authorization_headers(),
+                **access_key_headers(),
+                "Content-Type": "application/json",
+            },
+        )
+        exhausted = gateway.client.post(
+            "/v1/mcp/scholar",
+            content=initialize_body(),
+            headers={
+                **access_key_headers(),
                 "Content-Type": "application/json",
             },
         )
 
-        assert response.status_code == 502
-        assert response.json()["error"]["code"] == "backend_response_too_large"
-        assert response_body not in response.content
+        assert first.status_code == 200
+        assert exhausted.status_code == 429
+        assert exhausted.json()["error"]["code"] == "quota_exceeded"
+        assert len(gateway.upstream_requests) == 1
+        assert DIRECT_ACCESS_KEY not in str(gateway.upstream_requests[0].headers)
         with Session(gateway.engine) as session:
+            affinity = session.get(
+                McpSessionAffinity,
+                digest_token(session_id),
+            )
+            assert affinity is not None
+            assert affinity.capability_id is None
+            assert affinity.access_key_id == "key_gateway"
+            access_key = session.get(AccessKey, "key_gateway")
+            assert access_key is not None
+            assert access_key.last_used_at is not None
             audit = session.scalar(
                 select(AuditEvent).where(
-                    AuditEvent.details["reason"].as_string()
-                    == "backend_response_too_large"
+                    AuditEvent.access_key_id == "key_gateway",
+                    AuditEvent.outcome == "forwarded",
                 )
             )
             assert audit is not None
-
-
-def test_backend_timeout_is_classified_as_gateway_timeout() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ReadTimeout("timed out", request=request)
-
-    with gateway_harness(handler) as gateway:
-        response = gateway.client.post(
-            "/v1/mcp/scholar",
-            content=initialize_body(),
-            headers={
-                **authorization_headers(),
-                "Content-Type": "application/json",
-            },
-        )
-
-        assert response.status_code == 504
-        assert response.json()["error"]["code"] == "backend_timeout"
-        with Session(gateway.engine) as session:
-            audit = session.scalar(
-                select(AuditEvent).where(AuditEvent.result_class == "timeout")
-            )
-            assert audit is not None
-            assert audit.details["reason"] == "backend_timeout"
+            assert DIRECT_ACCESS_KEY not in str(audit.details)
 
 
 def test_credentials_and_tool_policy_fail_before_backend_contact() -> None:

@@ -270,7 +270,6 @@ def test_holder_revocation_rolls_back_when_audit_fails(
         capability = session.get(DshCapability, capability_id)
         assert capability is not None
         assert capability.revoked_at is None
-        assert capability.version == 1
 
 
 def test_enrolment_exchange_reports_unconfigured_quota(

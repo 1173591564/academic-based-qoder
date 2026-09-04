@@ -57,7 +57,7 @@ class Versioned:
 
 
 class Principal(Base, Timestamped, Versioned):
-    """Human identity synchronized from the configured identity provider."""
+    """Administrative or managed research identity."""
 
     __tablename__ = "principals"
 
@@ -66,10 +66,19 @@ class Principal(Base, Timestamped, Versioned):
     subject: Mapped[str] = mapped_column(String(512), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
     display_name: Mapped[str | None] = mapped_column(String(256))
+    kind: Mapped[str] = mapped_column(
+        String(32),
+        default="oidc_operator",
+        nullable=False,
+    )
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
 
     __table_args__ = (
         UniqueConstraint("issuer", "subject", name="uq_principal_issuer_subject"),
+        CheckConstraint(
+            "kind IN ('oidc_operator', 'managed_researcher')",
+            name="ck_principal_kind",
+        ),
     )
 
 
@@ -283,7 +292,7 @@ class TenantRoute(Base, Timestamped, Versioned):
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
 
 
-class DshCapability(Base, Versioned):
+class DshCapability(Base):
     """Revocable DSH session capability metadata."""
 
     __tablename__ = "dsh_capabilities"
@@ -319,26 +328,68 @@ class DshCapability(Base, Versioned):
     )
 
 
-class AdminRateLimit(Base):
-    """Database-backed fixed-window administration request counter."""
+class AccessKey(Base, Timestamped, Versioned):
+    """Long-lived revocable Scholar credential metadata."""
 
-    __tablename__ = "admin_rate_limits"
+    __tablename__ = "access_keys"
     __table_args__ = (
         CheckConstraint(
-            "request_count > 0",
-            name="ck_admin_rate_limit_request_count",
+            "(request_limit IS NULL AND period_seconds IS NULL) OR "
+            "(request_limit > 0 AND period_seconds > 0)",
+            name="ck_access_key_quota_pair",
         ),
     )
 
-    session_id: Mapped[str] = mapped_column(
-        ForeignKey("browser_sessions.id"),
-        primary_key=True,
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    token_digest: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    token_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
+    token_last_four: Mapped[str] = mapped_column(String(4), nullable=False)
+    principal_id: Mapped[str] = mapped_column(
+        ForeignKey("principals.id"),
+        nullable=False,
+        index=True,
     )
-    window_started_at: Mapped[datetime] = mapped_column(
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    allowed_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    request_limit: Mapped[int | None] = mapped_column(Integer)
+    period_seconds: Mapped[int | None] = mapped_column(Integer)
+    expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        index=True,
     )
-    request_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_principal_id: Mapped[str] = mapped_column(
+        ForeignKey("principals.id"),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_by_principal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("principals.id")
+    )
+    revoke_reason: Mapped[str | None] = mapped_column(String(500))
+
+
+class AccessKeyUsageWindow(Base):
+    """Atomic request counter for one Access Key period."""
+
+    __tablename__ = "access_key_usage_windows"
+
+    access_key_id: Mapped[str] = mapped_column(
+        ForeignKey("access_keys.id"),
+        primary_key=True,
+    )
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        primary_key=True,
+    )
+    period_seconds: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -474,9 +525,12 @@ class McpSessionAffinity(Base):
         index=True,
     )
     corpus_version: Mapped[str] = mapped_column(String(128), nullable=False)
-    capability_id: Mapped[str] = mapped_column(
+    capability_id: Mapped[str | None] = mapped_column(
         ForeignKey("dsh_capabilities.id"),
-        nullable=False,
+        index=True,
+    )
+    access_key_id: Mapped[str | None] = mapped_column(
+        ForeignKey("access_keys.id"),
         index=True,
     )
     expires_at: Mapped[datetime] = mapped_column(
@@ -493,6 +547,14 @@ class McpSessionAffinity(Base):
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(capability_id IS NOT NULL AND access_key_id IS NULL) OR "
+            "(capability_id IS NULL AND access_key_id IS NOT NULL)",
+            name="ck_mcp_affinity_credential",
+        ),
     )
 
 
@@ -542,6 +604,7 @@ class AuditEvent(Base):
     principal_id: Mapped[str | None] = mapped_column(String(48), index=True)
     tenant_id: Mapped[str | None] = mapped_column(String(48), index=True)
     capability_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    access_key_id: Mapped[str | None] = mapped_column(String(48), index=True)
     mcp_session_digest: Mapped[str | None] = mapped_column(String(128), index=True)
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)

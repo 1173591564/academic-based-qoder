@@ -40,11 +40,10 @@ def capability_body(capability: DshCapability) -> dict[str, object]:
             else None
         ),
         "created_at": capability.created_at.isoformat(),
-        "version": capability.version,
         "etag": resource_etag(
             "capability",
             capability.id,
-            capability.version,
+            capability.revoked_at or capability.created_at,
         ),
     }
 
@@ -117,7 +116,7 @@ def build_capability_router(
         require_current_etag(
             "capability",
             capability.id,
-            capability.version,
+            capability.revoked_at or capability.created_at,
             if_match,
         )
         if capability.revoked_at is not None:
@@ -127,12 +126,10 @@ def build_capability_router(
             update(DshCapability)
             .where(
                 DshCapability.id == capability.id,
-                DshCapability.version == capability.version,
                 DshCapability.revoked_at.is_(None),
             )
             .values(
                 revoked_at=revoked_at,
-                version=capability.version + 1,
             )
             .returning(DshCapability.id)
         )

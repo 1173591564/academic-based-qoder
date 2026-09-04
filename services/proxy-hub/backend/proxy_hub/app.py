@@ -16,26 +16,21 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.base import RequestResponseEndpoint
 
 from proxy_hub.admin import build_admin_router
-from proxy_hub.admin_rate_limit import consume_admin_request
-from proxy_hub.audit import AuditEntry, append_audit_event
-from proxy_hub.auth import build_auth_components, ensure_utc
+from proxy_hub.auth import build_auth_components
 from proxy_hub.circuit import BackendCircuitBreaker
 from proxy_hub.config import Settings, get_settings
 from proxy_hub.database import Database, create_database
 from proxy_hub.errors import (
     HubError,
-    error_response,
     hub_error_handler,
     unexpected_error_handler,
     validation_error_handler,
 )
 from proxy_hub.health import build_health_router
 from proxy_hub.mcp_gateway import build_mcp_gateway_router
-from proxy_hub.models import BrowserSession, utc_now
 from proxy_hub.production_check import assert_migrations_current
 from proxy_hub.quota import DatabaseQuotaService, QuotaService
 from proxy_hub.secrets import EnvironmentSecretResolver, SecretResolver
-from proxy_hub.security import digest_token
 from proxy_hub.session import build_session_router
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
@@ -126,79 +121,8 @@ def create_app(
             else f"req_{uuid4().hex}"
         )
         request.state.request_id = request_id
-        rate_headers: dict[str, str] = {}
-        if request.url.path.startswith("/v1/admin"):
-            raw_session = request.cookies.get(active_settings.cookie_name)
-            if raw_session is not None:
-                rate_session = resources.database.sessions()
-                try:
-                    browser_session = rate_session.get(
-                        BrowserSession,
-                        digest_token(raw_session),
-                    )
-                    now = utc_now()
-                    if (
-                        browser_session is not None
-                        and browser_session.revoked_at is None
-                        and ensure_utc(browser_session.expires_at) > now
-                    ):
-                        decision = consume_admin_request(
-                            rate_session,
-                            browser_session.id,
-                            request_limit=(active_settings.admin_rate_limit_requests),
-                            period_seconds=(
-                                active_settings.admin_rate_limit_period_seconds
-                            ),
-                            at=now,
-                        )
-                        rate_headers = {
-                            "RateLimit-Limit": str(
-                                active_settings.admin_rate_limit_requests
-                            ),
-                            "RateLimit-Remaining": str(decision.remaining),
-                            "RateLimit-Reset": str(decision.retry_after_seconds),
-                        }
-                        if not decision.allowed:
-                            append_audit_event(
-                                rate_session,
-                                AuditEntry(
-                                    request_id=request_id,
-                                    principal_id=browser_session.principal_id,
-                                    action="admin:rate_limit",
-                                    resource_type="administration_api",
-                                    outcome="rejected",
-                                    decision="deny",
-                                    details={"reason": "rate_limit_exceeded"},
-                                ),
-                            )
-                            rate_session.commit()
-                            return error_response(
-                                request,
-                                429,
-                                "admin_rate_limit_exceeded",
-                                "The administration request rate is exhausted.",
-                                {
-                                    **rate_headers,
-                                    "Retry-After": str(decision.retry_after_seconds),
-                                    "X-Request-ID": request_id,
-                                },
-                            )
-                        rate_session.commit()
-                except Exception:
-                    rate_session.rollback()
-                    return error_response(
-                        request,
-                        503,
-                        "control_plane_unavailable",
-                        "The administration control plane is unavailable.",
-                        {"X-Request-ID": request_id},
-                    )
-                finally:
-                    rate_session.close()
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
-        for name, value in rate_headers.items():
-            response.headers[name] = value
         return response
 
     app.add_exception_handler(HubError, hub_error_handler)

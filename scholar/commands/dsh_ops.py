@@ -23,18 +23,17 @@
   scholar init-dsh --uninstall    # 卸载（删 patch 段 + 预设目录）
 """
 
-import getpass
-import ipaddress
 import json
 import os
 import re
 import shutil
 import sys
+import ipaddress
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from urllib.parse import urlparse, urlsplit
 from urllib.error import HTTPError as _HTTPError
 from urllib.error import URLError as _URLError
-from urllib.parse import urlparse, urlsplit
 from urllib.request import Request as _Request
 from urllib.request import urlopen as _urlopen
 
@@ -51,6 +50,7 @@ console = Console()
 MARKER = "# >>> scholar"
 END_MARKER = "# <<< scholar"
 DEFAULT_REMOTE_TOKEN_REF = "SCHOLAR_REMOTE_TOKEN"
+DEFAULT_GATEWAY_URL = "http://47.108.198.147:8081/v1/mcp/scholar"
 _CREDENTIAL_REF = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -292,7 +292,7 @@ def _ensure_scholar_assets(
     return actions
 
 
-def _validated_remote_url(value: str) -> str:
+def _validated_remote_url(value: str, *, allow_http: bool = False) -> str:
     try:
         parsed = urlparse(value)
         hostname = parsed.hostname or ""
@@ -315,6 +315,12 @@ def _validated_remote_url(value: str) -> str:
                 return value
         except ValueError:
             pass
+        if allow_http:
+            console.print(
+                "[yellow]警告：网关为 HTTP。production 模式的 Proxy Hub "
+                "会强制 HTTPS origin，届时请改用 https 地址重跑。[/]"
+            )
+            return value
     raise typer.BadParameter(
         "remote MCP URL must use HTTPS, or HTTP on a numeric loopback address for an SSH tunnel"
     )
@@ -671,23 +677,31 @@ def _exchange_capability(
     return token, expires
 
 
-def _read_enrolment_code(code_stdin: bool) -> str:
-    if code_stdin:
-        return sys.stdin.readline().rstrip("\r\n")
-    if not sys.stdin.isatty():
-        raise typer.BadParameter(
-            "非交互输入必须使用 --code-stdin，避免兑换码被终端回显"
-        )
-    return getpass.getpass("请输入一次性 enrolment code: ").strip()
+def _validated_access_key(value: str) -> str:
+    """Validate the Scholar Access Key format before storing it."""
+    access_key = value.strip()
+    if not access_key:
+        raise typer.BadParameter("Access Key 为空")
+    if not access_key.startswith("sk_scholar_v1_"):
+        raise typer.BadParameter("Access Key 格式无效，应以 sk_scholar_v1_ 开头")
+    return access_key
 
 
 @app.command(name="gateway-login")
 def gateway_login(
+    code: str = typer.Option(
+        None, "--code", help="Proxy Hub 一次性 enrolment 兑换码（管理员发放）"
+    ),
     code_stdin: bool = typer.Option(False, "--code-stdin", help="从标准输入读取兑换码"),
+    api_key_stdin: bool = typer.Option(
+        False,
+        "--api-key-stdin",
+        help="从标准输入读取 Scholar Access Key（推荐）",
+    ),
     gateway: str = typer.Option(
         None,
         "--gateway",
-        help="Proxy Hub 网关 MCP URL（公网必须使用 HTTPS）",
+        help="Proxy Hub 网关 MCP URL（默认 http://47.108.198.147:8081/v1/mcp/scholar）",
     ),
     dsh_home: Path = typer.Option(None, "--dsh-home", help="dsh 配置根（默认 ~/.dsh）"),
     scholar_home: Path = typer.Option(None, "--scholar-home", help="知识库根"),
@@ -697,14 +711,13 @@ def gateway_login(
     token_env: str = typer.Option(
         DEFAULT_REMOTE_TOKEN_REF,
         "--token-env",
-        help="capability 存入 dsh credentials 的引用名",
+        help="Access Key 或 capability 存入 dsh credentials 的引用名",
     ),
 ):
-    """Proxy Hub 网关接入：一次性兑换码 → capability → 写入学术模式配置。
+    """保存 Scholar Access Key 并写入 Proxy Hub 学术模式配置。
 
-    等价于 init-dsh --remote <gateway>，外加用兑换码换取短期 capability
-    并存入 dsh credentials。capability 到期后重跑本命令换新码即可，
-    配置无需改动。
+    默认隐藏读取管理员签发的 Access Key。--api-key-stdin 适合安装器；
+    --code 与 --code-stdin 保留用于旧 enrolment/capability 流程。
     """
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
     scholar_home = Path(scholar_home) if scholar_home else Path(config.SCHOLAR_HOME)
@@ -712,17 +725,31 @@ def gateway_login(
     py = str(python_cmd) if python_cmd else sys.executable
     patch = _patch_path(dsh_home, profile)
     dev_tree = _detect_dev_tree(scholar_home)
-    if not gateway:
-        raise typer.BadParameter("需要 --gateway 提供 Proxy Hub 网关 MCP URL")
-    gateway_url = _validated_remote_url(gateway)
+    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL, allow_http=True)
     token_ref = _validated_credential_ref(token_env)
-    code_value = _read_enrolment_code(code_stdin)
-    if not code_value:
-        raise typer.BadParameter("兑换码为空")
-
-    console.print("[cyan]正在兑换 capability ...[/]")
-    token_value, expires_at = _exchange_capability(gateway_url, code_value)
-    console.print(f"[green][OK][/] capability 已签发（到期：{expires_at or '见 Hub'}）")
+    if code_stdin and code:
+        raise typer.BadParameter("--code 与 --code-stdin 二选一")
+    if api_key_stdin and (code_stdin or code):
+        raise typer.BadParameter(
+            "--api-key-stdin 不能与 --code 或 --code-stdin 同时使用"
+        )
+    legacy_capability = code_stdin or bool(code)
+    if legacy_capability:
+        code_value = sys.stdin.readline().rstrip("\r\n") if code_stdin else code.strip()
+        if not code_value:
+            raise typer.BadParameter("兑换码为空")
+        console.print("[cyan]正在兑换 capability ...[/]")
+        token_value, expires_at = _exchange_capability(gateway_url, code_value)
+        console.print(
+            f"[green][OK][/] capability 已签发（到期：{expires_at or '见 Hub'}）"
+        )
+    else:
+        supplied_key = (
+            sys.stdin.readline().rstrip("\r\n")
+            if api_key_stdin
+            else typer.prompt("请输入 Scholar Access Key", hide_input=True)
+        )
+        token_value = _validated_access_key(supplied_key)
 
     for action in _ensure_scholar_assets(scholar_home, include_runtime_dirs=False):
         console.print(f"[green][OK][/] {action}")
@@ -782,11 +809,15 @@ def gateway_login(
     console.print(f"[green][OK][/] academic preset written @ {pdir}")
     for r in rules_actions:
         console.print(f"[green][OK][/] {r}")
-    console.print(
-        "[green][OK][/] capability credential stored（到期自动失效后重跑本命令换新）"
-    )
+    if legacy_capability:
+        console.print(
+            "[green][OK][/] capability credential stored"
+            "（到期自动失效后重跑本命令换新）"
+        )
+    else:
+        console.print("[green][OK][/] Scholar Access Key 已安全保存")
     console.print(f"\n[bold]Proxy Hub 网关模式[/]：MCP 端点 = {gateway_url}")
-    console.print(f"capability 凭据引用：{token_ref}")
+    console.print(f"Bearer 凭据引用：{token_ref}")
     console.print("\n验证：")
     console.print('  dsh --profile headless "用 scholar 工具查一下知识库规模"')
     console.print("  Web UI → 设置 → Agent 预设 → 自定义 →「学术模式」开新会话")

@@ -21,6 +21,7 @@ class AuditEntry:
     principal_id: str | None = None
     tenant_id: str | None = None
     capability_id: str | None = None
+    access_key_id: str | None = None
     mcp_session_digest: str | None = None
     resource_id: str | None = None
     tool_name: str | None = None
@@ -54,6 +55,7 @@ def append_audit_event(session: Session, entry: AuditEntry) -> AuditEvent:
         principal_id=entry.principal_id,
         tenant_id=entry.tenant_id,
         capability_id=entry.capability_id,
+        access_key_id=entry.access_key_id,
         mcp_session_digest=entry.mcp_session_digest,
         action=entry.action,
         resource_type=entry.resource_type,

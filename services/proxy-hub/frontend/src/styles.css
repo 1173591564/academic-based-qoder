@@ -1362,6 +1362,191 @@ input::placeholder {
   grid-column: 1 / -1;
 }
 
+.researcher-panel {
+  margin-bottom: 18px;
+}
+
+.researcher-panel .panel-heading p {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.researcher-list {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.researcher-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(39 56 50 / 4%);
+}
+
+.researcher-card > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 17px 18px;
+  background: var(--surface-subtle);
+}
+
+.researcher-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.access-key-list {
+  display: grid;
+}
+
+.access-key-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.9fr) auto minmax(190px, 0.8fr) minmax(220px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 15px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.key-metadata {
+  display: grid;
+  gap: 3px;
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tool-chips span {
+  max-width: 100%;
+  padding: 4px 7px;
+  overflow: hidden;
+  color: #416158;
+  font-family: var(--mono);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #d7e8e2;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.issued-key {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid #a9d3c4;
+  border-radius: 13px;
+  background: #f0faf6;
+  box-shadow: 0 12px 30px rgb(35 116 93 / 8%);
+}
+
+.issued-key h2 {
+  margin: 4px 0;
+}
+
+.issued-key p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.issued-key > code {
+  padding: 13px 15px;
+  overflow: auto;
+  color: #143a30;
+  font-size: 12px;
+  border: 1px solid #c5e4d9;
+  border-radius: 9px;
+  background: #fff;
+  user-select: all;
+}
+
+.issued-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.issued-key .key-command {
+  padding-top: 2px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.tool-selector {
+  margin: 10px 0 22px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.tool-selector legend {
+  padding: 0 6px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.tool-selector > p {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+.tool-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.tool-option-grid label {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 9px;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 9px;
+  border: 1px solid #e3e9e6;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.tool-option-grid input {
+  width: auto;
+  margin: 0;
+}
+
+.tool-option-grid span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .record-list {
   display: grid;
 }
@@ -1694,6 +1879,43 @@ input::placeholder {
 
   .responsive-table tbody tr.interactive-row:focus-visible {
     outline-offset: 2px;
+  }
+
+  .researcher-card > header,
+  .access-key-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .researcher-card > header .inline-actions,
+  .access-key-row > .inline-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .form-grid,
+  .tool-option-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .issued-key {
+    padding: 18px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1240px) {
+  .access-key-row {
+    grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  }
+
+  .access-key-row > .tool-chips {
+    grid-column: 1 / 3;
+  }
+
+  .access-key-row > .inline-actions {
+    grid-column: 3;
+    grid-row: 2;
+    justify-content: flex-end;
   }
 }
 

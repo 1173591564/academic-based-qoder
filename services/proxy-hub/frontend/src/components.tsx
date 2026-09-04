@@ -91,7 +91,8 @@ export function StatusPill({ status }: { status: string }) {
             status === "denied" ||
             status === "failed" ||
             status === "rejected" ||
-            status === "revoked"
+            status === "revoked" ||
+            status === "expired"
           ? "disabled"
           : "neutral";
   return (

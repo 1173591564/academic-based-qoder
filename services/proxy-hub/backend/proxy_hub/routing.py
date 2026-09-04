@@ -77,10 +77,11 @@ def _select_backend(
 def resolve_route(
     session: Session,
     tenant_id: str,
-    capability_id: str,
+    credential_id: str,
     at: datetime,
     max_probe_age: timedelta,
     *,
+    credential_kind: str = "capability",
     mcp_session_digest: str | None = None,
 ) -> RouteSelection:
     """Resolve an explicit active route or a valid existing affinity."""
@@ -97,7 +98,16 @@ def resolve_route(
         affinity = session.get(McpSessionAffinity, mcp_session_digest)
         if affinity is None or _as_utc(affinity.expires_at) <= _as_utc(at):
             raise RouteResolutionError("session_affinity_missing")
-        if affinity.tenant_id != tenant_id or affinity.capability_id != capability_id:
+        affinity_credential_id = (
+            affinity.capability_id
+            if credential_kind == "capability"
+            else affinity.access_key_id
+        )
+        if (
+            credential_kind not in {"capability", "access_key"}
+            or affinity.tenant_id != tenant_id
+            or affinity_credential_id != credential_id
+        ):
             raise RouteResolutionError("session_affinity_mismatch")
         backend = session.get(ScholarBackend, affinity.backend_id)
         if backend is None:

@@ -280,13 +280,9 @@ def build_session_router(
             update(DshCapability)
             .where(
                 DshCapability.id == capability.id,
-                DshCapability.version == capability.version,
                 DshCapability.revoked_at.is_(None),
             )
-            .values(
-                revoked_at=revoked_at,
-                version=capability.version + 1,
-            )
+            .values(revoked_at=revoked_at)
             .returning(DshCapability.id)
         )
         if revoked_id is None:

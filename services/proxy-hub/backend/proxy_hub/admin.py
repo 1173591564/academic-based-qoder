@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from proxy_hub.access_keys import build_access_key_router
 from proxy_hub.admin_backends import build_backend_router
 from proxy_hub.admin_capabilities import build_capability_router
 from proxy_hub.admin_iam import build_iam_router
@@ -83,8 +84,9 @@ def build_admin_router(
     """Build administration routes bound to application resources."""
     router = APIRouter(prefix="/v1/admin", tags=["administration"])
     router.include_router(build_iam_router(database, auth))
-    router.include_router(build_enrolment_router(database, auth))
     router.include_router(build_capability_router(database, auth))
+    router.include_router(build_access_key_router(database, auth))
+    router.include_router(build_enrolment_router(database, auth))
     router.include_router(
         build_backend_router(
             database,
