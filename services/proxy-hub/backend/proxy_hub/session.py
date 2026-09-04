@@ -5,12 +5,13 @@ from datetime import datetime, timedelta
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from proxy_hub.audit import AuditEntry, append_audit_event
+from proxy_hub.capabilities import authenticate_capability
 from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
 from proxy_hub.eligibility import active_membership_exists
@@ -18,6 +19,7 @@ from proxy_hub.errors import HubError, request_id
 from proxy_hub.models import (
     DshCapability,
     EnrolmentToken,
+    McpSessionAffinity,
     Principal,
     QuotaPolicy,
     QuotaWindow,
@@ -244,12 +246,78 @@ def build_session_router(
             status_code=201,
             content={
                 "session_token": raw_capability,
+                "session_id": capability.id,
                 "expires_at": capability.expires_at.isoformat(),
                 "subject": {"user_id": principal.id},
                 "tenant": {"tenant_id": tenant.id},
                 "scopes": scopes,
                 "quota": quota,
             },
+            headers={
+                "Cache-Control": "no-store",
+                "Pragma": "no-cache",
+            },
+        )
+
+    @router.delete("/v1/session", status_code=204)
+    def revoke_session(
+        request: Request,
+        session: Session = Depends(get_session),
+    ) -> Response:
+        context = authenticate_capability(
+            session,
+            request.headers.get("authorization"),
+        )
+        capability = session.get(DshCapability, context.capability_id)
+        if capability is None:
+            raise HubError(
+                401,
+                "invalid_credential",
+                "A valid DSH session capability is required.",
+            )
+        revoked_at = utc_now()
+        revoked_id = session.scalar(
+            update(DshCapability)
+            .where(
+                DshCapability.id == capability.id,
+                DshCapability.version == capability.version,
+                DshCapability.revoked_at.is_(None),
+            )
+            .values(
+                revoked_at=revoked_at,
+                version=capability.version + 1,
+            )
+            .returning(DshCapability.id)
+        )
+        if revoked_id is None:
+            raise HubError(
+                401,
+                "invalid_credential",
+                "A valid DSH session capability is required.",
+            )
+        session.execute(
+            delete(McpSessionAffinity).where(
+                McpSessionAffinity.capability_id == capability.id
+            )
+        )
+        append_audit_event(
+            session,
+            AuditEntry(
+                request_id=request_id(request),
+                principal_id=context.principal_id,
+                tenant_id=context.tenant_id,
+                capability_id=context.capability_id,
+                action="session:revoke",
+                resource_type="dsh_capability",
+                resource_id=context.capability_id,
+                outcome="accepted",
+                decision="permit",
+                details={"reason": "holder_revoked"},
+            ),
+        )
+        session.commit()
+        return Response(
+            status_code=204,
             headers={
                 "Cache-Control": "no-store",
                 "Pragma": "no-cache",

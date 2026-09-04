@@ -5,6 +5,7 @@ from datetime import timedelta
 from time import monotonic
 from typing import NoReturn
 
+import anyio
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from proxy_hub.audit import AuditEntry, append_audit_event
 from proxy_hub.capabilities import CapabilityContext, authenticate_capability
+from proxy_hub.circuit import BackendCircuitBreaker
 from proxy_hub.config import Settings
 from proxy_hub.database import Database, session_scope
 from proxy_hub.errors import HubError, request_id
@@ -56,6 +58,62 @@ AUDITABLE_PROTOCOL_METHODS = frozenset(
         "tools/call",
     }
 )
+
+
+class CircuitOpenError(Exception):
+    """An upstream backend circuit rejected a request."""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__("backend circuit is open")
+        self.retry_after_seconds = retry_after_seconds
+
+
+async def send_upstream(
+    client: httpx.AsyncClient,
+    circuit_breaker: BackendCircuitBreaker,
+    settings: Settings,
+    *,
+    backend_id: str,
+    method: str,
+    backend_url: str,
+    headers: dict[str, str],
+    body: bytes,
+) -> httpx.Response:
+    """Send one upstream request with safe-method retries and circuit isolation."""
+    decision = circuit_breaker.before_request(backend_id, at=utc_now())
+    if not decision.allowed:
+        raise CircuitOpenError(decision.retry_after_seconds)
+    retry_count = settings.backend_safe_retry_attempts if method == "GET" else 0
+    for attempt in range(retry_count + 1):
+        upstream_request = client.build_request(
+            method,
+            backend_url,
+            headers=headers,
+            content=body,
+        )
+        try:
+            response = await client.send(upstream_request, stream=True)
+        except httpx.HTTPError:
+            if attempt < retry_count:
+                await anyio.sleep(settings.backend_retry_backoff_seconds * (2**attempt))
+                continue
+            circuit_breaker.record_failure(backend_id, at=utc_now())
+            raise
+        failed = (
+            300 <= response.status_code < 400
+            or response.status_code >= 500
+            or response.status_code in {401, 403}
+        )
+        if failed and attempt < retry_count:
+            await response.aclose()
+            await anyio.sleep(settings.backend_retry_backoff_seconds * (2**attempt))
+            continue
+        if failed:
+            circuit_breaker.record_failure(backend_id, at=utc_now())
+        else:
+            circuit_breaker.record_success(backend_id)
+        return response
+    raise RuntimeError("unreachable upstream retry state")
 
 
 def append_gateway_audit(
@@ -162,6 +220,7 @@ def build_mcp_gateway_router(
     client: httpx.AsyncClient,
     secret_resolver: SecretResolver,
     quota_service: QuotaService,
+    circuit_breaker: BackendCircuitBreaker,
 ) -> APIRouter:
     """Create the authenticated Scholar Streamable HTTP gateway."""
     router = APIRouter()
@@ -365,12 +424,6 @@ def build_mcp_gateway_router(
                 mcp_session_digest=session_digest,
             )
 
-        upstream_request = client.build_request(
-            request.method,
-            backend_url,
-            headers=request_headers(request, service_credential),
-            content=body,
-        )
         try:
             reservation = quota_service.reserve(
                 session,
@@ -421,8 +474,46 @@ def build_mcp_gateway_router(
 
         started_at = monotonic()
         try:
-            upstream = await client.send(upstream_request, stream=True)
+            upstream = await send_upstream(
+                client,
+                circuit_breaker,
+                settings,
+                backend_id=selection.backend_id,
+                method=request.method,
+                backend_url=backend_url,
+                headers=request_headers(request, service_credential),
+                body=body,
+            )
+        except CircuitOpenError as error:
+            quota_service.complete(
+                session,
+                reservation,
+                succeeded=False,
+                at=utc_now(),
+            )
+            append_gateway_audit(
+                session,
+                request,
+                context=context,
+                outcome="rejected",
+                decision="deny",
+                reason="backend_circuit_open",
+                metadata=metadata,
+                selection=selection,
+                mcp_session_digest=session_digest,
+                latency_ms=int((monotonic() - started_at) * 1000),
+                result_class="circuit_open",
+                quota_delta=1 if reservation.enforced else None,
+            )
+            session.commit()
+            raise HubError(
+                503,
+                "backend_unavailable",
+                "No eligible Scholar backend is available.",
+                headers={"Retry-After": str(error.retry_after_seconds)},
+            ) from error
         except httpx.HTTPError as error:
+            timed_out = isinstance(error, httpx.TimeoutException)
             quota_service.complete(
                 session,
                 reservation,
@@ -435,18 +526,18 @@ def build_mcp_gateway_router(
                 context=context,
                 outcome="failed",
                 decision="permit",
-                reason="backend_request_failed",
+                reason="backend_timeout" if timed_out else "backend_request_failed",
                 metadata=metadata,
                 selection=selection,
                 mcp_session_digest=session_digest,
                 latency_ms=int((monotonic() - started_at) * 1000),
-                result_class="transport_error",
+                result_class="timeout" if timed_out else "transport_error",
                 quota_delta=1 if reservation.enforced else None,
             )
             session.commit()
             raise HubError(
-                502,
-                "backend_request_failed",
+                504 if timed_out else 502,
+                "backend_timeout" if timed_out else "backend_request_failed",
                 "The Scholar backend request failed.",
             ) from error
         if 300 <= upstream.status_code < 400:
@@ -504,6 +595,28 @@ def build_mcp_gateway_router(
                 502,
                 "backend_request_failed",
                 "The Scholar backend request failed.",
+            )
+        declared_size = response_size(upstream)
+        if (
+            declared_size is not None
+            and declared_size > settings.mcp_response_max_bytes
+        ):
+            await upstream.aclose()
+            deny_gateway(
+                session,
+                request,
+                HubError(
+                    502,
+                    "backend_response_too_large",
+                    "The Scholar backend response exceeds the configured limit.",
+                ),
+                context=context,
+                reason="backend_response_too_large",
+                metadata=metadata,
+                selection=selection,
+                mcp_session_digest=session_digest,
+                quota_service=quota_service,
+                reservation=reservation,
             )
 
         try:
@@ -656,6 +769,7 @@ def build_mcp_gateway_router(
                 quota_service,
                 reservation,
                 refresh_seconds=settings.quota_reservation_ttl_seconds / 2,
+                maximum_bytes=settings.mcp_response_max_bytes,
             ),
             status_code=upstream.status_code,
             headers=response_headers(upstream),

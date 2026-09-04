@@ -61,6 +61,16 @@ def api_harness(monkeypatch: pytest.MonkeyPatch) -> ApiHarness:
                     "workspace_isolation": "tenant",
                 },
             )
+        if request.url.path.endswith("/mcp"):
+            assert request.headers["authorization"] == ("Bearer scholar-service-token")
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {"content": [{"type": "text", "text": "ok"}]},
+                },
+            )
         return httpx.Response(404)
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(scholar_backend))

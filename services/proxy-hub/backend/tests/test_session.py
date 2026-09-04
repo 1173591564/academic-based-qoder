@@ -217,6 +217,62 @@ def test_enrolment_exchange_returns_secret_once_and_persists_only_digest(
         assert context.scopes == ("scholar_info", "scholar_search")
 
 
+def test_capability_holder_can_revoke_session(api_harness: ApiHarness) -> None:
+    subject = seed_session_subject(api_harness)
+    created = exchange_session(api_harness, subject)
+    raw_capability = created.json()["session_token"]
+    capability_id = created.json()["session_id"]
+
+    revoked = api_harness.client.delete(
+        "/v1/session",
+        headers={"Authorization": f"Bearer {raw_capability}"},
+    )
+    repeated = api_harness.client.delete(
+        "/v1/session",
+        headers={"Authorization": f"Bearer {raw_capability}"},
+    )
+
+    assert revoked.status_code == 204
+    assert revoked.headers["cache-control"] == "no-store"
+    assert repeated.status_code == 401
+    with Session(api_harness.engine) as session:
+        capability = session.get(DshCapability, capability_id)
+        assert capability is not None
+        assert capability.revoked_at is not None
+        audit = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "session:revoke")
+        )
+        assert audit is not None
+        assert audit.capability_id == capability_id
+        assert raw_capability not in str(audit.details)
+
+
+def test_holder_revocation_rolls_back_when_audit_fails(
+    api_harness: ApiHarness,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = seed_session_subject(api_harness)
+    created = exchange_session(api_harness, subject)
+    raw_capability = created.json()["session_token"]
+    capability_id = created.json()["session_id"]
+
+    def fail_audit(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr("proxy_hub.session.append_audit_event", fail_audit)
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        api_harness.client.delete(
+            "/v1/session",
+            headers={"Authorization": f"Bearer {raw_capability}"},
+        )
+
+    with Session(api_harness.engine) as session:
+        capability = session.get(DshCapability, capability_id)
+        assert capability is not None
+        assert capability.revoked_at is None
+        assert capability.version == 1
+
+
 def test_enrolment_exchange_reports_unconfigured_quota(
     api_harness: ApiHarness,
 ) -> None:
