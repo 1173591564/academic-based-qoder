@@ -16,6 +16,23 @@ def test_partial_oidc_configuration_is_rejected() -> None:
         Settings(oidc_client_id="client")
 
 
+def test_empty_single_lab_configuration_is_unset() -> None:
+    settings = Settings(
+        single_lab_backend_url="",
+        single_lab_corpus_version="",
+        single_lab_backend_credential_ref="",
+    )
+
+    assert settings.single_lab_backend_url is None
+    assert settings.single_lab_corpus_version is None
+    assert settings.single_lab_backend_credential_ref is None
+
+
+def test_partial_single_lab_configuration_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings(single_lab_backend_url="https://scholar.example.com/mcp")
+
+
 def test_capability_ttl_is_bounded() -> None:
     with pytest.raises(ValidationError):
         Settings(capability_ttl_seconds=299)
