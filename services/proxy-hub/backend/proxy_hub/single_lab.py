@@ -189,7 +189,7 @@ async def maintain_single_lab_backend(
     secret_resolver: SecretResolver,
 ) -> None:
     """Keep the single Scholar Backend probe fresh while Proxy Hub is running."""
-    interval_seconds = max(5, settings.backend_probe_max_age_seconds // 2)
+    interval_seconds = max(1.0, settings.backend_probe_max_age_seconds / 2)
     while True:
         try:
             await refresh_single_lab_backend(
