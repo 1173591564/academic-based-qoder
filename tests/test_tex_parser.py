@@ -75,6 +75,24 @@ Ian Goodfellow et al.
         entries = parser._extract_bibliography("")
         assert entries == []
 
+    def test_bibtex_commas_remain_within_author_names(self, parser, tmp_path):
+        """BibTeX commas separate name parts, not people."""
+        (tmp_path / "refs.bib").write_text(
+            """
+@article{names,
+  title = {Names},
+  author = {Lovelace, Ada and Turing, Alan Mathison},
+  year = {2026}
+}
+""",
+            encoding="utf-8",
+        )
+        entries = parser._extract_bibliography("", tmp_path)
+        assert entries[0]["authors"] == [
+            "Ada Lovelace",
+            "Alan Mathison Turing",
+        ]
+
     def test_doi_extraction_from_url(self, parser, tmp_path):
         """Test DOI extraction from URL field in .bib."""
         bib_content = r"""
@@ -103,10 +121,10 @@ class TestExtractCitations:
         assert "devlin2019" in refs
         assert "he2016deep" in refs
 
-    def test_bibitem_citations(self, parser):
+    def test_bibitems_are_not_citation_mentions(self, parser):
         content = r"\bibitem{key2024} Author, Title, 2024."
         refs = parser._extract_citations(content)
-        assert "key2024" in refs
+        assert refs == []
 
     def test_no_citations(self, parser):
         content = "This text has no citations."

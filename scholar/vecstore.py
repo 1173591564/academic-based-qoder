@@ -230,7 +230,7 @@ def search_passages(
             where.append("section ILIKE %s")
             params.append(f"%{section}%")
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-        params = [emb_str, emb_str, *params, k]
+        params = [emb_str, *params, emb_str, k]
         cur = conn.cursor()
         cur.execute(
             f"""

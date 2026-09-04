@@ -43,6 +43,12 @@ scholar doctor
 - Client 不从 server 同步 corpus file 或 vector index。
 - Remote client 不需要 database 或 embedding-provider credential。
 
+## 解析产物
+
+TeX parser 生成通过 schema 校验的 vNext artifact，包含 parser lineage、source-file hash、带来源的 metadata assertion，以及结构化 warning/loss diagnostic。`save_parsed()` 将 vNext artifact 保存到 `parsed/vnext/`，并在原有 `parsed/<paper_id>.json` 位置写入显式 legacy projection，从而让现有 MCP 与 retrieval reader 保持稳定，同时继续扩展 evidence 字段。
+
+仓库内的合成 fixture corpus 与 golden artifact 覆盖 nested input、missing input、多语言文本、formula prefix collision、未引用 bibliography entry，以及逗号格式的 BibTeX author。
+
 ## MCP server
 
 启动 local stdio transport：
@@ -127,7 +133,7 @@ python -m pip wheel . --no-deps -w dist
 
 根目录 `Makefile` 也提供 Scholar、Proxy Hub backend、Proxy Hub frontend 与生成模板的独立检查入口。
 
-Tests 覆盖 path containment、malformed paper data、graph/index invalidation、authentication、MCP initialization、16-tool catalog、lexical 与 semantic search、DSH clean-home installation、credential storage、permission、existing-file preservation 与 rollback。
+Tests 覆盖 path containment、malformed paper data、parser golden artifact、graph/index invalidation、authentication、MCP initialization、16-tool catalog、lexical 与 semantic search、pgvector PostgreSQL scoped passage SQL、DSH clean-home installation、credential storage、permission、existing-file preservation 与 rollback。
 
 ## 阶段边界
 
