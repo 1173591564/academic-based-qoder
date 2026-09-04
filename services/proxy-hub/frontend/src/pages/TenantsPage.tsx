@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { api, ApiError } from "../api";
+import { api, ApiError, idempotencyKey } from "../api";
 import {
   activateOnKeyDown,
   EmptyState,
@@ -120,7 +120,7 @@ export function TenantsPage({
     setErrorRequestId(null);
     try {
       const result = await api.post<Tenant>("/v1/admin/tenants", payload, {
-        "Idempotency-Key": crypto.randomUUID(),
+        "Idempotency-Key": idempotencyKey(),
       });
       setShowCreate(false);
       setNotice(

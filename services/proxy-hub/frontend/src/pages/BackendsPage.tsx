@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { api, ApiError } from "../api";
+import { api, ApiError, idempotencyKey } from "../api";
 import {
   activateOnKeyDown,
   EmptyState,
@@ -121,7 +121,7 @@ export function BackendsPage({ me }: { me: AdminMe }) {
           credential_version:
             String(form.get("credential_version") ?? "").trim() || null,
         },
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setModal(null);
       setNotice(backendResponse(result.data));

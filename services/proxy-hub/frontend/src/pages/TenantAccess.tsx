@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api, ApiError } from "../api";
+import { api, ApiError, idempotencyKey } from "../api";
 import {
   EmptyState,
   InlineAlert,
@@ -181,7 +181,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
           team_id: String(form.get("team_id") ?? "").trim() || null,
           ...keySettings(form),
         },
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setIssuedKey(result.data.access_key.access_key);
       setModal(null);
@@ -206,7 +206,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       const result = await api.post<ScholarAccessKey>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/researchers/${encodeURIComponent(selectedResearcher.id)}/access-keys`,
         keySettings(form),
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setIssuedKey(result.data.access_key);
       setModal(null);
@@ -270,7 +270,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
             Number(String(form.get("expires_in_days") ?? "30")) * 86400,
         },
         {
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": idempotencyKey(),
           "If-Match": selectedKey.etag,
         },
       );
@@ -340,7 +340,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
       const result = await api.post<Team>(
         `/v1/admin/tenants/${encodeURIComponent(tenantId)}/teams`,
         { name: String(form.get("name") ?? "").trim() },
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setModal(null);
       setNotice(
@@ -366,7 +366,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
           principal_id: String(form.get("principal_id") ?? "").trim(),
           team_id: String(form.get("team_id") ?? "").trim() || null,
         },
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setModal(null);
       setNotice(
@@ -392,7 +392,7 @@ export function TenantAccess({ tenantId }: { tenantId: string }) {
           principal_id: String(form.get("principal_id") ?? "").trim(),
           role: String(form.get("role") ?? ""),
         },
-        { "Idempotency-Key": crypto.randomUUID() },
+        { "Idempotency-Key": idempotencyKey() },
       );
       setModal(null);
       setNotice(
