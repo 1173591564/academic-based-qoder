@@ -11,7 +11,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy import Engine
+from sqlalchemy import Engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.base import RequestResponseEndpoint
 
@@ -32,6 +32,8 @@ from proxy_hub.production_check import assert_migrations_current
 from proxy_hub.quota import DatabaseQuotaService, QuotaService
 from proxy_hub.secrets import EnvironmentSecretResolver, SecretResolver
 from proxy_hub.session import build_session_router
+from proxy_hub.simple_tokens import build_token_user_router
+from proxy_hub.single_lab import bootstrap_single_lab
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
 
@@ -94,6 +96,10 @@ def create_app(
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if resources.settings.environment == "production":
             assert_migrations_current(resources.database.engine)
+        if resources.settings.environment != "test" or inspect(
+            resources.database.engine
+        ).has_table("tenants"):
+            bootstrap_single_lab(resources.database, resources.settings)
         yield
         if resources.owns_http_client:
             await resources.http_client.aclose()
@@ -139,6 +145,12 @@ def create_app(
             resources.secret_resolver,
             resources.quota_service,
             resources.circuit_breaker,
+        )
+    )
+    app.include_router(
+        build_token_user_router(
+            resources.database,
+            resources.settings,
         )
     )
     app.include_router(

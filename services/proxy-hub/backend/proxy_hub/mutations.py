@@ -1,6 +1,7 @@
 """Shared administration mutation integrity helpers."""
 
 from collections.abc import Collection, Mapping
+from datetime import datetime
 from hashlib import sha256
 from json import dumps
 
@@ -120,7 +121,7 @@ def idempotency_response(
 def require_current_etag(
     resource_type: str,
     resource_id: str,
-    version: int,
+    version: int | datetime,
     if_match: str | None,
 ) -> None:
     """Require the current strong ETag for a mutable resource."""

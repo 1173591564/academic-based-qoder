@@ -389,6 +389,10 @@ p {
   text-underline-offset: 3px;
 }
 
+.text-button.danger {
+  color: #a54843;
+}
+
 .secondary-button:disabled,
 .text-button:disabled {
   cursor: not-allowed;
@@ -400,6 +404,78 @@ p {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-bottom: 26px;
+}
+
+.service-metrics {
+  margin-top: 4px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 9px;
+  min-width: 210px;
+}
+
+.secret-display {
+  padding: 16px;
+  overflow-wrap: anywhere;
+  color: #173b31;
+  border: 1px solid #bed8cf;
+  border-radius: 10px;
+  background: #edf7f3;
+}
+
+.secret-display code {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.confirmation-field {
+  display: flex;
+  grid-template-columns: none;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid #e1d2b9;
+  border-radius: 9px;
+  background: #fff9ee;
+}
+
+.confirmation-field input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+}
+
+.transport-warning {
+  display: flex;
+  gap: 8px 18px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding: 14px 18px;
+  color: #75541f;
+  font-size: 13px;
+  border: 1px solid #e6cca1;
+  border-radius: 10px;
+  background: #fff8e9;
+}
+
+.status-detail dl {
+  margin: 0;
+  padding: 4px 22px 22px;
+}
+
+.request-id {
+  max-width: 180px;
+  overflow-wrap: anywhere;
+}
+
+.token-table th:last-child,
+.token-table td:last-child {
+  min-width: 250px;
 }
 
 .metric-card,

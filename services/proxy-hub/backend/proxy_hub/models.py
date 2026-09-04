@@ -66,6 +66,10 @@ class Principal(Base, Timestamped, Versioned):
     subject: Mapped[str] = mapped_column(String(512), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
     display_name: Mapped[str | None] = mapped_column(String(256))
+    managed_name_key: Mapped[str | None] = mapped_column(
+        String(256),
+        unique=True,
+    )
     kind: Mapped[str] = mapped_column(
         String(32),
         default="oidc_operator",
@@ -355,12 +359,16 @@ class AccessKey(Base, Timestamped, Versioned):
         index=True,
     )
     label: Mapped[str] = mapped_column(String(200), nullable=False)
+    token_name_key: Mapped[str | None] = mapped_column(String(256), index=True)
+    active_name_key: Mapped[str | None] = mapped_column(
+        String(256),
+        unique=True,
+    )
     allowed_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     request_limit: Mapped[int | None] = mapped_column(Integer)
     period_seconds: Mapped[int | None] = mapped_column(Integer)
-    expires_at: Mapped[datetime] = mapped_column(
+    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         index=True,
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

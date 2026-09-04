@@ -724,6 +724,9 @@ def build_mcp_gateway_router(
 
         if response_session is not None and 200 <= upstream.status_code < 300:
             response_digest = digest_token(response_session)
+            affinity_expires_at = context.expires_at or (
+                now + timedelta(seconds=settings.session_ttl_seconds)
+            )
             affinity = session.get(McpSessionAffinity, response_digest)
             if affinity is None:
                 affinity = McpSessionAffinity(
@@ -733,7 +736,7 @@ def build_mcp_gateway_router(
                     corpus_version=selection.corpus_version,
                     capability_id=context.capability_id,
                     access_key_id=context.access_key_id,
-                    expires_at=context.expires_at,
+                    expires_at=affinity_expires_at,
                     last_seen_at=now,
                 )
                 session.add(affinity)
@@ -763,7 +766,7 @@ def build_mcp_gateway_router(
                 )
             else:
                 affinity.last_seen_at = now
-                affinity.expires_at = context.expires_at
+                affinity.expires_at = affinity_expires_at
         if request.method == "DELETE" and session_digest is not None:
             affinity = session.get(McpSessionAffinity, session_digest)
             if affinity is not None and upstream.status_code < 500:

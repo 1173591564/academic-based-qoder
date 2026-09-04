@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 from conftest import ApiHarness
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from proxy_hub.admin_observability import integer_metric, numeric_metric
@@ -401,10 +402,10 @@ def test_global_usage_uses_stable_tenant_cursor(
 ) -> None:
     now = utc_now()
     with Session(api_harness.engine) as session:
-        first_tenant = add_tenant(session, "usage-first")
-        second_tenant = add_tenant(session, "usage-second")
+        add_tenant(session, "usage-first")
+        add_tenant(session, "usage-second")
         session.commit()
-        expected_ids = sorted([first_tenant.id, second_tenant.id])
+        expected_ids = sorted(session.scalars(select(Tenant.id)).all())
 
     first = api_harness.client.get(
         "/v1/admin/usage",
@@ -423,11 +424,22 @@ def test_global_usage_uses_stable_tenant_cursor(
             limit=1,
         ),
     )
+    third = api_harness.client.get(
+        "/v1/admin/usage",
+        params=range_params(
+            now - timedelta(hours=1),
+            now + timedelta(minutes=1),
+            cursor=second.json()["next_cursor"],
+            limit=1,
+        ),
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
+    assert third.status_code == 200
     assert [
         first.json()["items"][0]["tenant_id"],
         second.json()["items"][0]["tenant_id"],
+        third.json()["items"][0]["tenant_id"],
     ] == expected_ids
-    assert second.json()["next_cursor"] is None
+    assert third.json()["next_cursor"] is None

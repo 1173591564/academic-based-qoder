@@ -118,9 +118,7 @@ def test_researcher_creation_stores_only_digest_and_redacts_replay(
         assert context.capability_id is None
         assert context.scopes == ("scholar_info",)
 
-    listed = api_harness.client.get(
-        f"/v1/admin/tenants/{tenant_id}/access-keys"
-    )
+    listed = api_harness.client.get(f"/v1/admin/tenants/{tenant_id}/access-keys")
     assert listed.status_code == 200
     listed_key = listed.json()["items"][0]
     assert listed_key["access_key"] is None
@@ -170,10 +168,13 @@ def test_access_key_policy_rotation_revocation_and_researcher_disable(
             assert error.status_code == 401
         else:
             raise AssertionError("rotated Access Key remained valid")
-        assert authenticate_credential(
-            session,
-            f"Bearer {replacement_token}",
-        ).access_key_id == replacement["id"]
+        assert (
+            authenticate_credential(
+                session,
+                f"Bearer {replacement_token}",
+            ).access_key_id
+            == replacement["id"]
+        )
 
     disabled = api_harness.client.patch(
         f"/v1/admin/tenants/{tenant_id}/researchers/{researcher['id']}",

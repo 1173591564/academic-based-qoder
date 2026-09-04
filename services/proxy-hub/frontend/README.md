@@ -2,11 +2,15 @@
 
 The frontend is a React and TypeScript administration SPA built with Vite and served from `/console/` on the same origin as the Hub API.
 
-The console includes OIDC sign-in, overview, tenant detail, teams, memberships, role bindings, exact Scholar tool policy, quota policy, backend registry/readiness/credential rotation, explicit tenant routes, bounded audit, usage, and principal status administration.
+The console includes OIDC sign-in and three administrator pages:
 
-Navigation and controls are derived from capabilities returned by `/v1/admin/me`, but the frontend is never the security boundary. Direct navigation and every API mutation remain subject to server-side role and tenant scope checks.
+- Token management: create, copy once, rename, rotate, revoke, delete, and search Tokens;
+- Service status: Scholar availability, Corpus version, last check, and an explicit probe;
+- Audit log: timestamp, Token name, MCP Tool, result, latency, and Request ID.
 
-The browser stores no identity-provider access, refresh token, capability, or Scholar service credential in local storage. Mutations use the server-side session cookie, same-origin checks, the CSRF cookie and header pair, ETag/`If-Match` concurrency control, and `Idempotency-Key` for creation. Successful mutations display the returned server resource and refresh its ETag.
+Tenant, membership, policy, quota, route, backend credential, and Principal administration remain backend compatibility APIs and are not exposed in the single-lab console. The frontend is never the security boundary; every API mutation remains subject to the administrator role or allowlist.
+
+The browser stores no identity-provider access token, refresh token, raw Scholar Token, or Scholar Backend credential in local storage. Mutations use the server-side session cookie, same-origin checks, the CSRF cookie and header pair, ETag/`If-Match` concurrency control, and `Idempotency-Key`. A raw Token is rendered only from a create or rotate response, with copy feedback and a close confirmation when it has not been copied.
 
 ## Development
 

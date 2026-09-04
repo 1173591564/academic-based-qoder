@@ -12,6 +12,103 @@ export type Lang = "en" | "zh";
 const STORAGE_KEY = "proxy_hub_lang";
 
 const ZH: Record<string, string> = {
+  // ── simplified single-lab console ──
+  "Token management": "Token 管理",
+  "Service status": "服务状态",
+  "Audit log": "审计日志",
+  "Loading Proxy Hub": "正在加载 Proxy Hub",
+  "Administrator access": "管理员访问",
+  "Sign in with OIDC to manage Scholar Tokens.":
+    "使用 OIDC 登录以管理 Scholar Token。",
+  "Proxy Hub unavailable": "Proxy Hub 不可用",
+  "Administrator": "管理员",
+  "SCHOLAR ACCESS": "SCHOLAR 访问",
+  "Create one permanent Token per name. Full Token values are shown once.":
+    "每个名称创建一个永久 Token，完整 Token 仅显示一次。",
+  "Create Token": "创建 Token",
+  "A Token with this name already exists.": "已存在同名 Token。",
+  "Token creation failed.": "Token 创建失败。",
+  "Token name updated.": "Token 名称已更新。",
+  "Token rename failed.": "Token 重命名失败。",
+  "Confirm that the current Token will stop working.":
+    "请确认当前 Token 将停止工作。",
+  "Token rotation failed.": "Token 轮换失败。",
+  "Revoke this Token immediately?": "确定立即撤销此 Token 吗？",
+  "Token revoked.": "Token 已撤销。",
+  "Token revocation failed.": "Token 撤销失败。",
+  "Delete this Token and disable its managed identity? Audit history is retained.":
+    "确定删除此 Token 并停用其 Managed Identity 吗？审计历史将保留。",
+  "Token deleted. Audit history was retained.":
+    "Token 已删除，审计历史已保留。",
+  "Token deletion failed.": "Token 删除失败。",
+  "Token copied.": "Token 已复制。",
+  "Copy failed. Select and copy the Token manually.":
+    "复制失败，请手动选择并复制 Token。",
+  "This Token has not been copied. Close it permanently anyway?":
+    "此 Token 尚未复制，仍要永久关闭吗？",
+  "No Tokens": "暂无 Token",
+  "Create a Token to connect DSH Scholar mode.":
+    "创建 Token 以连接 DSH 学者模式。",
+  "Search Tokens": "搜索 Token",
+  "Search by Token name or prefix": "按 Token 名称或前缀搜索",
+  "Token name": "Token 名称",
+  "Token": "Token",
+  "Actions": "操作",
+  "Rename": "重命名",
+  "Rotate Token": "轮换 Token",
+  "Revoke Token": "撤销 Token",
+  "Delete": "删除",
+  "Rename Token": "重命名 Token",
+  "Renaming does not change the Token secret.":
+    "重命名不会改变 Token secret。",
+  "Save name": "保存名称",
+  "The Token is permanent until it is revoked or rotated.":
+    "Token 永久有效，直到被撤销或轮换。",
+  "Example: Literature group": "例如：文献组",
+  "The current Token stops working immediately. The replacement is shown once.":
+    "当前 Token 将立即失效，新 Token 仅显示一次。",
+  "I understand that the current Token will be revoked.":
+    "我了解当前 Token 将被撤销。",
+  "Save this Token now": "立即保存此 Token",
+  "Proxy Hub stores only a digest. This full Token cannot be shown again.":
+    "Proxy Hub 只保存摘要，完整 Token 之后无法再次显示。",
+  "Copied": "已复制",
+  "Copy Token": "复制 Token",
+  "SCHOLAR BACKEND": "SCHOLAR BACKEND",
+  "Current Scholar availability and Corpus version.":
+    "查看当前 Scholar 可用性与 Corpus 版本。",
+  "Checking…": "检查中…",
+  "Check again": "重新检查",
+  "Service check completed.": "服务检查完成。",
+  "Service check failed.": "服务检查失败。",
+  "Development HTTP is enabled.": "已启用开发用 HTTP。",
+  "Tokens are transmitted in plaintext. Use only revocable test Tokens.":
+    "Token 将以明文传输，请仅使用可撤销的测试 Token。",
+  "Availability": "可用性",
+  "Available": "可用",
+  "Unavailable": "不可用",
+  "Scholar requests can be routed.": "Scholar 请求可以正常路由。",
+  "Scholar requests cannot be routed.": "Scholar 请求当前无法路由。",
+  "Version reported by the active Scholar route":
+    "当前 Scholar route 报告的版本",
+  "Last checked": "最近检查",
+  "Never": "从未",
+  "Run a service check": "运行服务检查",
+  "CURRENT STATE": "当前状态",
+  "Scholar service": "Scholar 服务",
+  "180-DAY RETENTION": "保留 180 天",
+  "Token name, MCP Tool, result, latency, and Request ID. Research content is never stored.":
+    "仅记录 Token 名称、MCP Tool、结果、延迟和 Request ID，不保存研究内容。",
+  "Scholar MCP Tool calls from the last 24 hours will appear here.":
+    "最近 24 小时的 Scholar MCP Tool 调用将显示在这里。",
+  "Search audit log": "搜索审计日志",
+  "Search by Token, MCP Tool, result, or Request ID":
+    "按 Token、MCP Tool、结果或 Request ID 搜索",
+  "MCP Tool": "MCP Tool",
+  "Result": "结果",
+  "Request ID": "Request ID",
+  "Unknown Token": "未知 Token",
+
   // ── chrome ──
   "Overview": "总览",
   "Tenants": "租户",

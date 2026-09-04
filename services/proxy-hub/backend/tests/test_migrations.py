@@ -64,6 +64,38 @@ def test_migrated_audit_table_rejects_updates_and_deletes(tmp_path: Path) -> Non
     ):
         connection.execute(text("DELETE FROM audit_events WHERE id = 'audit_test'"))
 
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO audit_events (
+                    id,
+                    occurred_at,
+                    request_id,
+                    action,
+                    resource_type,
+                    outcome,
+                    details
+                ) VALUES (
+                    'audit_expired',
+                    datetime('now', '-181 days'),
+                    'req_expired',
+                    'test',
+                    'test',
+                    'accepted',
+                    '{}'
+                )
+                """
+            )
+        )
+        connection.execute(text("DELETE FROM audit_events WHERE id = 'audit_expired'"))
+        assert (
+            connection.scalar(
+                text("SELECT COUNT(*) FROM audit_events WHERE id = 'audit_expired'")
+            )
+            == 0
+        )
+
     engine.dispose()
 
 
@@ -117,6 +149,25 @@ def test_gateway_state_migration_upgrades_and_downgrades(tmp_path: Path) -> None
     assert "last_probe_reason" in {
         column["name"] for column in inspector.get_columns("scholar_backends")
     }
+    access_key_columns = {
+        column["name"]: column for column in inspector.get_columns("access_keys")
+    }
+    assert {
+        "token_name_key",
+        "active_name_key",
+    }.issubset(access_key_columns)
+    assert access_key_columns["expires_at"]["nullable"] is True
+    assert "managed_name_key" in {
+        column["name"] for column in inspector.get_columns("principals")
+    }
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("access_keys")
+    } >= {"uq_access_keys_active_name_key"}
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("principals")
+    } >= {"uq_principals_managed_name_key"}
 
     command.downgrade(config, "d737c231b0eb")
 

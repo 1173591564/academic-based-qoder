@@ -2,11 +2,11 @@
 
 import io
 import json
-
 from pathlib import Path
 
-import yaml
 import typer
+import yaml
+from click import unstyle
 from typer.testing import CliRunner
 
 from scholar.commands import dsh_ops
@@ -84,22 +84,33 @@ def test_gateway_login_exchanges_and_stores_capability(tmp_path, monkeypatch):
     assert "2026-10-01" in result.output
 
 
-def test_gateway_login_stores_direct_access_key_without_exchange(
+def test_gateway_login_validates_and_stores_direct_token(
     tmp_path, monkeypatch
 ):
     scholar_home = tmp_path / "scholar"
     dsh_home = tmp_path / "dsh"
-    access_key = "sk_scholar_v1_direct-key-not-in-argv"
+    token = "opaque-token-not-in-argv"
+    captured = {}
 
-    def unexpected_urlopen(req, timeout=None):
-        raise AssertionError(f"unexpected request to {req.full_url}")
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["authorization"] = req.headers["Authorization"]
+        return _FakeResponse(
+            {
+                "name": "Literature Group",
+                "scholar_available": True,
+            }
+        )
 
-    monkeypatch.setattr(dsh_ops, "_urlopen", unexpected_urlopen)
+    monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        dsh_ops,
+        "DEFAULT_GATEWAY_URL",
+        "https://hub.example.test/v1/mcp/scholar",
+    )
     result = invoke_gateway_login(
         [
             "--api-key-stdin",
-            "--gateway",
-            "https://hub.example.test/v1/mcp/scholar",
             "--scholar-home",
             str(scholar_home),
             "--dsh-home",
@@ -107,21 +118,101 @@ def test_gateway_login_stores_direct_access_key_without_exchange(
             "--workspace",
             str(tmp_path / "workspace"),
         ],
-        input=f"{access_key}\n",
+        input=f"{token}\n",
     )
     assert result.exit_code == 0, result.output
+    assert captured == {
+        "url": "https://hub.example.test/v1/me",
+        "authorization": f"Bearer {token}",
+    }
     document = yaml.safe_load(
         (dsh_home / ".credentials.yaml").read_text(encoding="utf-8")
     )
-    assert document[dsh_ops.DEFAULT_REMOTE_TOKEN_REF] == access_key
+    assert document[dsh_ops.DEFAULT_REMOTE_TOKEN_REF] == token
     config_text = (
         dsh_home / "profiles" / "headless" / "cordis.patch.yml"
     ).read_text(encoding="utf-8")
-    assert access_key not in config_text + result.output
-    assert "Scholar Access Key 已安全保存" in result.output
+    assert token not in config_text + result.output
+    assert "Token 名称：Literature Group" in result.output
+    assert "Scholar Token 已保存为 Managed Credential" in result.output
 
 
-def test_gateway_login_rejects_invalid_direct_access_key(tmp_path):
+def test_gateway_login_rejects_invalid_token_before_persistence(tmp_path, monkeypatch):
+    def fake_urlopen(req, timeout=None):
+        raise dsh_ops._HTTPError(
+            req.full_url,
+            401,
+            "Unauthorized",
+            {},
+            io.BytesIO(b'{"detail":"invalid credential"}'),
+        )
+
+    monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        dsh_ops,
+        "DEFAULT_GATEWAY_URL",
+        "https://hub.example.test/v1/mcp/scholar",
+    )
+    result = invoke_gateway_login(
+        [
+            "--api-key-stdin",
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(tmp_path / "dsh"),
+        ],
+        input="not-a-scholar-key\n",
+    )
+    assert result.exit_code != 0
+    assert "Token 无效或已撤销" in result.output
+    assert not (tmp_path / "dsh" / ".credentials.yaml").exists()
+
+
+def test_gateway_login_keeps_existing_credential_on_transient_failure(
+    tmp_path, monkeypatch
+):
+    dsh_home = tmp_path / "dsh"
+    dsh_ops._store_credential(
+        dsh_home,
+        dsh_ops.DEFAULT_REMOTE_TOKEN_REF,
+        "existing-token",
+    )
+
+    def fake_urlopen(req, timeout=None):
+        raise dsh_ops._HTTPError(
+            req.full_url,
+            503,
+            "Unavailable",
+            {},
+            io.BytesIO(b'{"detail":"backend unavailable"}'),
+        )
+
+    monkeypatch.setattr(dsh_ops, "_urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        dsh_ops,
+        "DEFAULT_GATEWAY_URL",
+        "https://hub.example.test/v1/mcp/scholar",
+    )
+    result = invoke_gateway_login(
+        [
+            "--api-key-stdin",
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(dsh_home),
+        ],
+        input="replacement-token\n",
+    )
+    assert result.exit_code != 0
+    assert "原 Managed Credential" in result.output
+    assert "未修改，请重试" in result.output
+    document = yaml.safe_load(
+        (dsh_home / ".credentials.yaml").read_text(encoding="utf-8")
+    )
+    assert document[dsh_ops.DEFAULT_REMOTE_TOKEN_REF] == "existing-token"
+
+
+def test_gateway_login_rejects_custom_gateway_for_primary_token_flow(tmp_path):
     result = invoke_gateway_login(
         [
             "--api-key-stdin",
@@ -132,11 +223,10 @@ def test_gateway_login_rejects_invalid_direct_access_key(tmp_path):
             "--dsh-home",
             str(tmp_path / "dsh"),
         ],
-        input="not-a-scholar-key\n",
+        input="token\n",
     )
     assert result.exit_code != 0
-    assert "sk_scholar_v1_" in result.output
-    assert not (tmp_path / "dsh" / ".credentials.yaml").exists()
+    assert "--gateway 仅用于兼容" in unstyle(result.output)
 
 
 def test_gateway_login_surfaces_hub_error(tmp_path, monkeypatch):
@@ -279,6 +369,47 @@ def test_init_dsh_remote_clean_home_stores_special_token_safely(tmp_path):
     if dsh_ops.os.name != "nt":
         assert credentials.stat().st_mode & 0o777 == 0o600
         assert dsh_home.stat().st_mode & 0o777 == 0o700
+
+
+def test_init_dsh_prepares_http_onboarding_without_storing_token(tmp_path):
+    scholar_home = tmp_path / "scholar"
+    dsh_home = tmp_path / "dsh"
+    result = invoke_init_dsh(
+        [
+            "--remote",
+            dsh_ops.DEFAULT_GATEWAY_URL,
+            "--allow-insecure-http",
+            "--scholar-home",
+            str(scholar_home),
+            "--dsh-home",
+            str(dsh_home),
+            "--workspace",
+            str(tmp_path / "workspace"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert not (dsh_home / ".credentials.yaml").exists()
+    preset_text = (
+        dsh_home / ".agent-presets" / "academic" / "agent.cordis.yml"
+    ).read_text(encoding="utf-8")
+    assert dsh_ops.DEFAULT_GATEWAY_URL in preset_text
+    assert "bearerTokenEnv: SCHOLAR_REMOTE_TOKEN" in preset_text
+    assert "allowInsecureHttp: true" in preset_text
+
+
+def test_init_dsh_rejects_public_http_without_explicit_opt_in(tmp_path):
+    result = invoke_init_dsh(
+        [
+            "--remote",
+            dsh_ops.DEFAULT_GATEWAY_URL,
+            "--scholar-home",
+            str(tmp_path / "scholar"),
+            "--dsh-home",
+            str(tmp_path / "dsh"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "must use HTTPS" in result.output
 
 
 def test_init_dsh_check_does_not_provision_clean_home(tmp_path):
@@ -437,6 +568,20 @@ def test_remote_rows_with_credential_reference():
             "https://scholar.example.test/mcp",
             "",
         )
+
+
+def test_remote_rows_mark_public_http_as_development_only():
+    row = dsh_ops._mcp_scholar_row(
+        "C:/py/python.exe",
+        ARGS["scholar_home"],
+        ARGS["workspace"],
+        False,
+        "http://192.0.2.10/mcp",
+        "",
+        token_ref="SCHOLAR_REMOTE_TOKEN",
+        allow_insecure_http=True,
+    )
+    assert "allowInsecureHttp: true" in row
 
 
 def test_write_preset_remote(tmp_path):

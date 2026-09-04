@@ -1,16 +1,14 @@
 # Proxy Hub
 
-This directory contains the first runnable Proxy Hub control-plane slice.
+This directory contains the Proxy Hub control plane and Scholar MCP gateway.
 
-- `backend/` contains the FastAPI administration service, OIDC browser sessions, tenant-scoped RBAC, append-only audit records, SQLAlchemy models, and Alembic migrations.
+- `backend/` contains the FastAPI administration service, OIDC browser sessions, the single-lab Token facade, append-only audit records, SQLAlchemy models, and Alembic migrations.
 - `frontend/` contains the React and TypeScript operator console served at `/console/`.
 
-The backend supports operator login, tenant IAM, DSH capabilities, the Scholar
-MCP gateway, exact tool policy, quota enforcement, Scholar backend registration
-and readiness-gated tenant routes. The current console exposes only the initial
-overview and tenant surfaces; the remaining administration pages are defined
-in `docs/proxy-hub-console.md`.
+The administrator console exposes Token management, Service status, and Audit log. The single-lab facade initializes one deployment-owned tenant, route, tool policy, managed Principal, and Membership automatically; those compatibility resources are not user-facing. New Tokens are permanent until rotation or revoke, receive the fixed 16-tool Scholar catalog, and do not carry a user quota.
 
-Neither side will own corpus parsing, graph or vector queries, embeddings, research workflows, or the DSH user interface.
+Proxy Hub authenticates each Token, applies global request protections, selects the Scholar Backend, injects the deployment-owned service credential, and stores minimized audit metadata. It never forwards a user Token or stores research request bodies.
+
+Corpus parsing, graph or vector queries, embeddings, research workflows, and the DSH user interface remain outside Proxy Hub.
 
 Local deployment instructions are in `infra/proxy-hub/README.md`.

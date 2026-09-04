@@ -1,114 +1,72 @@
-# Proxy Hub Minimum Interface
+# Proxy Hub single-lab architecture
 
-Proxy Hub is a control-plane product in this repository. Its backend authenticates users, resolves their tenant, enforces policy, routes MCP traffic to a Scholar backend, and records attribution. Its separate administration frontend manages that state through `/v1/admin/`; it never contains research or corpus logic. See [the console design](proxy-hub-console.md).
+Proxy Hub is the security and routing boundary between DSH research clients and the Scholar Backend.
+
+```text
+Administrator browser --OIDC--> Proxy Hub console
+                                  ├── Token management
+                                  ├── Service status
+                                  └── Audit log
+
+DSH academic preset --Bearer Token--> /v1/me
+                    --Bearer Token--> /v1/mcp/scholar
+                                           │ deployment credential
+                                           ▼
+                                      Scholar Backend
+                                      Corpus and 16 MCP Tools
+```
+
+The deployment owns one laboratory and one Corpus. Startup idempotently resolves the configured tenant, Scholar Backend, route, full Scholar tool policy, and administrator allowlist. Existing tenant, Principal, Membership, policy, quota, route, capability, and Access Key services remain internal compatibility mechanisms for one release.
+
+## Token lifecycle
+
+An administrator creates a Token by entering a Token name. Active names are unique after whitespace trimming, NFKC normalization, and case folding. The service creates a managed Principal and Membership, applies the fixed 16-tool policy, and issues a permanent Token with `expires_at = NULL`.
+
+The raw Token is returned only by create and rotate operations. The database stores a cryptographic digest plus display-safe metadata. Rotation invalidates the previous Token immediately. Revoke disables access. Delete revokes the Token, disables the managed Principal and Membership, and retains audit history.
+
+Legacy Access Keys keep their original expiry and quota behavior. New facade Tokens have no user quota but remain subject to global concurrency, request-size, timeout, safe-retry, and Scholar Backend circuit protections.
+
+## DSH validation
+
+DSH receives the Proxy Hub gateway URL from its deployment composition. The user enters only the Token. `GET /v1/me` uses `Authorization: Bearer <token>` and returns the Token name plus Scholar availability and Corpus version.
+
+DSH persists `SCHOLAR_REMOTE_TOKEN` only after `/v1/me` succeeds with a nonempty `name`. Explicit `401` or `403` responses mean the credential is invalid. Network failures, timeouts, redirects, `5xx`, and malformed success responses are service failures and do not replace an existing Managed Credential.
+
+The MCP client resolves the Managed Credential for every request. An explicit MCP `401` or `403` unsets the provider-managed value so onboarding can appear again. Other transport and Tool failures preserve it.
+
+## Gateway behavior
+
+Proxy Hub consumes the client Token, resolves the single-lab authorization records, verifies the requested MCP Tool, and selects the configured healthy Scholar Backend. It injects its own deployment credential upstream. The user Token is never forwarded.
+
+MCP request and response bodies are relayed without model-visible rewriting. Research questions, request parameters, response bodies, raw Tokens, backend credentials, and raw MCP session identifiers are not persisted.
+
+## Audit and retention
+
+The administrator Audit log exposes only timestamp, Token name, MCP Tool, result, latency, and Request ID. Audit records are retained for 180 days and removed automatically. Revocation and deletion never erase unexpired audit records.
+
+## Security
+
+Production requires HTTPS or an encrypted private network. Public HTTP is development-only and requires explicit enablement in both Proxy Hub server configuration and DSH composition. HTTP exposes Tokens and research traffic in plaintext, so only revocable test Tokens may be used.
+
+The console retains the existing OIDC browser session, CSRF, same-origin, role, and administrator allowlist controls. Research users do not log into the console.
 
 ## Public API
 
-### `POST /v1/session`
-
-Authenticates an operator-issued enrolment token and returns a short-lived
-session capability. The enrolment credential is single-use and is never
-stored or logged in plaintext.
-
-```json
-{
-  "enrolment_token": "<one-time-opaque-credential>",
-  "session_label": "research-workstation"
-}
-```
-
-```json
-{
-  "session_token": "<opaque-or-signed-capability>",
-  "expires_at": "2026-09-02T15:00:00Z",
-  "subject": { "user_id": "user-..." },
-  "tenant": { "tenant_id": "tenant-..." },
-  "scopes": ["scholar_search", "scholar_info"],
-  "quota": { "class": "standard", "remaining": 1000 }
-}
-```
-
-Successful responses use `Cache-Control: no-store`. The returned capability
-is also opaque and only its digest is persisted. Issuance fails closed unless
-the principal, tenant, membership and optional team are active, and the
-enrolment scopes still match the fixed Scholar tool catalog.
-
-Membership resolution happens during issuance and is rechecked whenever the
-capability is authenticated, so disabling a principal, tenant, membership or
-team immediately removes access. The client stores one credential reference
-for the returned capability and resolves it per request. The quota object is
-current control-plane metadata; request reservation and enforcement are added
-in the next request-path policy stage.
-
-### `/v1/mcp/scholar`
-
-Accepts authenticated Streamable HTTP MCP `POST`, `GET` and `DELETE` traffic.
-The Hub consumes the DSH capability, injects the selected Scholar service
-credential upstream, and never returns either credential. JSON-RPC request and
-response bodies are relayed without rewriting.
-
 ```text
-verify capability
-→ resolve tenant
-→ intersect capability scopes with the tenant's exact tool allowlist
-→ select a healthy backend with MCP session affinity
-→ reject workspace writes unless the backend declares tenant isolation
-→ atomically reserve the tenant request and concurrency quota
-→ forward JSON-RPC frames without rewriting
-→ append minimized audit metadata
-→ settle the quota lease when the response stream terminates
+GET    /v1/me
+POST   /v1/mcp/scholar
+GET    /v1/mcp/scholar
+DELETE /v1/mcp/scholar
+
+GET    /v1/admin/tokens
+POST   /v1/admin/tokens
+PATCH  /v1/admin/tokens/{token_id}
+POST   /v1/admin/tokens/{token_id}/rotate
+POST   /v1/admin/tokens/{token_id}/revoke
+DELETE /v1/admin/tokens/{token_id}
+GET    /v1/admin/service-status
+POST   /v1/admin/service-status/probe
+GET    /v1/admin/token-audit
 ```
 
-The raw `mcp-session-id` is forwarded only for protocol continuity and is
-stored and audited only as a digest bound to the tenant and capability.
-Unknown, expired or cross-capability affinity fails closed. Workspace-write
-tools remain denied on shared backends. Missing or invalid tenant tool policy
-also fails closed. Enforced quotas use durable leases so abandoned streams can
-be recovered, while long-lived streams refresh their lease until completion.
-Policies with enforcement disabled do not create quota counters.
-
-The Hub must not add model-visible tools, redirect requests, expose backend credentials, or return data from a different tenant when routing information is missing.
-
-## Internal interfaces
-
-```text
-decide(principal, tenant, tool) -> permit | deny(reason)
-append(audit_record) -> committed | unavailable
-resolve_backend(tenant, mcp_session_id) -> backend
-```
-
-These are in-process interfaces for the first implementation. They can become separate policy or audit services only when operating requirements justify another deployable component.
-
-## Audit record
-
-Each authorization decision and forwarded tool call records:
-
-- timestamp;
-- principal and tenant identifiers;
-- session and capability identifiers without token material;
-- tool name and argument digest;
-- corpus version and selected backend;
-- decision, latency, result class, and returned byte count;
-- quota delta when quotas are enabled.
-
-Raw research questions are not stored by default.
-
-## Failure behavior
-
-- Missing, invalid, expired, or revoked credentials return `401` without backend contact.
-- Unknown or unauthorized tenants and tools return `403`.
-- Unknown tenant routing never falls back to a default corpus.
-- Policy evaluation failure denies the request.
-- Backend unavailability fails the MCP request; DSH startup remains fail closed when initial synchronization cannot complete.
-- Audit failure rejects write-capable tools. Read-tool behavior requires an explicit product decision before implementation.
-- DSH session and MCP routes never redirect.
-
-## Administration and operations
-
-The same-origin administration console is served under `/console/` and calls only `/v1/admin/`. Browser sessions, DSH capabilities, and Scholar service credentials are separate credential classes. The management API and page-level role model are specified in [the console design](proxy-hub-console.md).
-
-The Hub also exposes private liveness and readiness. Readiness requires at least one healthy Scholar backend for every tenant currently eligible for routing. Scholar exposes its own private readiness with corpus version, parsed-paper count, vector/chunk counts, graph build timestamp, and synchronization timestamp.
-
-## Deferred capabilities
-
-Delegation, impersonation, a custom identity-provider UI, billing, per-document ACLs, Memory proxying, response caching, tool rewriting, and Hub-specific MCP tools are not part of the first implementation.
+Create operations require an `Idempotency-Key`. Mutations use ETags and `If-Match` where a current resource version is required. Only OIDC handshake routes redirect.

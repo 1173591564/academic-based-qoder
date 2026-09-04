@@ -92,6 +92,7 @@ def _mcp_scholar_row(
     remote_url: str | None,
     indent: str,
     token_ref: str | None = None,
+    allow_insecure_http: bool = False,
 ) -> str:
     """mcp-scholar 插件行。remote_url 非空时走 streamable-http（服务器集中部署，
     数据零分发；token_ref 由 dsh credentials 服务逐请求解析），否则 stdio 本地子进程。
@@ -101,13 +102,16 @@ def _mcp_scholar_row(
         if token_ref is None:
             raise ValueError("remote Scholar requires a Bearer credential reference")
         bearer = f"{i}    bearerTokenEnv: {token_ref}\n"
+        insecure = (
+            f"{i}    allowInsecureHttp: true\n" if allow_insecure_http else ""
+        )
         return f"""{i}- id: mcp-scholar
 {i}  name: '@deepseek-ai/dsh-mcp-client'
 {i}  config:
 {i}    serverName: scholar
 {i}    transport: streamable-http
 {i}    url: "{remote_url}"
-{bearer}{i}    failOnStartupError: true
+{bearer}{insecure}{i}    failOnStartupError: true
 """
     env_lines = [
         f"{i}    env:",
@@ -135,6 +139,7 @@ def _build_patch_block(
     workspace: Path | None = None,
     remote_url: str | None = None,
     token_ref: str | None = None,
+    allow_insecure_http: bool = False,
 ) -> str:
     if workspace is None:
         workspace = scholar_home
@@ -147,6 +152,7 @@ def _build_patch_block(
             remote_url,
             "    ",
             token_ref=token_ref,
+            allow_insecure_http=allow_insecure_http,
         )
         skills_dir = Path(scholar_home) / ".scholar" / "skills"
         return f"""{MARKER}
@@ -385,6 +391,7 @@ def _build_preset_rows(
     dev_tree: bool,
     remote_url: str | None = None,
     token_ref: str | None = None,
+    allow_insecure_http: bool = False,
 ) -> str:
     """预设组装的 scholar 段——结构与 headless patch 同构，两处差异：
     SCHOLAR_WORKSPACE 静态烘焙（预设组装每进程装载一次，cwd 语义失效）；
@@ -398,6 +405,7 @@ def _build_preset_rows(
         remote_url,
         "",
         token_ref=token_ref,
+        allow_insecure_http=allow_insecure_http,
     )
     skills_dir = Path(scholar_home) / ".scholar" / "skills"
     return f"""# ── scholar（由 `scholar init-dsh` 生成/刷新，勿手改）──────────────────────
@@ -426,6 +434,7 @@ def _write_preset(
     dev_tree: bool,
     remote_url: str | None = None,
     token_ref: str | None = None,
+    allow_insecure_http: bool = False,
 ) -> str:
     """写用户级 academic 预设（standard 基座 + scholar 段，整文件重写、幂等）。"""
     base = _preset_base_template().read_text(encoding="utf-8")
@@ -436,6 +445,7 @@ def _write_preset(
         dev_tree,
         remote_url=remote_url,
         token_ref=token_ref,
+        allow_insecure_http=allow_insecure_http,
     )
     pdir = _preset_dir(dsh_home)
     pdir.mkdir(parents=True, exist_ok=True)
@@ -534,6 +544,11 @@ def init_dsh(
         "--token-stdin",
         help="从标准输入读取 Bearer token 并写入 dsh 的 owner-only credentials 文件",
     ),
+    allow_insecure_http: bool = typer.Option(
+        False,
+        "--allow-insecure-http",
+        help="开发环境显式允许公网 HTTP Scholar endpoint",
+    ),
 ):
     """把 Scholar Studio 挂进 dsh（学术模式预设 + headless one-shot patch）。"""
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
@@ -548,10 +563,16 @@ def init_dsh(
         _remove_preset(dsh_home)
         return
 
-    remote = _validated_remote_url(remote) if remote else None
+    remote = (
+        _validated_remote_url(remote, allow_http=allow_insecure_http)
+        if remote
+        else None
+    )
     token_ref = _validated_credential_ref(token_env) if remote else None
     if token_stdin and not remote:
         raise typer.BadParameter("--token-stdin requires --remote")
+    if allow_insecure_http and not remote:
+        raise typer.BadParameter("--allow-insecure-http requires --remote")
     if check and token_stdin:
         raise typer.BadParameter("--check cannot store a credential")
 
@@ -574,6 +595,7 @@ def init_dsh(
         workspace=workspace,
         remote_url=remote,
         token_ref=token_ref,
+        allow_insecure_http=allow_insecure_http,
     )
     if check:
         console.print(Panel(block, title=f"{patch} (preview)", border_style="cyan"))
@@ -605,6 +627,7 @@ def init_dsh(
             dev_tree,
             remote_url=remote,
             token_ref=token_ref,
+            allow_insecure_http=allow_insecure_http,
         )
         rules_actions = _ensure_rules(scholar_home)
         if token_value is not None:
@@ -677,14 +700,72 @@ def _exchange_capability(
     return token, expires
 
 
-def _validated_access_key(value: str) -> str:
-    """Validate the Scholar Access Key format before storing it."""
-    access_key = value.strip()
-    if not access_key:
-        raise typer.BadParameter("Access Key 为空")
-    if not access_key.startswith("sk_scholar_v1_"):
-        raise typer.BadParameter("Access Key 格式无效，应以 sk_scholar_v1_ 开头")
-    return access_key
+def _validated_token(value: str) -> str:
+    """Reject an empty Scholar Token before server validation."""
+    token = value.strip()
+    if not token:
+        raise typer.BadParameter("Token 为空")
+    return token
+
+
+def _validate_token(gateway_url: str, token: str, timeout: int = 20) -> dict:
+    """Validate a Token against Proxy Hub before managed persistence."""
+    parts = urlsplit(gateway_url)
+    origin = f"{parts.scheme}://{parts.netloc}"
+    req = _Request(
+        origin + "/v1/me",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="GET",
+    )
+    try:
+        with _urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except _HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise typer.BadParameter(
+                "Token 无效或已撤销，请向管理员申请新 Token"
+            ) from exc
+        raise typer.BadParameter(
+            f"Proxy Hub 暂时不可用（HTTP {exc.code}）；原 Managed Credential 未修改，请重试"
+        ) from exc
+    except (_URLError, TimeoutError) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise typer.BadParameter(
+            f"无法连接 Proxy Hub（{origin}）：{reason}；原 Managed Credential 未修改，请重试"
+        ) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise typer.BadParameter(
+            "Proxy Hub /v1/me 返回无效响应；原 Managed Credential 未修改，请重试"
+        ) from exc
+    if not isinstance(body, dict) or not isinstance(body.get("name"), str):
+        raise typer.BadParameter(
+            "Proxy Hub /v1/me 响应缺少 Token 名称；原 Managed Credential 未修改，请重试"
+        )
+    return body
+
+
+def _requires_insecure_http(url: str) -> bool:
+    """Return whether a remote URL needs DSH's development HTTP override."""
+    parsed = urlparse(url)
+    return parsed.scheme == "http" and not (
+        parsed.hostname
+        and (
+            parsed.hostname == "::1"
+            or (
+                _is_ipv4_loopback(parsed.hostname)
+            )
+        )
+    )
+
+
+def _is_ipv4_loopback(hostname: str) -> bool:
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 @app.command(name="gateway-login")
@@ -696,7 +777,7 @@ def gateway_login(
     api_key_stdin: bool = typer.Option(
         False,
         "--api-key-stdin",
-        help="从标准输入读取 Scholar Access Key（推荐）",
+        help="从标准输入读取 Scholar Token（推荐）",
     ),
     gateway: str = typer.Option(
         None,
@@ -711,12 +792,12 @@ def gateway_login(
     token_env: str = typer.Option(
         DEFAULT_REMOTE_TOKEN_REF,
         "--token-env",
-        help="Access Key 或 capability 存入 dsh credentials 的引用名",
+        help="Token 或 capability 存入 DSH Managed Credential 的引用名",
     ),
 ):
-    """保存 Scholar Access Key 并写入 Proxy Hub 学术模式配置。
+    """验证并保存 Scholar Token，写入 Proxy Hub 学者模式配置。
 
-    默认隐藏读取管理员签发的 Access Key。--api-key-stdin 适合安装器；
+    默认隐藏读取管理员签发的 Token。--api-key-stdin 保留为兼容选项；
     --code 与 --code-stdin 保留用于旧 enrolment/capability 流程。
     """
     dsh_home = Path(dsh_home) if dsh_home else Path.home() / ".dsh"
@@ -725,7 +806,6 @@ def gateway_login(
     py = str(python_cmd) if python_cmd else sys.executable
     patch = _patch_path(dsh_home, profile)
     dev_tree = _detect_dev_tree(scholar_home)
-    gateway_url = _validated_remote_url(gateway or DEFAULT_GATEWAY_URL, allow_http=True)
     token_ref = _validated_credential_ref(token_env)
     if code_stdin and code:
         raise typer.BadParameter("--code 与 --code-stdin 二选一")
@@ -734,6 +814,12 @@ def gateway_login(
             "--api-key-stdin 不能与 --code 或 --code-stdin 同时使用"
         )
     legacy_capability = code_stdin or bool(code)
+    if not legacy_capability and gateway is not None:
+        raise typer.BadParameter("--gateway 仅用于兼容的 enrolment/capability 流程")
+    gateway_url = _validated_remote_url(
+        gateway or DEFAULT_GATEWAY_URL,
+        allow_http=not legacy_capability or gateway is None,
+    )
     if legacy_capability:
         code_value = sys.stdin.readline().rstrip("\r\n") if code_stdin else code.strip()
         if not code_value:
@@ -747,9 +833,14 @@ def gateway_login(
         supplied_key = (
             sys.stdin.readline().rstrip("\r\n")
             if api_key_stdin
-            else typer.prompt("请输入 Scholar Access Key", hide_input=True)
+            else typer.prompt("请输入 Scholar Token", hide_input=True)
         )
-        token_value = _validated_access_key(supplied_key)
+        token_value = _validated_token(supplied_key)
+        console.print("[cyan]正在验证 Token ...[/]")
+        identity = _validate_token(gateway_url, token_value)
+        console.print(
+            f"[green][OK][/] Token 已验证（Token 名称：{identity['name']}）"
+        )
 
     for action in _ensure_scholar_assets(scholar_home, include_runtime_dirs=False):
         console.print(f"[green][OK][/] {action}")
@@ -767,6 +858,7 @@ def gateway_login(
         workspace=workspace,
         remote_url=gateway_url,
         token_ref=token_ref,
+        allow_insecure_http=_requires_insecure_http(gateway_url),
     )
     patch_previous = patch.read_bytes() if patch.exists() else None
     preset_dir = _preset_dir(dsh_home)
@@ -789,6 +881,7 @@ def gateway_login(
             dev_tree,
             remote_url=gateway_url,
             token_ref=token_ref,
+            allow_insecure_http=_requires_insecure_http(gateway_url),
         )
         rules_actions = _ensure_rules(scholar_home)
         _store_credential(dsh_home, token_ref, token_value)
@@ -815,7 +908,7 @@ def gateway_login(
             "（到期自动失效后重跑本命令换新）"
         )
     else:
-        console.print("[green][OK][/] Scholar Access Key 已安全保存")
+        console.print("[green][OK][/] Scholar Token 已保存为 Managed Credential")
     console.print(f"\n[bold]Proxy Hub 网关模式[/]：MCP 端点 = {gateway_url}")
     console.print(f"Bearer 凭据引用：{token_ref}")
     console.print("\n验证：")

@@ -24,27 +24,19 @@ class CredentialContext:
     principal_id: str
     tenant_id: str
     scopes: tuple[str, ...]
-    expires_at: datetime
+    expires_at: datetime | None
     request_limit: int | None = None
     period_seconds: int | None = None
 
     @property
     def capability_id(self) -> str | None:
         """Return the legacy capability identifier when applicable."""
-        return (
-            self.credential_id
-            if self.credential_kind == "capability"
-            else None
-        )
+        return self.credential_id if self.credential_kind == "capability" else None
 
     @property
     def access_key_id(self) -> str | None:
         """Return the Access Key identifier when applicable."""
-        return (
-            self.credential_id
-            if self.credential_kind == "access_key"
-            else None
-        )
+        return self.credential_id if self.credential_kind == "access_key" else None
 
 
 CapabilityContext = CredentialContext
@@ -83,15 +75,13 @@ def _credential_context(
     principal_id: str,
     tenant_id: str,
     raw_scopes: object,
-    expires_at: datetime,
+    expires_at: datetime | None,
     request_limit: int | None = None,
     period_seconds: int | None = None,
 ) -> CredentialContext:
     """Re-authorize shared tenant and scope requirements."""
     denial_code = (
-        "capability_denied"
-        if credential_kind == "capability"
-        else "credential_denied"
+        "capability_denied" if credential_kind == "capability" else "credential_denied"
     )
     principal = session.get(Principal, principal_id)
     tenant = session.get(Tenant, tenant_id)
@@ -152,7 +142,7 @@ def authenticate_credential(
             select(AccessKey).where(
                 AccessKey.token_digest == token_digest,
                 AccessKey.revoked_at.is_(None),
-                AccessKey.expires_at > now,
+                (AccessKey.expires_at.is_(None) | (AccessKey.expires_at > now)),
             )
         )
         if access_key is None:
