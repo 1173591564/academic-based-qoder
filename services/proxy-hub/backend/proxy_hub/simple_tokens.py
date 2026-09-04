@@ -344,12 +344,7 @@ def build_token_admin_router(
             managed_name_key=name_key,
             kind="managed_researcher",
         )
-        membership = Membership(
-            id=new_id("membership"),
-            principal_id=principal.id,
-            tenant_id=tenant.id,
-        )
-        session.add_all((principal, membership))
+        session.add(principal)
         try:
             session.flush()
         except IntegrityError as error:
@@ -359,6 +354,12 @@ def build_token_admin_router(
                 "token_name_conflict",
                 "A Token with this name already exists.",
             ) from error
+        membership = Membership(
+            id=new_id("membership"),
+            principal_id=principal.id,
+            tenant_id=tenant.id,
+        )
+        session.add(membership)
         access_key, raw_token = issue_access_key(
             session,
             context,
