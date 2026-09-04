@@ -112,6 +112,21 @@ def test_create_lists_permanent_digest_only_token(api_harness: ApiHarness) -> No
         assert principal.managed_name_key == "research laptop"
 
 
+def test_create_orders_principal_before_membership_foreign_key(
+    api_harness: ApiHarness,
+) -> None:
+    with api_harness.engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+    body, _token = create_token(
+        api_harness,
+        "Foreign key ordering",
+        idempotency_key="foreign-key-ordering",
+    )
+
+    assert body["name"] == "Foreign key ordering"
+
+
 def test_token_name_is_unicode_casefold_unique(api_harness: ApiHarness) -> None:
     create_token(api_harness, "Ａlice")
 
