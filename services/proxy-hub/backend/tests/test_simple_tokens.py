@@ -224,10 +224,14 @@ def test_rename_rotate_revoke_and_delete_token(api_harness: ApiHarness) -> None:
         },
     )
     assert deleted.status_code == 204
+    listed = api_harness.client.get("/v1/admin/tokens")
+    assert listed.status_code == 200
+    assert listed.json()["items"] == []
+
     with Session(api_harness.engine) as session:
-        principal = session.scalar(
-            select(Principal).where(Principal.managed_name_key == "literature group")
-        )
+        access_key = session.get(AccessKey, replacement_body["id"])
+        assert access_key is not None
+        principal = session.get(Principal, access_key.principal_id)
         assert principal is not None
         membership = session.scalar(
             select(Membership).where(
@@ -236,7 +240,15 @@ def test_rename_rotate_revoke_and_delete_token(api_harness: ApiHarness) -> None:
         )
         assert membership is not None
         assert principal.status == "disabled"
+        assert principal.managed_name_key is None
         assert membership.status == "disabled"
+
+    recreated, _token = create_token(
+        api_harness,
+        "Literature group",
+        idempotency_key="recreate-deleted-token",
+    )
+    assert recreated["status"] == "active"
 
 
 def test_me_distinguishes_invalid_token_and_unavailable_backend(
