@@ -47,4 +47,8 @@ production topology.
 A non-loopback public HTTP origin is development-only and additionally requires
 `PROXY_HUB_ALLOW_INSECURE_PUBLIC_HTTP=true`.
 
+The public ingress accepts credential-validation CORS requests only from DSH
+web clients served on HTTP loopback origins (`localhost`, `127.0.0.1`, or
+`[::1]`). Other browser origins do not receive cross-origin access.
+
 Scholar database credentials, corpus volumes, parsing jobs, and vector-index assets must not be added to this directory.

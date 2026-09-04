@@ -271,6 +271,42 @@ def test_me_distinguishes_invalid_token_and_unavailable_backend(
     assert unavailable.json()["error"]["code"] == "backend_unavailable"
 
 
+def test_me_allows_loopback_dsh_cors(api_harness: ApiHarness) -> None:
+    origin = "http://127.0.0.1:35183"
+    preflight = api_harness.client.options(
+        "/v1/me",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    invalid = api_harness.client.get(
+        "/v1/me",
+        headers={
+            "Origin": origin,
+            "Authorization": "Bearer invalid",
+        },
+    )
+    denied = api_harness.client.options(
+        "/v1/me",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == origin
+    assert "GET" in preflight.headers["access-control-allow-methods"]
+    assert "Authorization" in preflight.headers["access-control-allow-headers"]
+    assert invalid.status_code == 401
+    assert invalid.headers["access-control-allow-origin"] == origin
+    assert denied.status_code == 400
+    assert "access-control-allow-origin" not in denied.headers
+
+
 def test_service_status_probe_and_minimized_audit(api_harness: ApiHarness) -> None:
     backend_id = configure_ready_backend(api_harness)
     body, _token = create_token(api_harness)
