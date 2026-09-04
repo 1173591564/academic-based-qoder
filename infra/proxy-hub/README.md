@@ -44,4 +44,7 @@ inject the OIDC client secret through the deployment secret facility, keep
 separate release operation. The local Compose file is not a high-availability
 production topology.
 
+A non-loopback public HTTP origin is development-only and additionally requires
+`PROXY_HUB_ALLOW_INSECURE_PUBLIC_HTTP=true`.
+
 Scholar database credentials, corpus volumes, parsing jobs, and vector-index assets must not be added to this directory.
