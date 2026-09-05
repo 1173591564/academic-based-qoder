@@ -1,43 +1,74 @@
-"""Scholar private readiness metadata tests."""
+"""Scholar v2 private readiness metadata tests."""
 
-from pathlib import Path
+from contextlib import contextmanager
 
-from scholar import config, graph_mem
+from scholar.v2.models import ScholarError
 from scholar_mcp.health import readiness_payload
 
 
-def test_readiness_requires_explicit_corpus_version(monkeypatch) -> None:
-    monkeypatch.delenv("SCHOLAR_CORPUS_VERSION", raising=False)
+class FakeCursor:
+    def execute(self, _query, _params) -> None:
+        return None
 
+    def fetchall(self):
+        return [
+            ("build-rel", "relational", "sealed"),
+            ("build-graph", "graph", "sealed"),
+        ]
+
+
+class FakeDatabase:
+    def active_snapshot(self):
+        return {
+            "id": "snapshot-test",
+            "release_id": "release-test",
+            "relational_build_id": "build-rel",
+            "graph_build_id": "build-graph",
+            "vector_build_id": None,
+            "semantic_build_id": None,
+            "schema_version": "scholar-v2-001",
+        }
+
+    @contextmanager
+    def cursor(self, read_only=False):
+        assert read_only is True
+        yield FakeCursor()
+
+
+def test_readiness_reports_snapshot_unavailable(monkeypatch) -> None:
+    from scholar.v2 import runtime
+
+    class UnavailableDatabase:
+        def active_snapshot(self):
+            raise ScholarError("SNAPSHOT_UNAVAILABLE", "no active production snapshot")
+
+    monkeypatch.setattr(runtime, "get_database", lambda: UnavailableDatabase())
     status, payload = readiness_payload()
-
     assert status == 503
     assert payload == {
         "status": "unavailable",
-        "reason": "corpus_version_missing",
+        "mode": "v2",
+        "code": "SNAPSHOT_UNAVAILABLE",
+        "reason": "no active production snapshot",
     }
 
 
-def test_readiness_reports_bounded_corpus_metadata(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    parsed_dir = tmp_path / "parsed"
-    parsed_dir.mkdir()
-    (parsed_dir / "paper-a.json").write_text("{}", encoding="utf-8")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(config, "PARSED_DIR", parsed_dir)
-    monkeypatch.setattr(graph_mem, "GRAPH_CACHE", graph_path)
-    monkeypatch.setenv("SCHOLAR_CORPUS_VERSION", "corpus-v1")
-    monkeypatch.setenv("SCHOLAR_WORKSPACE_ISOLATION", "tenant")
+def test_readiness_reports_bounded_snapshot_metadata(monkeypatch) -> None:
+    from scholar.v2 import runtime
 
+    monkeypatch.setattr(runtime, "get_database", lambda: FakeDatabase())
     status, payload = readiness_payload()
-
     assert status == 200
-    assert payload["status"] == "ready"
-    assert payload["corpus_version"] == "corpus-v1"
-    assert payload["parsed_papers"] == 1
-    assert payload["workspace_isolation"] == "tenant"
-    assert payload["graph_built_at"] is not None
-    assert payload["synchronized_at"] is not None
+    assert payload == {
+        "status": "ready",
+        "mode": "v2",
+        "schema_version": "scholar-v2-001",
+        "channel": "production",
+        "snapshot_id": "snapshot-test",
+        "corpus_release_id": "release-test",
+        "builds": [
+            {"id": "build-rel", "kind": "relational", "state": "sealed"},
+            {"id": "build-graph", "kind": "graph", "state": "sealed"},
+        ],
+        "degraded_capabilities": ["vector", "semantic"],
+    }

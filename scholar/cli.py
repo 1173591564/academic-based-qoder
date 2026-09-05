@@ -21,6 +21,7 @@ from .commands import execution_ops  # noqa: F401  compile-paper, exp-*, dataset
 from .commands import external_ops  # noqa: F401  arxiv-search, arxiv-download
 from .commands import dsh_ops  # noqa: F401  init-dsh
 from .commands import sync_ops  # noqa: F401  sync (v0.2.0 single maintenance command)
+from .commands import v2_ops  # noqa: F401  v2 corpus/build/snapshot operations
 from . import lean_sync  # noqa: F401  lean-sync, lean-templates
 
 
