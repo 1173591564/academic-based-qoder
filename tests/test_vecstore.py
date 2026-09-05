@@ -107,7 +107,7 @@ def _write_parsed(tmp_path, pid, title, abstract):
 
 def test_ensure_paper_vectors_incremental(tmp_path, fake_pg):
     md5_a = _write_parsed(tmp_path, "01KA", "Paper A", "abstract A")
-    md5_b = _write_parsed(tmp_path, "01KB", "Paper B", "abstract B")
+    _write_parsed(tmp_path, "01KB", "Paper B", "abstract B")
     fake_pg.existing = {"01KA": md5_a, "01KZ": _md5("[Gone] old")}
 
     stats = vecstore.ensure_paper_vectors(

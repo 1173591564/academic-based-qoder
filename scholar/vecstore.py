@@ -12,7 +12,6 @@ the indexed content, so `scholar sync` only pays for changed papers.
 
 import hashlib
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config, rag

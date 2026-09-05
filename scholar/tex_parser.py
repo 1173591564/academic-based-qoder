@@ -9,13 +9,10 @@ Comprehensive rewrite with improved extraction for:
 - Sections: cleaner text with aggressive LaTeX stripping
 """
 import re
-import os
-import json
 import hashlib
 import tarfile
 import zipfile
 import tempfile
-import shutil
 from pathlib import Path
 from typing import Optional
 from collections import Counter
@@ -1811,7 +1808,11 @@ class TeXParser:
                 if title_match:
                     title = title_match.group(1)
                 else:
-                    lines = [l.strip() for l in body.strip().split("\n") if l.strip()]
+                    lines = [
+                        line.strip()
+                        for line in body.strip().split("\n")
+                        if line.strip()
+                    ]
                     if lines:
                         first = lines[0]
                         first = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", first)

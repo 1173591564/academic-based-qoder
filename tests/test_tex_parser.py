@@ -2,9 +2,7 @@
 Test tex_parser.py — TeX parsing including bibliography extraction.
 Uses tmp_path fixtures, no dependency on actual paper data.
 """
-import json
 import pytest
-from pathlib import Path
 
 from scholar.tex_parser import TeXParser
 
