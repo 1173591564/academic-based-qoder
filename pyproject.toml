@@ -19,9 +19,10 @@ dependencies = [
     "mcp>=1.0,<2",
     "rapidfuzz>=3.0",
     "bibtexparser>=1.4",
-    "pyparsing>=3.0,<4",
+    "pyparsing>=3.1,<4",
     "networkx>=3.0",
     "PyYAML>=6.0.2,<7",
+    "jsonschema>=4.23,<5",
 ]
 
 [project.optional-dependencies]
@@ -34,4 +35,4 @@ scholar = "scholar.cli:main"
 include = ["scholar*", "scholar_mcp*"]
 
 [tool.setuptools.package-data]
-scholar = ["*.json", "*.txt", "templates/**/*", "v2/*.sql"]
+scholar = ["*.json", "*.txt", "templates/**/*", "schemas/*.json", "v2/*.sql"]

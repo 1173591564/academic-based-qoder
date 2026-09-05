@@ -9,6 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: scholar_test
+          POSTGRES_USER: scholar
+          POSTGRES_PASSWORD: scholar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U scholar -d scholar_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     strategy:
       matrix:
         python-version: ['3.11']
@@ -28,6 +42,8 @@ jobs:
         run: make check-templates
 
       - name: Run tests
+        env:
+          SCHOLAR_TEST_POSTGRES_DSN: postgresql://scholar:scholar_test@127.0.0.1:55432/scholar_test
         run: make test-scholar
 
       - name: Verify Lean4 (if available)

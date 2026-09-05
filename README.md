@@ -50,6 +50,12 @@ scholar doctor
 
 See [Scholar v2 operations](docs/scholar-v2.md).
 
+## Parsed artifacts
+
+TeX parsing produces a schema-validated vNext artifact with parser lineage, source-file hashes, source-qualified metadata assertions, and structured warning/loss diagnostics. `save_parsed()` stores the vNext artifact under `parsed/vnext/` and writes an explicit legacy projection at the existing `parsed/<paper_id>.json` location, so current MCP and retrieval readers remain stable while evidence fields evolve.
+
+The committed synthetic fixture corpus and golden artifacts cover nested inputs, missing inputs, multilingual text, formula-prefix collisions, uncited bibliography entries, and comma-formatted BibTeX authors.
+
 ## MCP server
 
 Start local stdio transport:
@@ -138,7 +144,7 @@ python -m pip wheel . --no-deps -w dist
 
 The root `Makefile` also exposes focused checks for Scholar, the Proxy Hub backend, the Proxy Hub frontend, and generated templates.
 
-Tests cover path containment, malformed paper data, graph/index invalidation, authentication, MCP initialization, the 16-tool catalog, lexical and semantic search, DSH clean-home installation, credential storage, permissions, existing-file preservation, and rollback.
+Tests cover path containment, malformed paper data, parser golden artifacts, graph/index invalidation, authentication, MCP initialization, the 16-tool catalog, lexical and semantic search, scoped passage SQL against pgvector PostgreSQL, DSH clean-home installation, credential storage, permissions, existing-file preservation, and rollback.
 
 ## Phase boundary
 
