@@ -5,7 +5,6 @@ Tests configuration paths, environment variable loading, arXiv request utility.
 """
 
 import pytest
-from pathlib import Path
 
 
 class TestConfigPaths:
@@ -49,6 +48,14 @@ class TestConfigPaths:
 
         assert config.EMBEDDING_PROVIDER == "zhipu"
         assert config.EMBEDDING_DIM == 1024
+
+    def test_source_tree_does_not_require_ide_templates(self, tmp_path):
+        from scholar.config import _is_source_tree
+
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
+        (tmp_path / "scholar_mcp").mkdir()
+
+        assert _is_source_tree(tmp_path)
 
 
 class TestArxivRequest:

@@ -22,14 +22,14 @@ from .ide_templates import sync_ide_templates
 # ===================================================================
 
 
-def _is_source_tree() -> bool:
+def _is_source_tree(root: Optional[Path] = None) -> bool:
     """检测是否从源码树（含 pip editable）运行。
 
-    源码树特征：scholar/ 的父目录下同时存在 .scholar/ 与 scholar_mcp/。
+    源码树特征：scholar/ 的父目录下同时存在 pyproject.toml 与 scholar_mcp/。
     pip 非 editable 安装（site-packages）不满足该特征。
     """
-    root = Path(__file__).resolve().parent.parent
-    return (root / ".scholar").exists() and (root / "scholar_mcp").exists()
+    root = root or Path(__file__).resolve().parent.parent
+    return (root / "pyproject.toml").is_file() and (root / "scholar_mcp").is_dir()
 
 
 def _resolve_scholar_home() -> Path:

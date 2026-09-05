@@ -17,7 +17,8 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Optional
-from collections import Counter
+
+from .pdf_parser import parse_pdf
 
 
 class TeXParser:
@@ -54,7 +55,7 @@ class TeXParser:
         r"\\usepackage(?:\[.*?\])?\{.*?"
         r"(?:icml|nips|neurips|cvpr|iccv|eccv|aaai|ijcai|acl|emnlp|naacl|"
         r"coling|sigir|kdd|www|wsdm|cikm|recsys|mlsys|aistats|uai|alt)"
-        r"[_-]?(\d{4})"
+        r"[a-z_-]*?(\d{4})"
         r".*?\}",
         re.I
     )
@@ -166,9 +167,9 @@ class TeXParser:
         (re.compile(r"iclr", re.I), "ICLR"),
         (re.compile(r"aaai", re.I), "AAAI"),
         (re.compile(r"ijcai", re.I), "IJCAI"),
-        (re.compile(r"acl\b", re.I), "ACL"),
-        (re.compile(r"emnlp", re.I), "EMNLP"),
         (re.compile(r"naacl", re.I), "NAACL"),
+        (re.compile(r"emnlp", re.I), "EMNLP"),
+        (re.compile(r"acl\b", re.I), "ACL"),
         (re.compile(r"cvpr", re.I), "CVPR"),
         (re.compile(r"iccv", re.I), "ICCV"),
         (re.compile(r"eccv", re.I), "ECCV"),
@@ -242,11 +243,14 @@ class TeXParser:
                 if k not in macros:
                     macros[k] = v
 
+            year, year_source = self._extract_year_with_source(
+                raw_main, all_content
+            )
             result = {
                 "paper_id": paper_id,
                 "title": self._extract_title(raw_main, macros),
                 "authors": self._extract_authors(raw_main, macros),
-                "year": self._extract_year(raw_main, all_content),
+                "year": year,
                 "venue": self._detect_venue(raw_main, all_content),
                 "arxiv_id": self._extract_arxiv_id(raw_main, all_content),
                 "abstract": self._extract_abstract(all_content, macros),
@@ -256,10 +260,22 @@ class TeXParser:
                 "bibliography": self._extract_bibliography(all_content, tmpdir),
                 "tex_file_count": len(tex_files),
                 "main_tex_file": main_file.name,
+                "parse_source": "tex",
+                "content_sources": {
+                    "sections": "tex",
+                    "formulas": "tex",
+                    "citations": "tex",
+                    "bibliography": "tex",
+                },
             }
+            result["metadata_sources"] = self._metadata_sources(
+                result, year_source
+            )
             # 内建规则：有 arxiv_id 但 venue 未检测到 → 自动设为 "arXiv"
             if result["arxiv_id"] and not result["venue"]:
                 result["venue"] = "arXiv"
+            if result["arxiv_id"] and result["venue"] == "arXiv":
+                result["metadata_sources"]["venue"] = "derived:arxiv"
             return result
 
     def parse_directory(self, dir_path: Path, paper_id: str) -> dict:
@@ -280,11 +296,14 @@ class TeXParser:
             if k not in macros:
                 macros[k] = v
 
+        year, year_source = self._extract_year_with_source(
+            raw_main, all_content
+        )
         result = {
             "paper_id": paper_id,
             "title": self._extract_title(raw_main, macros),
             "authors": self._extract_authors(raw_main, macros),
-            "year": self._extract_year(raw_main, all_content),
+            "year": year,
             "venue": self._detect_venue(raw_main, all_content),
             "arxiv_id": self._extract_arxiv_id(raw_main, all_content),
             "abstract": self._extract_abstract(all_content, macros),
@@ -294,9 +313,21 @@ class TeXParser:
             "bibliography": self._extract_bibliography(all_content, dir_path),
             "tex_file_count": len(tex_files),
             "main_tex_file": main_file.name,
+            "parse_source": "tex",
+            "content_sources": {
+                "sections": "tex",
+                "formulas": "tex",
+                "citations": "tex",
+                "bibliography": "tex",
+            },
         }
+        result["metadata_sources"] = self._metadata_sources(
+            result, year_source
+        )
         if result["arxiv_id"] and not result["venue"]:
             result["venue"] = "arXiv"
+        if result["arxiv_id"] and result["venue"] == "arXiv":
+            result["metadata_sources"]["venue"] = "derived:arxiv"
         return result
 
     # ---------------------------------------------------------------
@@ -446,6 +477,76 @@ class TeXParser:
     # Metadata extractors
     # ---------------------------------------------------------------
 
+    @staticmethod
+    def _balanced_argument(
+        content: str, command: str
+    ) -> Optional[str]:
+        pattern = re.compile(r"\\" + re.escape(command) + r"\b")
+        for match in pattern.finditer(content):
+            position = match.end()
+            while position < len(content) and content[position].isspace():
+                position += 1
+            if position < len(content) and content[position] == "[":
+                close = content.find("]", position + 1)
+                if close < 0:
+                    continue
+                position = close + 1
+                while position < len(content) and content[position].isspace():
+                    position += 1
+            if position >= len(content) or content[position] != "{":
+                continue
+
+            depth = 0
+            start = position + 1
+            for index in range(position, len(content)):
+                char = content[index]
+                if char == "{" and (index == 0 or content[index - 1] != "\\"):
+                    depth += 1
+                elif char == "}" and (index == 0 or content[index - 1] != "\\"):
+                    depth -= 1
+                    if depth == 0:
+                        return content[start:index]
+        return None
+
+    @staticmethod
+    def _replace_citations(text: str) -> str:
+        pattern = re.compile(
+            r"\\(?:cite|citep|citet|citealp|citeauthor|citeyear|"
+            r"shortcite|Cite)\*?(?:\[[^\]]*\]\s*)*\{([^}]*)\}"
+        )
+
+        def replacement(match):
+            keys = [
+                key.strip()
+                for key in re.split(r"[,\s]+", match.group(1))
+                if key.strip()
+            ]
+            return f"[cite:{'; '.join(keys)}]" if keys else "[cite]"
+
+        return pattern.sub(replacement, text)
+
+    @staticmethod
+    def _replace_references(text: str) -> str:
+        pattern = re.compile(
+            r"\\(?:ref|eqref|autoref|cref|Cref|nameref|"
+            r"hyperref|secref)\{([^}]*)\}"
+        )
+        return pattern.sub(
+            lambda match: f"[ref:{match.group(1).strip()}]",
+            text,
+        )
+
+    @staticmethod
+    def _metadata_sources(result: dict, year_source: Optional[str]) -> dict:
+        sources = {
+            field: "tex"
+            for field in ["title", "authors", "venue", "arxiv_id", "abstract"]
+            if result.get(field)
+        }
+        if result.get("year") and year_source:
+            sources["year"] = year_source
+        return sources
+
     def _extract_title(self, content: str, macros: dict = None) -> Optional[str]:
         """Extract title with macro resolution and formatting cleanup."""
         if macros is None:
@@ -454,15 +555,11 @@ class TeXParser:
         # Remove comments first
         clean = re.sub(r"(?<!\\)%.*$", "", content, flags=re.MULTILINE)
 
-        for pattern in [
-            r"\\icmltitlerunning\{([^}]+)\}",
-            r"\\icmltitle\{([^}]+)\}",
-            r"\\title(?:\[.*?\])?\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}",
-        ]:
-            m = re.search(pattern, clean, re.DOTALL)
-            if not m:
+        for command in ["icmltitlerunning", "icmltitle", "title"]:
+            title = self._balanced_argument(clean, command)
+            if title is None:
                 continue
-            title = m.group(1).strip()
+            title = title.strip()
 
             # 1. Resolve custom macros
             title = self._resolve_macros(title, macros)
@@ -470,12 +567,14 @@ class TeXParser:
             # 2. Replace \\ (line breaks) with space
             title = re.sub(r"\\\\", " ", title)
 
-            # 3. Remove LaTeX environments entirely (minipage, center, etc.)
+            # 3. Remove layout environment markers while preserving their text
             for env in ["minipage", "center", "tabular", "figure", "picture"]:
                 title = re.sub(
-                    r"\\begin\{" + env + r"\}.*?\\end\{" + env + r"\}",
-                    " ", title, flags=re.DOTALL,
+                    r"\\begin\{" + env + r"\}(?:\[[^\]]*\])?"
+                    r"(?:\{[^}]*\})?",
+                    " ", title,
                 )
+                title = re.sub(r"\\end\{" + env + r"\}", " ", title)
 
             # 4. Remove \includegraphics[...]{...} and \includegraphics[...]...
             title = re.sub(r"\\includegraphics(?:\[[^\]]*\])?\{[^}]*\}", "", title)
@@ -1014,17 +1113,22 @@ class TeXParser:
     # ---------------------------------------------------------------
 
     def _extract_year(self, main_content: str, full_content: str) -> Optional[int]:
-        """Extract publication year with multiple fallback strategies."""
+        return self._extract_year_with_source(main_content, full_content)[0]
+
+    def _extract_year_with_source(
+        self, main_content: str, full_content: str
+    ) -> tuple[Optional[int], Optional[str]]:
+        """Extract a year only from attributable metadata."""
 
         # 1. \acmYear{YYYY}
         m = self.RE_ACM_YEAR.search(main_content)
         if m:
-            return int(m.group(1))
+            return int(m.group(1)), "tex:acm_year"
 
         # 2. Conference style file year (e.g., icml2016, neurips_2023, iclr2015)
         m = self.RE_CONF_STYLE_YEAR.search(main_content)
         if m:
-            return int(m.group(1))
+            return int(m.group(1)), "tex:conference_style"
 
         # 3. Broad: ANY \usepackage or \documentclass option containing a 4-digit year
         #    Catches: iclr2024_conference, colm2024_conference, naaclhlt2018,
@@ -1035,17 +1139,20 @@ class TeXParser:
         ]:
             for pm in re.finditer(pattern, main_content, re.I):
                 matched_text = " ".join(g for g in pm.groups() if g)
-                years = re.findall(r"\b(20[012]\d|19\d\d)\b", matched_text)
+                years = re.findall(
+                    r"(?<!\d)(20[012]\d|19\d\d)(?!\d)",
+                    matched_text,
+                )
                 if years:
                     recent = [y for y in years if 2015 <= int(y) <= 2026]
                     if recent:
-                        return int(recent[0])
-                    return int(years[0])
+                        return int(recent[0]), "tex:document_style"
+                    return int(years[0]), "tex:document_style"
 
         # 4. Comment-based year (% year: 2023, % date = 2023)
         m = self.RE_YEAR_COMMENT.search(main_content)
         if m:
-            return int(m.group(1))
+            return int(m.group(1)), "tex:year_comment"
 
         # 5. \date{...}
         m = self.RE_DATE.search(main_content)
@@ -1053,24 +1160,15 @@ class TeXParser:
             date_str = m.group(1)
             years = re.findall(r"\b(20[012]\d|19\d\d)\b", date_str)
             if years:
-                return int(years[0])
+                return int(years[0]), "tex:date"
 
         # 6. Conference + year text pattern in preamble (e.g., "NeurIPS 2023")
         preamble = main_content[:8000]
         m = self.RE_CONF_YEAR_TEXT.search(preamble)
         if m:
-            return int(m.group(2))
+            return int(m.group(2)), "tex:conference_text"
 
-        # 7. arXiv ID year: arXiv:2301.xxxxx -> 2023
-        arxiv_match = self.RE_ARXIV_ID.search(main_content)
-        if arxiv_match:
-            yy = int(arxiv_match.group(1))
-            if yy >= 90:
-                return 1900 + yy
-            else:
-                return 2000 + yy
-
-        # 7b. Explicit year macro definitions: \def\confYear{2023}, \newcommand{\year}{2023}, etc.
+        # 7. Explicit year macro definitions
         for pattern in [
             r"\\def\\[a-zA-Z]*[Yy]ear\{(\d{4})\}",
             r"\\(?:newcommand|renewcommand)\{?\\[a-zA-Z]*[Yy]ear\}?\{(\d{4})\}",
@@ -1081,69 +1179,18 @@ class TeXParser:
             if m:
                 y = int(m.group(1))
                 if 2010 <= y <= 2026:
-                    return y
+                    return y, "tex:year_macro"
 
-        # 8. Scan preamble for any 4-digit year (2015-2026)
-        # Filter out years that appear to be part of dataset/version names or citation keys
-        preamble = main_content[:8000]
-        # Strip citation commands to avoid picking up years from cite keys
-        preamble_cleaned = re.sub(r"\\(?:cite|citep|citet|citealp|citeauthor|citeyear|bibitem)\*?(?:\[[^\]]*\])?\{[^}]*\}", "", preamble)
-        year_matches = list(re.finditer(r"\b(20[12]\d)\b", preamble_cleaned))
-        if year_matches:
-            # Collect years that are NOT preceded by a hyphen or part of a dataset name
-            filtered_years = []
-            for ym in year_matches:
-                y = ym.group(1)
-                start = ym.start()
-                # Check if preceded by hyphen (dataset version like ImageNet-2012)
-                if start > 0 and preamble_cleaned[start - 1] in "-_":
-                    continue
-                # Check if part of a command name context
-                preceding = preamble_cleaned[max(0, start - 30):start]
-                if re.search(r"(?:dataset|version|benchmark|challenge|track)\b[^.]*$", preceding, re.I):
-                    continue
-                filtered_years.append(y)
-            if filtered_years:
-                counter = Counter(filtered_years)
-                most_common = counter.most_common(1)[0]
-                return int(most_common[0])
-
-        # 9. Check full content for conference-year patterns
-        m = self.RE_CONF_YEAR_TEXT.search(full_content)
-        if m:
-            return int(m.group(2))
-
-        # 10. arXiv ID in full content
-        arxiv_match = self.RE_ARXIV_ID.search(full_content)
+        # 8. arXiv submission year is retained as a labeled fallback.
+        arxiv_match = self.RE_ARXIV_ID.search(main_content)
+        if not arxiv_match:
+            arxiv_match = self.RE_ARXIV_ID.search(full_content)
         if arxiv_match:
             yy = int(arxiv_match.group(1))
-            if yy >= 90:
-                return 1900 + yy
-            else:
-                return 2000 + yy
+            year = 1900 + yy if yy >= 90 else 2000 + yy
+            return year, "tex:arxiv_submission"
 
-        # 11. Last resort: scan first 15000 chars of full content for years
-        full_snippet = full_content[:15000]
-        full_snippet_cleaned = re.sub(
-            r"\\(?:cite|citep|citet|citealp|citeauthor|citeyear|bibitem)\*?(?:\[[^\]]*\])?\{[^}]*\}",
-            "", full_snippet,
-        )
-        years = re.findall(r"\b(20[12]\d)\b", full_snippet_cleaned)
-        if years:
-            # Filter out years preceded by hyphens or underscores (dataset versions)
-            filtered = []
-            for ym in re.finditer(r"\b(20[12]\d)\b", full_snippet_cleaned):
-                y = ym.group(1)
-                start = ym.start()
-                if start > 0 and full_snippet_cleaned[start - 1] in "-_":
-                    continue
-                filtered.append(y)
-            if filtered:
-                counter = Counter(filtered)
-                most_common = counter.most_common(1)[0]
-                return int(most_common[0])
-
-        return None
+        return None, None
 
     def _detect_venue(self, main_content: str, full_content: str) -> Optional[str]:
         header = main_content[:5000]
@@ -1215,14 +1262,11 @@ class TeXParser:
         # 5. Remove \textwidth, \linewidth, \columnwidth dimension references
         abstract = re.sub(r"\\(?:textwidth|linewidth|columnwidth|textheight|paperwidth)\b", "", abstract)
 
-        # 6. Replace citations with [cite]
-        abstract = re.sub(
-            r"\\(?:cite|citep|citet|citealp|citeauthor|citeyear)\*?(?:\[[^\]]*\])?\{[^}]*\}",
-            "[cite]", abstract,
-        )
+        # 6. Preserve citation keys
+        abstract = self._replace_citations(abstract)
 
-        # 7. Replace cross-references with [ref]
-        abstract = re.sub(r"\\(?:ref|eqref|autoref|cref|Cref)\{[^}]*\}", "[ref]", abstract)
+        # 7. Preserve cross-reference labels
+        abstract = self._replace_references(abstract)
 
         # 8. Remove \em (standalone emphasis marker)
         abstract = re.sub(r"\\em\b\s*", "", abstract)
@@ -1241,8 +1285,8 @@ class TeXParser:
         # 12. Remove dimension literals: 0.05in, -0.05in, etc.
         abstract = re.sub(r"-?\d+\.?\d*\s*(?:mm|cm|pt|em|ex|in)\b", "", abstract)
 
-        # 12b. Remove inline math $...$
-        abstract = re.sub(r"\$[^$\n]+?\$", "", abstract)
+        # 12b. Keep inline math content
+        abstract = re.sub(r"\$([^$\n]+?)\$", r" [math: \1] ", abstract)
 
         # 13. Remove remaining generic commands (keep content) — 2 passes for nesting
         for _ in range(2):
@@ -1331,18 +1375,11 @@ class TeXParser:
             # 4. Remove noise commands (vspace, label, etc.)
             section_text = self.SECTION_NOISE_CMDS.sub("", section_text)
 
-            # 3. Replace cross-references with [ref]
-            section_text = re.sub(
-                r"\\(?:ref|eqref|autoref|cref|Cref|nameref|hyperref|secref)\{[^}]*\}",
-                "[ref]", section_text,
-            )
+            # 3. Preserve cross-reference labels
+            section_text = self._replace_references(section_text)
 
-            # 4. Replace citations with [cite] (including \shortcite)
-            section_text = re.sub(
-                r"\\(?:cite|citep|citet|citealp|citeauthor|citeyear|shortcite)\*?"
-                r"(?:\[[^\]]*\])?\{[^}]*\}",
-                "[cite]", section_text,
-            )
+            # 4. Preserve citation keys
+            section_text = self._replace_citations(section_text)
 
             # 5. Remove footnote/marginpar/index
             section_text = re.sub(
@@ -1358,8 +1395,6 @@ class TeXParser:
                 "picture", "minipage", "subfigure", "subtable",
                 "verbatim", "Verbatim", "minted",
                 "center", "quote", "quotation", "flushleft", "flushright",
-                "proof", "remark", "example", "definition", "theorem",
-                "lemma", "corollary", "proposition", "note",
             ]:
                 section_text = re.sub(
                     r"\\begin\{" + re.escape(env) + r"\}.*?"
@@ -1390,7 +1425,8 @@ class TeXParser:
             for env in ["itemize", "enumerate", "description"]:
                 # Remove \begin/\end markers
                 section_text = re.sub(
-                    r"\\begin\{" + env + r"\}", "\n", section_text,
+                    r"\\begin\{" + env + r"\}(?:\[[^\]]*\])?",
+                    "\n", section_text,
                 )
                 section_text = re.sub(r"\\end\{" + env + r"\}", "\n", section_text)
             # Convert \item[...] or \item to bullet-like prefix
@@ -1427,8 +1463,8 @@ class TeXParser:
             # Remove \(...\) inline display math
             section_text = re.sub(r"\\\(.+?\\\)", " [formula] ", section_text, flags=re.DOTALL)
 
-            # 9b. Remove inline math $...$ (keep as [math] placeholder)
-            section_text = re.sub(r"\$[^$\n]+?\$", " [math] ", section_text)
+            # 9b. Keep inline math content
+            section_text = re.sub(r"\$([^$\n]+?)\$", r" [math: \1] ", section_text)
 
             # 10. Remove bibliography-related commands
             section_text = re.sub(r"\\bibliographystyle\{[^}]*\}", "", section_text)
@@ -1498,9 +1534,7 @@ class TeXParser:
             # 15h. Remove \footnoteref, \footnotemark, \autoref, \hyperref, etc.
             section_text = re.sub(r"\\footnoteref\{[^}]*\}", "", section_text)
             section_text = re.sub(r"\\footnotemark(?:\[[^\]]*\])?", "", section_text)
-            section_text = re.sub(r"\\autoref\{[^}]*\}", "[ref]", section_text)
-            section_text = re.sub(r"\\hyperref\{[^}]*\}", "[ref]", section_text)
-            section_text = re.sub(r"\\nameref\{[^}]*\}", "[ref]", section_text)
+            section_text = self._replace_references(section_text)
 
             # --- Final comprehensive catch-all cleanup ---
 
@@ -1534,9 +1568,6 @@ class TeXParser:
             # 17. Collapse whitespace
             section_text = re.sub(r"\n{3,}", "\n\n", section_text)
             section_text = re.sub(r"[ \t]+", " ", section_text)
-
-            if len(section_text) > 10000:
-                section_text = section_text[:10000] + "\n... [truncated]"
 
             sections.append({
                 "heading": heading,
@@ -1720,18 +1751,112 @@ class TeXParser:
 # ---------------------------------------------------------------
 
 def parse_paper(paper_dir: Path, paper_id: str) -> dict:
-    """Parse a paper directory containing source.tar.gz or source.zip."""
+    """Parse a paper with TeX structure and a conservative PDF fallback."""
     parser = TeXParser()
+    tex_result = None
+    parse_error = None
 
     for name in ["source.tar.gz", "source.tgz", "source.tar", "source.zip"]:
         archive = paper_dir / name
         if archive.exists():
-            return parser.parse_archive(archive, paper_id)
+            try:
+                tex_result = parser.parse_archive(archive, paper_id)
+            except (ValueError, tarfile.TarError, zipfile.BadZipFile) as exc:
+                parse_error = exc
+            break
 
-    tex_files = list(paper_dir.rglob("*.tex"))
-    if tex_files:
-        return parser.parse_directory(paper_dir, paper_id)
+    if tex_result is None:
+        tex_files = list(paper_dir.rglob("*.tex"))
+        if tex_files:
+            tex_result = parser.parse_directory(paper_dir, paper_id)
 
-    raise FileNotFoundError(
-        f"No source archive or .tex files found in {paper_dir}"
+    pdf_files = sorted(
+        paper_dir.rglob("*.pdf"),
+        key=lambda path: (
+            path.name.lower() == "paper.pdf",
+            path.stat().st_size,
+        ),
+        reverse=True,
     )
+    if not pdf_files:
+        if tex_result is not None:
+            return tex_result
+        if parse_error is not None:
+            raise parse_error
+        raise FileNotFoundError(
+            f"No source archive, .tex, or PDF files found in {paper_dir}"
+        )
+
+    pdf_result = parse_pdf(pdf_files[0], paper_id)
+    if tex_result is None:
+        return pdf_result
+
+    return _merge_pdf_fallback(tex_result, pdf_result)
+
+
+def _merge_pdf_fallback(tex_result: dict, pdf_result: dict) -> dict:
+    result = dict(tex_result)
+    metadata_sources = dict(tex_result.get("metadata_sources", {}))
+    pdf_sources = pdf_result.get("metadata_sources", {})
+    conflicts = {}
+    changed = False
+
+    for field in ["title", "authors", "arxiv_id", "abstract"]:
+        if not result.get(field) and pdf_result.get(field):
+            result[field] = pdf_result[field]
+            metadata_sources[field] = pdf_sources.get(field, "pdf")
+            changed = True
+
+    pdf_year = pdf_result.get("year")
+    if pdf_year:
+        tex_year = result.get("year")
+        if tex_year and tex_year != pdf_year:
+            conflicts["year"] = {"tex": tex_year, "pdf": pdf_year}
+        if tex_year != pdf_year:
+            result["year"] = pdf_year
+            metadata_sources["year"] = pdf_sources.get(
+                "year", "pdf:front_matter"
+            )
+            changed = True
+
+        pdf_venue = pdf_result.get("venue")
+        if pdf_venue and result.get("venue") != pdf_venue:
+            if result.get("venue"):
+                conflicts["venue"] = {
+                    "tex": result["venue"],
+                    "pdf": pdf_venue,
+                }
+            result["venue"] = pdf_venue
+            metadata_sources["venue"] = pdf_sources.get(
+                "venue", "pdf:front_matter"
+            )
+            changed = True
+    elif not result.get("venue") and pdf_result.get("venue"):
+        result["venue"] = pdf_result["venue"]
+        metadata_sources["venue"] = pdf_sources.get(
+            "venue", "pdf:front_matter"
+        )
+        changed = True
+
+    tex_content_length = sum(
+        len(section.get("content", ""))
+        for section in result.get("sections", [])
+    )
+    pdf_content_length = sum(
+        len(section.get("content", ""))
+        for section in pdf_result.get("sections", [])
+    )
+    if (
+        pdf_result.get("sections")
+        and tex_content_length < max(500, pdf_content_length * 0.2)
+    ):
+        result["sections"] = pdf_result["sections"]
+        result.setdefault("content_sources", {})["sections"] = "pdf"
+        changed = True
+
+    result["pdf_file"] = pdf_result.get("pdf_file")
+    result["parse_source"] = "tex+pdf" if changed else "tex"
+    result["metadata_sources"] = metadata_sources
+    if conflicts:
+        result["metadata_conflicts"] = conflicts
+    return result
