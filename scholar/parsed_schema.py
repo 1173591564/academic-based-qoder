@@ -48,6 +48,8 @@ def parser_config_hash() -> str:
             "clean_text_projection": 1,
             "include_resolution": 1,
             "metadata_assertions": 1,
+            "metadata_source_selection": 1,
+            "pdf_fallback": 1,
         },
     )
 
@@ -62,8 +64,9 @@ def legacy_projection(document: dict) -> dict:
 
 
 def metadata_assertions(legacy: dict, main_file: str) -> list[dict]:
-    """Build source-qualified metadata assertions from TeX extraction."""
+    """Build source-qualified metadata assertions from selected values."""
     assertions = []
+    metadata_sources = legacy.get("metadata_sources", {})
     confidence = {
         "title": 0.85,
         "authors": 0.65,
@@ -76,11 +79,18 @@ def metadata_assertions(legacy: dict, main_file: str) -> list[dict]:
         value = legacy.get(field)
         if value in (None, "", []):
             continue
+        source = metadata_sources.get(field, "tex")
+        source_kind = source.partition(":")[0]
+        source_path = (
+            legacy.get("pdf_file") or main_file
+            if source_kind == "pdf"
+            else main_file
+        )
         assertion = {
             "field": field,
             "value": value,
-            "source_kind": "tex",
-            "source_locator": {"path": main_file},
+            "source_kind": source_kind,
+            "source_locator": {"path": source_path},
             "confidence": confidence[field],
             "selected": True,
         }

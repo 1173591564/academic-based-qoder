@@ -29,6 +29,12 @@
   "citations": [
     "used2026"
   ],
+  "content_sources": {
+    "bibliography": "tex",
+    "citations": "tex",
+    "formulas": "tex",
+    "sections": "tex"
+  },
   "diagnostics": {
     "losses": [
       {
@@ -39,7 +45,7 @@
         },
         "message": "Search text is a lossy derived view of the expanded TeX source.",
         "operation": "derive",
-        "output_chars": 196,
+        "output_chars": 205,
         "stage": "normalize"
       }
     ],
@@ -118,16 +124,23 @@
       "value": "This synthetic paper tests deterministic parsing, provenance, and explicit diagnostics"
     }
   ],
+  "metadata_sources": {
+    "abstract": "tex",
+    "authors": "tex",
+    "title": "tex",
+    "year": "tex:date"
+  },
   "paper_id": "PARSER_CONTRACT_FIXTURE",
+  "parse_source": "tex",
   "parser": {
-    "config_hash": "sha256:418aa6ab4133cabf93daa1264c1c7fdf04874a927887d8a6450a453e992ed94c",
+    "config_hash": "sha256:1dae82206fa411c7280e004345dbfb417bb1268c8d88824c83d92241eda23ef3",
     "name": "scholar-tex",
     "version": "3.0.0"
   },
   "schema_version": "3.0.0",
   "sections": [
     {
-      "content": "可验证的 evidence remains traceable to source. We cite the used entry [cite].\n\n [formula] \n\n [formula] \n\ndocument",
+      "content": "可验证的 evidence remains traceable to source. We cite the used entry [cite:used2026].\n\n [formula] \n\n [formula] \n\ndocument",
       "heading": "Introduction",
       "level": 1,
       "position": 0

@@ -114,7 +114,7 @@
       "type": "object",
       "required": ["kind", "main_file", "files"],
       "properties": {
-        "kind": {"const": "tex"},
+        "kind": {"enum": ["tex", "pdf", "hybrid"]},
         "main_file": {"type": "string", "minLength": 1},
         "files": {
           "type": "array",
