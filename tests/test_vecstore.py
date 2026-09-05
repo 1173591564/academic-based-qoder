@@ -107,7 +107,7 @@ def _write_parsed(tmp_path, pid, title, abstract):
 
 def test_ensure_paper_vectors_incremental(tmp_path, fake_pg):
     md5_a = _write_parsed(tmp_path, "01KA", "Paper A", "abstract A")
-    md5_b = _write_parsed(tmp_path, "01KB", "Paper B", "abstract B")
+    _write_parsed(tmp_path, "01KB", "Paper B", "abstract B")
     fake_pg.existing = {"01KA": md5_a, "01KZ": _md5("[Gone] old")}
 
     stats = vecstore.ensure_paper_vectors(
@@ -177,14 +177,14 @@ def test_search_passages_filters(fake_pg):
     assert rows and rows[0]["paper_id"] == "01KA"
     sqls = " ".join(sql for sql, _ in fake_pg.cursor_obj.executed)
     assert "paper_id = %s" in sqls and "section ILIKE %s" in sqls
-    # 参数顺序：emb, emb, paper_id, section_like, k
     params = [
         p
         for sql, p in fake_pg.cursor_obj.executed
         if "FROM chunks" in sql and "similarity" in sql
     ][0]
-    assert params[0].startswith("[") and params[2] == "01KA"
-    assert params[3] == "%Opt%" and params[4] == 5
+    assert params[0].startswith("[") and params[1] == "01KA"
+    assert params[2] == "%Opt%" and params[3].startswith("[")
+    assert params[4] == 5
 
 
 def test_search_passages_no_filters(fake_pg):

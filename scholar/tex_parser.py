@@ -9,16 +9,17 @@ Comprehensive rewrite with improved extraction for:
 - Sections: cleaner text with aggressive LaTeX stripping
 """
 import re
-import os
-import json
+import hashlib
 import tarfile
 import zipfile
 import tempfile
-import shutil
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
 from .pdf_parser import parse_pdf
+
+from .parsed_schema import build_parsed_document, legacy_projection
 
 
 class TeXParser:
@@ -222,74 +223,36 @@ class TeXParser:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             self._extract(archive_path, tmpdir)
-            tex_files = list(tmpdir.rglob("*.tex"))
-            if not tex_files:
-                raise ValueError(f"No .tex files found in {archive_path}")
-
-            main_file = self._find_main_tex(tex_files)
-            if main_file is None:
-                raise ValueError(
-                    f"No main .tex file (with \\documentclass) found among {len(tex_files)} files"
-                )
-
-            all_content = self._resolve_inputs(main_file, tmpdir, set())
-            raw_main = main_file.read_text(encoding="utf-8", errors="ignore")
-
-            # Extract macros: main file first, then supplement from all_content
-            macros = self._extract_macros(raw_main)
-            all_macros = self._extract_macros(all_content)
-            # Merge: all_content macros fill gaps, but main file takes priority
-            for k, v in all_macros.items():
-                if k not in macros:
-                    macros[k] = v
-
-            year, year_source = self._extract_year_with_source(
-                raw_main, all_content
-            )
-            result = {
-                "paper_id": paper_id,
-                "title": self._extract_title(raw_main, macros),
-                "authors": self._extract_authors(raw_main, macros),
-                "year": year,
-                "venue": self._detect_venue(raw_main, all_content),
-                "arxiv_id": self._extract_arxiv_id(raw_main, all_content),
-                "abstract": self._extract_abstract(all_content, macros),
-                "sections": self._extract_sections(all_content, macros),
-                "formulas": self._extract_formulas(all_content),
-                "citations": self._extract_citations(all_content),
-                "bibliography": self._extract_bibliography(all_content, tmpdir),
-                "tex_file_count": len(tex_files),
-                "main_tex_file": main_file.name,
-                "parse_source": "tex",
-                "content_sources": {
-                    "sections": "tex",
-                    "formulas": "tex",
-                    "citations": "tex",
-                    "bibliography": "tex",
-                },
-            }
-            result["metadata_sources"] = self._metadata_sources(
-                result, year_source
-            )
-            # 内建规则：有 arxiv_id 但 venue 未检测到 → 自动设为 "arXiv"
-            if result["arxiv_id"] and not result["venue"]:
-                result["venue"] = "arXiv"
-            if result["arxiv_id"] and result["venue"] == "arXiv":
-                result["metadata_sources"]["venue"] = "derived:arxiv"
-            return result
+            return self._parse_directory(tmpdir, paper_id, str(archive_path))
 
     def parse_directory(self, dir_path: Path, paper_id: str) -> dict:
         """Parse from an already-extracted directory of .tex files."""
-        tex_files = list(dir_path.rglob("*.tex"))
+        return self._parse_directory(dir_path, paper_id, str(dir_path))
+
+    def _parse_directory(
+        self,
+        dir_path: Path,
+        paper_id: str,
+        source_description: str,
+    ) -> dict:
+        tex_files = sorted(dir_path.rglob("*.tex"))
         if not tex_files:
-            raise ValueError(f"No .tex files found in {dir_path}")
+            raise ValueError(f"No .tex files found in {source_description}")
         main_file = self._find_main_tex(tex_files)
         if main_file is None:
-            raise ValueError("No main .tex file found")
-        all_content = self._resolve_inputs(main_file, dir_path, set())
-        raw_main = main_file.read_text(encoding="utf-8", errors="ignore")
+            raise ValueError(
+                f"No main .tex file (with \\documentclass) found among {len(tex_files)} files"
+            )
+        warnings = []
+        all_content = self._resolve_inputs_with_diagnostics(
+            main_file,
+            dir_path,
+            set(),
+            warnings,
+        )
+        warnings.extend(self._syntax_warnings(all_content, main_file, dir_path))
+        raw_main = self._read_source(main_file, dir_path, warnings)
 
-        # Extract macros: main file first, then supplement from all_content
         macros = self._extract_macros(raw_main)
         all_macros = self._extract_macros(all_content)
         for k, v in all_macros.items():
@@ -299,7 +262,7 @@ class TeXParser:
         year, year_source = self._extract_year_with_source(
             raw_main, all_content
         )
-        result = {
+        legacy = {
             "paper_id": paper_id,
             "title": self._extract_title(raw_main, macros),
             "authors": self._extract_authors(raw_main, macros),
@@ -312,7 +275,7 @@ class TeXParser:
             "citations": self._extract_citations(all_content),
             "bibliography": self._extract_bibliography(all_content, dir_path),
             "tex_file_count": len(tex_files),
-            "main_tex_file": main_file.name,
+            "main_tex_file": main_file.relative_to(dir_path).as_posix(),
             "parse_source": "tex",
             "content_sources": {
                 "sections": "tex",
@@ -321,14 +284,56 @@ class TeXParser:
                 "bibliography": "tex",
             },
         }
-        result["metadata_sources"] = self._metadata_sources(
-            result, year_source
+        legacy["metadata_sources"] = self._metadata_sources(
+            legacy, year_source
         )
-        if result["arxiv_id"] and not result["venue"]:
-            result["venue"] = "arXiv"
-        if result["arxiv_id"] and result["venue"] == "arXiv":
-            result["metadata_sources"]["venue"] = "derived:arxiv"
-        return result
+        if legacy["arxiv_id"] and not legacy["venue"]:
+            legacy["venue"] = "arXiv"
+        if legacy["arxiv_id"] and legacy["venue"] == "arXiv":
+            legacy["metadata_sources"]["venue"] = "derived:arxiv"
+        derived_text = "\n".join(
+            [
+                legacy.get("abstract") or "",
+                *(section["content"] for section in legacy["sections"]),
+            ]
+        )
+        losses = []
+        if len(derived_text) != len(all_content):
+            losses.append({
+                "code": "clean_text_projection",
+                "stage": "normalize",
+                "operation": "derive",
+                "message": "Search text is a lossy derived view of the expanded TeX source.",
+                "input_chars": len(all_content),
+                "output_chars": len(derived_text),
+                "locator": {
+                    "path": main_file.relative_to(dir_path).as_posix(),
+                },
+            })
+        source_files = []
+        for tex_file in tex_files:
+            raw = tex_file.read_bytes()
+            try:
+                raw.decode("utf-8")
+                encoding = "utf-8"
+            except UnicodeDecodeError:
+                encoding = "utf-8-replacement"
+            source_files.append({
+                "path": tex_file.relative_to(dir_path).as_posix(),
+                "encoding": encoding,
+                "sha256": f"sha256:{hashlib.sha256(raw).hexdigest()}",
+                "byte_length": len(raw),
+            })
+        return build_parsed_document(
+            legacy,
+            source={
+                "kind": "tex",
+                "main_file": main_file.relative_to(dir_path).as_posix(),
+                "files": source_files,
+            },
+            warnings=warnings,
+            losses=losses,
+        )
 
     # ---------------------------------------------------------------
     # Extraction helpers
@@ -386,31 +391,141 @@ class TeXParser:
         self, tex_file: Path, base_dir: Path, visited: set
     ) -> str:
         """Recursively resolve \\input{} and \\include{} to build full content."""
+        return self._resolve_inputs_with_diagnostics(
+            tex_file,
+            base_dir,
+            visited,
+            [],
+        )
+
+    def _read_source(
+        self,
+        tex_file: Path,
+        base_dir: Path,
+        warnings: list[dict],
+    ) -> str:
+        try:
+            return tex_file.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            warnings.append({
+                "code": "decode_replacement",
+                "stage": "read",
+                "severity": "warning",
+                "message": "Invalid UTF-8 bytes were replaced while decoding TeX.",
+                "locator": {
+                    "path": tex_file.relative_to(base_dir).as_posix(),
+                },
+            })
+            return tex_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            warnings.append({
+                "code": "source_read_failed",
+                "stage": "read",
+                "severity": "error",
+                "message": str(error),
+                "locator": {
+                    "path": tex_file.relative_to(base_dir).as_posix(),
+                },
+            })
+            return ""
+
+    def _resolve_inputs_with_diagnostics(
+        self,
+        tex_file: Path,
+        base_dir: Path,
+        visited: set,
+        warnings: list[dict],
+    ) -> str:
         real = tex_file.resolve()
         if real in visited:
+            warnings.append({
+                "code": "cyclic_input",
+                "stage": "include",
+                "severity": "warning",
+                "message": "A cyclic TeX input was skipped.",
+                "locator": {
+                    "path": tex_file.relative_to(base_dir).as_posix(),
+                },
+            })
             return ""
         visited.add(real)
-
-        try:
-            content = tex_file.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            return ""
+        content = self._read_source(tex_file, base_dir, warnings)
+        base_resolved = base_dir.resolve()
 
         def replace_input(match):
             ref = match.group(1).strip()
             for ext in [".tex", ""]:
                 candidate = tex_file.parent / (ref + ext)
-                if candidate.exists():
-                    return self._resolve_inputs(candidate, base_dir, visited)
+                if candidate.exists() and candidate.resolve().is_relative_to(base_resolved):
+                    return self._resolve_inputs_with_diagnostics(
+                        candidate,
+                        base_dir,
+                        visited,
+                        warnings,
+                    )
                 candidate = base_dir / (ref + ext)
-                if candidate.exists():
-                    return self._resolve_inputs(candidate, base_dir, visited)
+                if candidate.exists() and candidate.resolve().is_relative_to(base_resolved):
+                    return self._resolve_inputs_with_diagnostics(
+                        candidate,
+                        base_dir,
+                        visited,
+                        warnings,
+                    )
                 for found in base_dir.rglob(ref + ext):
-                    return self._resolve_inputs(found, base_dir, visited)
+                    return self._resolve_inputs_with_diagnostics(
+                        found,
+                        base_dir,
+                        visited,
+                        warnings,
+                    )
+            warnings.append({
+                "code": "missing_input",
+                "stage": "include",
+                "severity": "warning",
+                "message": f"TeX input could not be resolved: {ref}",
+                "locator": {
+                    "path": tex_file.relative_to(base_dir).as_posix(),
+                    "target": ref,
+                },
+            })
             return f"% [MISSING INPUT: {ref}]"
 
         resolved = self.RE_INPUT.sub(replace_input, content)
         return resolved
+
+    @staticmethod
+    def _syntax_warnings(
+        content: str,
+        main_file: Path,
+        base_dir: Path,
+    ) -> list[dict]:
+        locator = {"path": main_file.relative_to(base_dir).as_posix()}
+        warnings = []
+        unescaped = re.sub(r"\\[{}]", "", content)
+        if unescaped.count("{") != unescaped.count("}"):
+            warnings.append({
+                "code": "unbalanced_braces",
+                "stage": "parse",
+                "severity": "warning",
+                "message": "Expanded TeX contains unbalanced braces.",
+                "locator": locator,
+            })
+        begins = Counter(re.findall(r"\\begin\{([^}]+)\}", content))
+        ends = Counter(re.findall(r"\\end\{([^}]+)\}", content))
+        for environment in sorted(set(begins) | set(ends)):
+            if begins[environment] == ends[environment]:
+                continue
+            warnings.append({
+                "code": "unbalanced_environment",
+                "stage": "parse",
+                "severity": "warning",
+                "message": (
+                    f"TeX environment has {begins[environment]} begin marker(s) "
+                    f"and {ends[environment]} end marker(s): {environment}"
+                ),
+                "locator": locator,
+            })
+        return warnings
 
     def _clean_tex(self, text: str) -> str:
         """Remove common TeX noise for cleaner text extraction."""
@@ -1582,6 +1697,10 @@ class TeXParser:
         formulas = []
         seen = set()
 
+        def formula_key(latex: str) -> str:
+            normalized = re.sub(r"\s+", " ", latex).strip()
+            return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
         # Named math environments
         for m in self.RE_MATH_ENV.finditer(content):
             env_type = m.group(1)
@@ -1589,7 +1708,7 @@ class TeXParser:
             label_m = self.RE_LABEL.search(latex)
             label = label_m.group(1) if label_m else None
 
-            key = latex[:100]
+            key = formula_key(latex)
             if key in seen:
                 continue
             seen.add(key)
@@ -1603,7 +1722,7 @@ class TeXParser:
         # Display math $$...$$
         for m in self.RE_DISPLAY_MATH.finditer(content):
             latex = m.group(1).strip()
-            key = latex[:100]
+            key = formula_key(latex)
             if key in seen:
                 continue
             seen.add(key)
@@ -1617,7 +1736,7 @@ class TeXParser:
         # Display math \[...\] (new!)
         for m in self.RE_BRACKET_MATH.finditer(content):
             latex = m.group(1).strip()
-            key = latex[:100]
+            key = formula_key(latex)
             if key in seen:
                 continue
             seen.add(key)
@@ -1661,7 +1780,7 @@ class TeXParser:
                             seen_keys.add(key)
                             title = re.sub(r"[{}]", "", entry.get("title", "").strip())
                             authors_raw = entry.get("author", "")
-                            authors = [a.strip() for a in re.split(r"\s+and\s+|,", authors_raw) if a.strip()]
+                            authors = self._split_bibtex_authors(authors_raw)
                             year = None
                             year_str = entry.get("year", "")
                             if year_str:
@@ -1706,7 +1825,11 @@ class TeXParser:
                 if title_match:
                     title = title_match.group(1)
                 else:
-                    lines = [l.strip() for l in body.strip().split("\n") if l.strip()]
+                    lines = [
+                        line.strip()
+                        for line in body.strip().split("\n")
+                        if line.strip()
+                    ]
                     if lines:
                         first = lines[0]
                         first = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", first)
@@ -1733,6 +1856,28 @@ class TeXParser:
 
         return entries
 
+    @staticmethod
+    def _split_bibtex_authors(authors_raw: str) -> list[str]:
+        """Split BibTeX authors without treating name-internal commas as separators."""
+        authors = []
+        for raw_author in re.split(r"\s+and\s+", authors_raw):
+            raw_author = re.sub(r"[{}]", "", raw_author).strip()
+            if not raw_author:
+                continue
+            comma_parts = [
+                part.strip()
+                for part in raw_author.split(",")
+                if part.strip()
+            ]
+            if len(comma_parts) == 2:
+                author = f"{comma_parts[1]} {comma_parts[0]}"
+            elif len(comma_parts) == 3:
+                author = f"{comma_parts[2]} {comma_parts[0]} {comma_parts[1]}"
+            else:
+                author = raw_author
+            authors.append(re.sub(r"\s+", " ", author).strip())
+        return authors
+
     def _extract_citations(self, content: str) -> list[str]:
         refs = set()
         for m in self.RE_CITATION.finditer(content):
@@ -1741,8 +1886,6 @@ class TeXParser:
                 key = key.strip()
                 if key and not key.startswith("%"):
                     refs.add(key)
-        for m in self.RE_BIBITEM.finditer(content):
-            refs.add(m.group(1).strip())
         return sorted(refs)
 
 
@@ -1787,15 +1930,52 @@ def parse_paper(paper_dir: Path, paper_id: str) -> dict:
             f"No source archive, .tex, or PDF files found in {paper_dir}"
         )
 
-    pdf_result = parse_pdf(pdf_files[0], paper_id)
+    pdf_path = pdf_files[0]
+    pdf_result = parse_pdf(pdf_path, paper_id)
+    pdf_result["pdf_file"] = pdf_path.relative_to(paper_dir).as_posix()
     if tex_result is None:
-        return pdf_result
+        return _build_pdf_document(pdf_result, pdf_path)
 
-    return _merge_pdf_fallback(tex_result, pdf_result)
+    return _merge_pdf_fallback(tex_result, pdf_result, pdf_path)
 
 
-def _merge_pdf_fallback(tex_result: dict, pdf_result: dict) -> dict:
-    result = dict(tex_result)
+def _source_file(
+    path: Path,
+    encoding: str,
+    source_path: Optional[str] = None,
+) -> dict:
+    raw = path.read_bytes()
+    return {
+        "path": source_path or path.name,
+        "encoding": encoding,
+        "sha256": f"sha256:{hashlib.sha256(raw).hexdigest()}",
+        "byte_length": len(raw),
+    }
+
+
+def _build_pdf_document(pdf_result: dict, pdf_path: Path) -> dict:
+    return build_parsed_document(
+        pdf_result,
+        source={
+            "kind": "pdf",
+            "main_file": pdf_result["pdf_file"],
+            "files": [
+                _source_file(
+                    pdf_path,
+                    "binary",
+                    pdf_result["pdf_file"],
+                )
+            ],
+        },
+    )
+
+
+def _merge_pdf_fallback(
+    tex_result: dict,
+    pdf_result: dict,
+    pdf_path: Path,
+) -> dict:
+    result = legacy_projection(tex_result)
     metadata_sources = dict(tex_result.get("metadata_sources", {}))
     pdf_sources = pdf_result.get("metadata_sources", {})
     conflicts = {}
@@ -1859,4 +2039,22 @@ def _merge_pdf_fallback(tex_result: dict, pdf_result: dict) -> dict:
     result["metadata_sources"] = metadata_sources
     if conflicts:
         result["metadata_conflicts"] = conflicts
-    return result
+    source = {
+        **tex_result["source"],
+        "kind": "hybrid",
+        "files": [
+            *tex_result["source"]["files"],
+            _source_file(
+                pdf_path,
+                "binary",
+                pdf_result["pdf_file"],
+            ),
+        ],
+    }
+    diagnostics = tex_result["diagnostics"]
+    return build_parsed_document(
+        result,
+        source=source,
+        warnings=diagnostics["warnings"],
+        losses=diagnostics["losses"],
+    )

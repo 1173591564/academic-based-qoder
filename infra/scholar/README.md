@@ -6,6 +6,8 @@
 docker compose -f infra/scholar/compose.yml up -d
 ```
 
-`init.sql` initializes PostgreSQL and pgvector. The existing Neo4j service is retained for compatibility with current local workflows while the tracked skill and command assets are migrated to the in-memory graph implementation.
+The Scholar v2 schema initializes PostgreSQL and pgvector. Relational,
+embedding, graph, build, and serving-snapshot projections all live in this
+single database; XML artifacts remain immutable files.
 
 Production deployments must replace the local development credentials and must keep the backend administrative interface private.

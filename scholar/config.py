@@ -157,9 +157,8 @@ INTERESTS_FILE = OUTPUT_DIR / "research-interests.json"
 # Running mode flags
 IS_FROZEN = getattr(sys, "frozen", False)
 IS_SOURCE_TREE = (
-    (Path(__file__).resolve().parent.parent / "pyproject.toml").is_file()
-    and (Path(__file__).resolve().parent.parent / ".git").exists()
-)
+    Path(__file__).resolve().parent.parent / "pyproject.toml"
+).is_file() and (Path(__file__).resolve().parent.parent / ".git").exists()
 
 
 def init_scholar_home() -> dict:
@@ -398,6 +397,27 @@ EMBEDDING_PROVIDER = os.getenv("SCHOLAR_EMBEDDING_PROVIDER", "zhipu")
 EMBEDDING_MODEL = os.getenv("SCHOLAR_EMBEDDING_MODEL", "embedding-2")
 EMBEDDING_DIM = int(os.getenv("SCHOLAR_EMBEDDING_DIM", "1024"))
 EMBEDDING_API_KEY = os.getenv("SCHOLAR_EMBEDDING_API_KEY", "")
+
+# XML-first data plane
+V2_SERVING_CHANNEL = os.getenv("SCHOLAR_V2_SERVING_CHANNEL", "production")
+V2_CORPUS_DIR = Path(
+    os.getenv("SCHOLAR_V2_CORPUS_DIR", str(SCHOLAR_HOME / "data" / "corpus-v2"))
+)
+V2_PG_POOL_MIN = int(os.getenv("SCHOLAR_V2_PG_POOL_MIN", "1"))
+V2_PG_POOL_MAX = int(os.getenv("SCHOLAR_V2_PG_POOL_MAX", "8"))
+V2_PG_CONNECT_TIMEOUT_MS = int(os.getenv("SCHOLAR_V2_PG_CONNECT_TIMEOUT_MS", "3000"))
+V2_PG_ACQUIRE_TIMEOUT_MS = int(os.getenv("SCHOLAR_V2_PG_ACQUIRE_TIMEOUT_MS", "2000"))
+V2_PG_STATEMENT_TIMEOUT_MS = int(
+    os.getenv("SCHOLAR_V2_PG_STATEMENT_TIMEOUT_MS", "15000")
+)
+V2_PG_LOCK_TIMEOUT_MS = int(os.getenv("SCHOLAR_V2_PG_LOCK_TIMEOUT_MS", "1000"))
+V2_MAX_INFLIGHT = int(os.getenv("SCHOLAR_V2_MAX_INFLIGHT", "32"))
+V2_VECTOR_MAX_INFLIGHT = int(os.getenv("SCHOLAR_V2_VECTOR_MAX_INFLIGHT", "8"))
+V2_SEMANTIC_MAX_INFLIGHT = int(os.getenv("SCHOLAR_V2_SEMANTIC_MAX_INFLIGHT", "4"))
+V2_REQUEST_ACQUIRE_TIMEOUT_MS = int(
+    os.getenv("SCHOLAR_V2_REQUEST_ACQUIRE_TIMEOUT_MS", "250")
+)
+V2_EMBEDDING_DIM = int(os.getenv("SCHOLAR_V2_EMBEDDING_DIM", "1024"))
 
 # MiKTeX (本地 LaTeX 编译)
 LATEX_CMD = os.getenv("SCHOLAR_LATEX_CMD", "pdflatex")

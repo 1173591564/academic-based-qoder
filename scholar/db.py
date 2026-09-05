@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
+from jsonschema import ValidationError
+
 from . import config
+from .parsed_schema import (
+    VNEXT_DIRNAME,
+    legacy_projection,
+    validate_parsed_document,
+)
 
 _PAPER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 
@@ -298,16 +305,45 @@ class Database:
 # ---------------------------------------------------------------
 
 def save_parsed(data: dict, parsed_dir: Path = None):
-    """Save parsed paper data to a JSON file."""
+    """Save parsed vNext and its legacy reader projection."""
     if parsed_dir is None:
         parsed_dir = config.PARSED_DIR
     parsed_dir.mkdir(parents=True, exist_ok=True)
-    out_path = parsed_path(data["paper_id"], parsed_dir)
+    legacy = data
+    if data.get("schema_version") is not None:
+        validate_parsed_document(data)
+        vnext_dir = parsed_dir / VNEXT_DIRNAME
+        vnext_dir.mkdir(parents=True, exist_ok=True)
+        vnext_path = parsed_path(data["paper_id"], vnext_dir)
+        vnext_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        legacy = legacy_projection(data)
+    out_path = parsed_path(legacy["paper_id"], parsed_dir)
     out_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
+        json.dumps(legacy, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     return out_path
+
+
+def load_parsed_vnext(paper_id: str, parsed_dir: Path = None) -> Optional[dict]:
+    """Load and validate a parsed vNext artifact when available."""
+    if parsed_dir is None:
+        parsed_dir = config.PARSED_DIR
+    try:
+        path = parsed_path(paper_id, parsed_dir / VNEXT_DIRNAME)
+    except ValueError:
+        return None
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        validate_parsed_document(document)
+        return document
+    except (OSError, json.JSONDecodeError, ValidationError):
+        return None
 
 
 def load_parsed(paper_id: str, parsed_dir: Path = None) -> Optional[dict]:

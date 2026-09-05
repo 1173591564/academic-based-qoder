@@ -1,0 +1,171 @@
+{
+  "abstract": "This synthetic paper tests deterministic parsing, provenance, and explicit diagnostics",
+  "arxiv_id": null,
+  "authors": [
+    "Ada Lovelace",
+    "Alan Turing"
+  ],
+  "bibliography": [
+    {
+      "authors": [
+        "Ada Lovelace",
+        "Alan Mathison Turing"
+      ],
+      "doi": "10.1000/used",
+      "ref_key": "used2026",
+      "title": "Used Evidence",
+      "year": 2026
+    },
+    {
+      "authors": [
+        "Grace Hopper"
+      ],
+      "doi": "",
+      "ref_key": "uncited2025",
+      "title": "Uncited Background",
+      "year": 2025
+    }
+  ],
+  "citations": [
+    "used2026"
+  ],
+  "content_sources": {
+    "bibliography": "tex",
+    "citations": "tex",
+    "formulas": "tex",
+    "sections": "tex"
+  },
+  "diagnostics": {
+    "losses": [
+      {
+        "code": "clean_text_projection",
+        "input_chars": 768,
+        "locator": {
+          "path": "main.tex"
+        },
+        "message": "Search text is a lossy derived view of the expanded TeX source.",
+        "operation": "derive",
+        "output_chars": 205,
+        "stage": "normalize"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "missing_input",
+        "locator": {
+          "path": "main.tex",
+          "target": "sections/missing"
+        },
+        "message": "TeX input could not be resolved: sections/missing",
+        "severity": "warning",
+        "stage": "include"
+      }
+    ]
+  },
+  "formulas": [
+    {
+      "env_type": "equation",
+      "label": null,
+      "latex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = \\alpha"
+    },
+    {
+      "env_type": "equation",
+      "label": null,
+      "latex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = \\beta"
+    }
+  ],
+  "main_tex_file": "main.tex",
+  "metadata_assertions": [
+    {
+      "confidence": 0.85,
+      "field": "title",
+      "id": "sha256:62643d4f9528a5f9ff6c0c49896c138f74acd0468859c8d63fdada99e52fd5f9",
+      "selected": true,
+      "source_kind": "tex",
+      "source_locator": {
+        "path": "main.tex"
+      },
+      "value": "Evidence Foundation"
+    },
+    {
+      "confidence": 0.65,
+      "field": "authors",
+      "id": "sha256:29d8844b943fde7565a5bca35898d5c304a0af394bab3207bda1b17d095bb3fd",
+      "selected": true,
+      "source_kind": "tex",
+      "source_locator": {
+        "path": "main.tex"
+      },
+      "value": [
+        "Ada Lovelace",
+        "Alan Turing"
+      ]
+    },
+    {
+      "confidence": 0.35,
+      "field": "year",
+      "id": "sha256:5960d17dbdce8daa7303c6a3035e03ecfc3ef34814b6e22725dd3e1e6e117362",
+      "selected": true,
+      "source_kind": "tex",
+      "source_locator": {
+        "path": "main.tex"
+      },
+      "value": 2026
+    },
+    {
+      "confidence": 0.8,
+      "field": "abstract",
+      "id": "sha256:6ba43dd23358bfe30cd9c1f2416009f455bb374c3559b3fc6e57274303b79a8d",
+      "selected": true,
+      "source_kind": "tex",
+      "source_locator": {
+        "path": "main.tex"
+      },
+      "value": "This synthetic paper tests deterministic parsing, provenance, and explicit diagnostics"
+    }
+  ],
+  "metadata_sources": {
+    "abstract": "tex",
+    "authors": "tex",
+    "title": "tex",
+    "year": "tex:date"
+  },
+  "paper_id": "PARSER_CONTRACT_FIXTURE",
+  "parse_source": "tex",
+  "parser": {
+    "config_hash": "sha256:1dae82206fa411c7280e004345dbfb417bb1268c8d88824c83d92241eda23ef3",
+    "name": "scholar-tex",
+    "version": "3.0.0"
+  },
+  "schema_version": "3.0.0",
+  "sections": [
+    {
+      "content": "可验证的 evidence remains traceable to source. We cite the used entry [cite:used2026].\n\n [formula] \n\n [formula] \n\ndocument",
+      "heading": "Introduction",
+      "level": 1,
+      "position": 0
+    }
+  ],
+  "source": {
+    "files": [
+      {
+        "byte_length": 347,
+        "encoding": "utf-8",
+        "path": "main.tex",
+        "sha256": "sha256:2a1a3937033292e576c3128e72c3f256dcb3c1dbff5604663d9454516283bfdd"
+      },
+      {
+        "byte_length": 440,
+        "encoding": "utf-8",
+        "path": "sections/intro.tex",
+        "sha256": "sha256:86618ae270d7bc301a97719e5fc5f68e7f7763284c5017246cd2ef9e9cda6095"
+      }
+    ],
+    "kind": "tex",
+    "main_file": "main.tex"
+  },
+  "tex_file_count": 2,
+  "title": "Evidence Foundation",
+  "venue": null,
+  "year": 2026
+}

@@ -2,7 +2,10 @@
 
 English | [中文](README.zh.md)
 
-Scholar Studio is a Python academic-research engine with a 48-command CLI, a 16-tool MCP server, 15 local research skills, lexical and semantic retrieval, an in-memory citation/concept graph, paper parsing, academic writing support, experiment helpers, and optional Lean4 synchronization.
+Scholar Studio is a Python academic-research engine with a 48-command CLI, a
+16-tool MCP server, XML-first evidence retrieval, PostgreSQL/pgvector
+projections, academic writing support, experiment helpers, and optional Lean4
+synchronization.
 
 ## Architecture
 
@@ -42,6 +45,16 @@ scholar doctor
 - A local stdio deployment may use an independently distributed and verified data pack.
 - Clients do not synchronize corpus files or vector indexes from the server.
 - Remote clients do not need database or embedding-provider credentials.
+- Immutable LaTeXML is the corpus authority; relational, vector, and graph
+  data are rebuildable PostgreSQL projections selected by a serving snapshot.
+
+See [Scholar v2 operations](docs/scholar-v2.md).
+
+## Parsed artifacts
+
+TeX parsing produces a schema-validated vNext artifact with parser lineage, source-file hashes, source-qualified metadata assertions, and structured warning/loss diagnostics. `save_parsed()` stores the vNext artifact under `parsed/vnext/` and writes an explicit legacy projection at the existing `parsed/<paper_id>.json` location, so current MCP and retrieval readers remain stable while evidence fields evolve.
+
+The committed synthetic fixture corpus and golden artifacts cover nested inputs, missing inputs, multilingual text, formula-prefix collisions, uncited bibliography entries, and comma-formatted BibTeX authors.
 
 ## MCP server
 
@@ -58,15 +71,13 @@ SCHOLAR_MCP_TRANSPORT=streamable-http \
 SCHOLAR_MCP_HOST=127.0.0.1 \
 SCHOLAR_MCP_PORT=8000 \
 SCHOLAR_MCP_TOKEN='managed-secret' \
-SCHOLAR_CORPUS_VERSION='corpus-v1' \
 SCHOLAR_WORKSPACE_ISOLATION=shared \
 python -m scholar_mcp
 ```
 
 Non-loopback HTTP requires a Bearer token. Explicit loopback no-auth mode (`SCHOLAR_MCP_ALLOW_INSECURE_LOOPBACK=1`) is limited to local development or an SSH tunnel. Model-facing errors omit filesystem paths, credentials, database diagnostics, and provider details.
-The authenticated private readiness endpoint reports only the configured corpus
-version, workspace isolation mode, and bounded index counts; Proxy Hub uses it
-before activating a tenant route.
+The authenticated private readiness endpoint reports only the active schema,
+release, snapshot, sealed builds, and degraded projection capabilities.
 
 The MCP server publishes exactly these 16 tools:
 
@@ -119,7 +130,8 @@ scholar graph-stats
 scholar sync
 ```
 
-Semantic search reports provider, database, and index unavailability separately from a legitimate zero-result response. Graph and vector caches refresh when authoritative corpus metadata changes.
+Semantic search reports provider, database, and projection unavailability
+separately from a legitimate zero-result response.
 
 ## Development
 
@@ -132,7 +144,7 @@ python -m pip wheel . --no-deps -w dist
 
 The root `Makefile` also exposes focused checks for Scholar, the Proxy Hub backend, the Proxy Hub frontend, and generated templates.
 
-Tests cover path containment, malformed paper data, graph/index invalidation, authentication, MCP initialization, the 16-tool catalog, lexical and semantic search, DSH clean-home installation, credential storage, permissions, existing-file preservation, and rollback.
+Tests cover path containment, malformed paper data, parser golden artifacts, graph/index invalidation, authentication, MCP initialization, the 16-tool catalog, lexical and semantic search, scoped passage SQL against pgvector PostgreSQL, DSH clean-home installation, credential storage, permissions, existing-file preservation, and rollback.
 
 ## Phase boundary
 

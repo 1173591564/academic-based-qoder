@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scholar-studio.local/schemas/parsed-vnext.schema.json",
+  "title": "Scholar parsed paper vNext",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "paper_id",
+    "title",
+    "authors",
+    "sections",
+    "formulas",
+    "citations",
+    "bibliography",
+    "parser",
+    "source",
+    "metadata_assertions",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "3.0.0"
+    },
+    "paper_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": ["string", "null"]
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "year": {
+      "type": ["integer", "null"],
+      "minimum": 1000,
+      "maximum": 9999
+    },
+    "venue": {
+      "type": ["string", "null"]
+    },
+    "arxiv_id": {
+      "type": ["string", "null"]
+    },
+    "abstract": {
+      "type": ["string", "null"]
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["heading", "level", "content", "position"],
+        "properties": {
+          "heading": {"type": "string"},
+          "level": {"type": "integer"},
+          "content": {"type": "string"},
+          "position": {"type": "integer", "minimum": 0}
+        },
+        "additionalProperties": true
+      }
+    },
+    "formulas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["latex", "label", "env_type"],
+        "properties": {
+          "latex": {"type": "string"},
+          "label": {"type": ["string", "null"]},
+          "env_type": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "bibliography": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref_key", "title", "authors", "year", "doi"],
+        "properties": {
+          "ref_key": {"type": "string"},
+          "title": {"type": "string"},
+          "authors": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "year": {"type": ["integer", "null"]},
+          "doi": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "parser": {
+      "type": "object",
+      "required": ["name", "version", "config_hash"],
+      "properties": {
+        "name": {"const": "scholar-tex"},
+        "version": {"type": "string", "minLength": 1},
+        "config_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind", "main_file", "files"],
+      "properties": {
+        "kind": {"enum": ["tex", "pdf", "hybrid"]},
+        "main_file": {"type": "string", "minLength": 1},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "encoding", "sha256", "byte_length"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "encoding": {"type": "string", "minLength": 1},
+              "sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "byte_length": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata_assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "field",
+          "value",
+          "source_kind",
+          "source_locator",
+          "confidence",
+          "selected"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "field": {"type": "string", "minLength": 1},
+          "source_kind": {"type": "string", "minLength": 1},
+          "source_locator": {"type": "object"},
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "selected": {"type": "boolean"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": ["warnings", "losses"],
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/warning"}
+        },
+        "losses": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/loss"}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "required": ["code", "stage", "severity", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["info", "warning", "error"]},
+        "message": {"type": "string", "minLength": 1},
+        "locator": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "loss": {
+      "type": "object",
+      "required": [
+        "code",
+        "stage",
+        "operation",
+        "message",
+        "input_chars",
+        "output_chars"
+      ],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "operation": {"enum": ["delete", "replace", "truncate", "derive"]},
+        "message": {"type": "string", "minLength": 1},
+        "input_chars": {"type": "integer", "minimum": 0},
+        "output_chars": {"type": "integer", "minimum": 0},
+        "locator": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
