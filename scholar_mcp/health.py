@@ -1,45 +1,69 @@
-"""Private readiness metadata for one Scholar corpus process."""
+"""Private readiness metadata for the active Scholar snapshot."""
 
-import os
-from datetime import datetime, timezone
-
-from scholar import config, graph_mem
-
-
-def _timestamp(path):
-    if not path.exists():
-        return None
-    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+from scholar import config
+from scholar.v2 import runtime
+from scholar.v2.models import ScholarError
 
 
 def readiness_payload():
     """Return bounded readiness metadata without exposing corpus content."""
-    corpus_version = os.getenv("SCHOLAR_CORPUS_VERSION", "").strip()
-    workspace_isolation = os.getenv(
-        "SCHOLAR_WORKSPACE_ISOLATION",
-        "shared",
-    ).strip()
-    if not corpus_version:
-        return 503, {"status": "unavailable", "reason": "corpus_version_missing"}
-    if workspace_isolation not in {"shared", "tenant"}:
+    try:
+        database = runtime.get_database()
+        snapshot = database.active_snapshot()
+        build_ids = [
+            build_id
+            for build_id in (
+                snapshot["relational_build_id"],
+                snapshot["graph_build_id"],
+                snapshot["vector_build_id"],
+                snapshot["semantic_build_id"],
+            )
+            if build_id
+        ]
+        with database.cursor(read_only=True) as cursor:
+            cursor.execute(
+                """
+                SELECT id, projection_type, status
+                FROM scholar_v2_projection_builds
+                WHERE id = ANY(%s)
+                ORDER BY projection_type
+                """,
+                (build_ids,),
+            )
+            builds = [
+                {"id": row[0], "kind": row[1], "state": row[2]}
+                for row in cursor.fetchall()
+            ]
+        degraded = [
+            kind
+            for kind, build_id in (
+                ("vector", snapshot["vector_build_id"]),
+                ("graph", snapshot["graph_build_id"]),
+                ("semantic", snapshot["semantic_build_id"]),
+            )
+            if build_id is None
+        ]
+        return 200, {
+            "status": "ready",
+            "mode": "v2",
+            "schema_version": snapshot["schema_version"],
+            "channel": config.V2_SERVING_CHANNEL,
+            "snapshot_id": snapshot["id"],
+            "corpus_release_id": snapshot["release_id"],
+            "builds": builds,
+            "degraded_capabilities": degraded,
+        }
+    except ScholarError as error:
         return 503, {
             "status": "unavailable",
-            "reason": "workspace_isolation_invalid",
+            "mode": "v2",
+            "code": error.code,
+            "reason": error.message,
         }
-    parsed_files = [path for path in config.PARSED_DIR.glob("*.json") if path.is_file()]
-    observed_paths = list(parsed_files)
-    if graph_mem.GRAPH_CACHE.is_file():
-        observed_paths.append(graph_mem.GRAPH_CACHE)
-    synchronized_at = None
-    if observed_paths:
-        latest = max(path.stat().st_mtime for path in observed_paths)
-        synchronized_at = datetime.fromtimestamp(latest, timezone.utc).isoformat()
-    return 200, {
-        "status": "ready",
-        "corpus_version": corpus_version,
-        "parsed_papers": len(parsed_files),
-        "vector_chunks": 0,
-        "graph_built_at": _timestamp(graph_mem.GRAPH_CACHE),
-        "synchronized_at": synchronized_at,
-        "workspace_isolation": workspace_isolation,
-    }
+    except Exception:
+        return 503, {
+            "status": "unavailable",
+            "mode": "v2",
+            "code": "INTERNAL",
+            "reason": "Scholar v2 readiness check failed",
+        }

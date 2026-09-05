@@ -15,33 +15,26 @@ Model-facing surface: 16 focused tools organised as a reading ladder.
                       scholar_auto_notes / scholar_interests
 
 Context economy contract: every tool returns a bounded result; full-paper
-dumps require an explicit full=True escape hatch. Maintenance operations
-(parse/ingest/rag-index/graph-build/…) live in the CLI, not here — run
-`scholar sync` to refresh all derived indexes from parsed JSON.
+dumps require an explicit full=True escape hatch. The corpus tools query a
+single version-pinned PostgreSQL/pgvector snapshot.
 
 Run: python -m scholar_mcp
 """
 
-import json
 import logging
 import os
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
 from scholar import config as scholar_config
-from scholar import db as dbmod
-from scholar import graph_mem, vecstore
-from scholar._state import init_shared_state, get_state  # noqa: F401 (re-exported)
-from scholar_mcp.transport import (
-    bearer_token_middleware as _bearer_token_middleware,
-    is_loopback_host as _is_loopback_host,
-    loopback_only_middleware as _loopback_only_middleware,
-    run_transport,
-)
+from scholar import research_loop as rl
+from scholar_mcp import v2_adapter
+from scholar_mcp.transport import run_transport
 
 mcp = FastMCP(
     "Scholar Studio",
@@ -60,29 +53,15 @@ logger = logging.getLogger(__name__)
 
 # ─── shared helpers ─────────────────────────────────────────────────────────
 
-MAX_SECTION_CHARS = 16_000
 MAX_FULL_JSON_CHARS = 200_000
-ABSTRACT_SNIPPET = 200  # L1 hit lines
-DIGEST_ABSTRACT = 400  # L2 digest
 SKILL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
-def _resolve(paper_id: str) -> str:
-    """Resolve hybrid ID to ULID using cached resolver (if available)."""
-    state = get_state()
-    if state:
-        return state.resolve_id(paper_id) or paper_id
-    from scholar.id_resolver import resolve_id
-
-    return resolve_id(paper_id) or paper_id
-
-
-def _load_parsed(paper_id: str) -> dict | None:
-    """Load parsed JSON with LRU cache (if SharedState available)."""
-    state = get_state()
-    if state:
-        return state.get_parsed(paper_id)
-    return dbmod.load_parsed(paper_id)
+def _corpus_call(operation, *args) -> str:
+    try:
+        return operation(*args)
+    except Exception as error:
+        return v2_adapter.error_text(error)
 
 
 def _run_scholar(*args: str, timeout: int = 120) -> str:
@@ -104,185 +83,33 @@ def _run_scholar(*args: str, timeout: int = 120) -> str:
     return output.strip()
 
 
-# ─── lexical scoring (same semantics as the dsh plugin layer) ───────────────
-
-_STOPWORDS = set(
-    (
-        "the a an and or of for to in on with by from as at is are was were be been this that these those "
-        "it its their his her our your my not no do does did done can could should would will shall may "
-        "might must how what why when where which who whom whose about into over under between within "
-        "without during through using use used based paper papers method methods model models approach "
-        "approaches result results new novel please explain describe tell say make give show help like "
-        "also more most some any all both each other than then you i we they he she them us him me here "
-        "there have has had having let get got"
-    ).split()
-)
-
-
-def _extract_terms(text: str) -> list[str]:
-    """Latin words (>=3 chars, stopwords removed) + CJK bigrams, deduped."""
-    if not text:
-        return []
-    terms: list[str] = []
-    for raw in re.findall(r"[a-z][a-z0-9+#.-]{2,}", text.lower()):
-        w = raw.rstrip(".+-")
-        if len(w) >= 3 and w not in _STOPWORDS:
-            terms.append(w)
-    cjk = re.findall(r"[\u4e00-\u9fff]", text)
-    terms.extend(cjk[i] + cjk[i + 1] for i in range(len(cjk) - 1))
-    return list(dict.fromkeys(terms))
-
-
-def _score_paper(data: dict, terms: list[str]) -> tuple[int, int]:
-    """Returns (score, matched_terms). title×4 / tags×2 / abstract×1 (cap 3)."""
-    title = (data.get("title") or "").lower()
-    abstract = (data.get("abstract") or "").lower()
-    tags = data.get("tags") or {}
-    tag_text = " ".join(
-        v
-        for key in ("domains", "sub_directions", "methods", "tags")
-        for v in (tags.get(key) or [])
-        if isinstance(v, str)
-    ).lower()
-    if not title and not abstract:
-        return 0, 0
-    score = 0
-    matched = 0
-    for term in terms:
-        hit = False
-        if term in title:
-            score += 4
-            hit = True
-        if tag_text and term in tag_text:
-            score += 2
-            hit = True
-        c, from_ = 0, 0
-        while True:
-            from_ = abstract.find(term, from_)
-            if from_ == -1 or c >= 3:
-                break
-            score += 1
-            c += 1
-            from_ += len(term)
-        if c:
-            hit = True
-        if hit:
-            matched += 1
-    if len(terms) >= 2:
-        phrase = terms[0] + " " + terms[1]
-        if phrase in title or phrase in abstract:
-            score += 3
-    return score, matched
-
-
 # ─── L1: find papers ────────────────────────────────────────────────────────
 
 
 @mcp.tool()
 def scholar_search(query: str, limit: int = 10) -> str:
-    """Lexical search across the library (title/abstract/tags).
+    """Lexical search across paper titles and abstracts.
 
     Args:
         query: Keywords or a short phrase (multi-word works best)
         limit: Max results (default 10)
     """
-    terms = _extract_terms(query)
-    if not terms:
-        return f"No usable terms in '{query}'"
-    min_matched = 1 if len(terms) == 1 else 2
-    hits = []
-    for pid in dbmod.list_parsed():
-        data = _load_parsed(pid)
-        if not data:
-            continue
-        score, matched = _score_paper(data, terms)
-        if score >= 5 and matched >= min_matched:
-            hits.append((score, data))
-    hits.sort(key=lambda x: x[0], reverse=True)
-    hits = hits[: max(1, min(limit, 20))]
-    if not hits:
-        return f"No results for '{query}'. Try scholar_vec_search with a natural-language question."
-    lines = [f"Search: '{query}' ({len(hits)} results, scored)"]
-    for score, data in hits:
-        snippet = (data.get("abstract") or "").replace("\n", " ")[:ABSTRACT_SNIPPET]
-        line = (
-            f"  [{data.get('paper_id', '')}] {(data.get('title') or 'N/A')[:70]} "
-            f"({data.get('year', '')} {data.get('venue') or ''}) score={score}"
-        )
-        if snippet:
-            line += f"\n      {snippet}…"
-        lines.append(line)
-    lines.append(
-        "Next: scholar_info <paper_id> for the section TOC; "
-        "scholar_section for specific sections."
-    )
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.search, query, max(1, min(limit, 20)))
 
 
 @mcp.tool()
 def scholar_vec_search(question: str, k: int = 8) -> str:
     """Semantic paper search: match a natural-language research question to
-    papers by their contribution (one embedding per paper over title+abstract).
+    chunk embeddings, then return distinct matching papers.
 
     Args:
         question: The user's academic question in natural language
         k: Max papers to return (default 8)
     """
-    if not question or not question.strip():
-        return "No semantic query provided."
-    try:
-        rows = vecstore.search_papers_semantic(question, k=max(1, min(k, 20)))
-    except vecstore.IndexUnavailable:
-        return "Semantic search unavailable: the server vector index is not ready."
-    except vecstore.EmbedUnavailable:
-        return "Semantic search unavailable: the server embedding provider is not ready."
-    except vecstore.DatabaseUnavailable:
-        return "Semantic search unavailable: the server vector database cannot be reached."
-    except Exception as error:
-        logger.warning("semantic search failed (%s)", type(error).__name__)
-        return "Semantic search failed. Fall back to scholar_search."
-    if not rows:
-        return "No semantic matches found in the server corpus."
-    lines = [f"Semantic matches for: '{question}' ({len(rows)} papers)"]
-    for r in rows:
-        data = _load_parsed(r["paper_id"]) or {}
-        title = (data.get("title") or "N/A")[:70]
-        year = data.get("year", "")
-        abstract = (data.get("abstract") or "").replace("\n", " ")[:ABSTRACT_SNIPPET]
-        lines.append(f"  [{r['paper_id']}] {title} ({year}) sim={r['similarity']}")
-        if abstract:
-            lines.append(f"      {abstract}…")
-    lines.append("Next: scholar_info <paper_id> for TOC; scholar_section to read.")
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.vector_search, question, max(1, min(k, 20)))
 
 
 # ─── L2: paper digest ───────────────────────────────────────────────────────
-
-
-def _digest_lines(data: dict) -> list[str]:
-    sections = data.get("sections", [])
-    lines = [
-        f"Title:     {data.get('title', 'N/A')}",
-        f"Authors:   {', '.join(data.get('authors', []) or [])[:120]}",
-        f"Year:      {data.get('year', 'N/A')}  Venue: {data.get('venue', 'N/A')}",
-        f"Formulas:  {len(data.get('formulas', []))}  "
-        f"Citations: {len(data.get('citations', []))}  Sections: {len(sections)}",
-    ]
-    abstract = (data.get("abstract") or "").strip()
-    if abstract:
-        lines.append(
-            f"\nAbstract: {abstract[:DIGEST_ABSTRACT]}"
-            f"{'…' if len(abstract) > DIGEST_ABSTRACT else ''}"
-        )
-    if sections:
-        lines.append(f"\nSection TOC (use scholar_section with the [index]):")
-        for i, s in enumerate(sections):
-            heading = (s.get("heading") or "(untitled)")[:60]
-            lines.append(
-                f"  [{i}] (L{s.get('level', 1)}, "
-                f"{len(s.get('content', ''))}c) {heading}"
-            )
-    return lines
 
 
 @mcp.tool()
@@ -292,11 +119,7 @@ def scholar_info(paper_id: str) -> str:
     Args:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
     """
-    ulid = _resolve(paper_id)
-    data = _load_parsed(ulid)
-    if not data:
-        return f"Paper not parsed: {paper_id}"
-    return "\n".join(_digest_lines(data))
+    return _corpus_call(v2_adapter.paper_info, paper_id)
 
 
 # ─── L3: read a single section ──────────────────────────────────────────────
@@ -312,69 +135,7 @@ def scholar_section(paper_id: str, section: str, span: int = 1) -> str:
         span: How many consecutive sections to include from the start
               position (default 1 = only the matched one)
     """
-    ulid = _resolve(paper_id)
-    data = _load_parsed(ulid)
-    if not data:
-        return f"Paper not parsed: {paper_id}"
-    sections = data.get("sections", [])
-    if not sections:
-        return "Paper has no sections."
-    raw = (section or "").strip()
-    idx: int | None = None
-    m = re.fullmatch(r"\[?(\d+)\]?", raw)
-    if m:
-        i = int(m.group(1))
-        if 0 <= i < len(sections):
-            idx = i
-    if idx is None:
-        exact = [i for i, s in enumerate(sections) if (s.get("heading") or "") == raw]
-        ci = [
-            i
-            for i, s in enumerate(sections)
-            if not exact and (s.get("heading") or "").lower() == raw.lower()
-        ]
-        subs = [
-            i
-            for i, s in enumerate(sections)
-            if not exact and not ci and raw.lower() in (s.get("heading") or "").lower()
-        ]
-        cands = exact or ci or subs
-        if not cands:
-            toc = "\n".join(
-                f"  [{i}] {(s.get('heading') or '(untitled)')[:60]}"
-                for i, s in enumerate(sections)
-            )
-            return f"Section '{section}' not found. TOC:\n{toc}"
-        if len(cands) > 1:
-            listing = "\n".join(
-                f"  [{i}] (L{sections[i].get('level', 1)}, "
-                f"{len(sections[i].get('content', ''))}c) "
-                f"{(sections[i].get('heading') or '(untitled)')[:60]}"
-                for i in cands[:10]
-            )
-            return (
-                f"Ambiguous heading '{section}' matches {len(cands)} "
-                f"sections. Retry with the [index]:\n{listing}"
-            )
-        idx = cands[0]
-    span = max(1, min(span, 5))
-    end = min(idx + span, len(sections))
-    parts = []
-    total = 0
-    for i in range(idx, end):
-        s = sections[i]
-        content = s.get("content", "")
-        parts.append(
-            f"[{i}] {s.get('heading') or '(untitled)'} "
-            f"(L{s.get('level', 1)})\n{content}"
-        )
-        total += len(content) + 8
-        if total > MAX_SECTION_CHARS:
-            parts.append(
-                f"…[truncated at {MAX_SECTION_CHARS} chars — narrow your span]"
-            )
-            break
-    return "\n\n".join(parts)
+    return _corpus_call(v2_adapter.section, paper_id, section, max(1, min(span, 5)))
 
 
 # ─── L4: passage location (optional) ────────────────────────────────────────
@@ -388,144 +149,50 @@ def scholar_passages(
     section: str | None = None,
     hybrid: bool = False,
 ) -> str:
-    """Locate passages mentioning the query (vector chunk search).
+    """Locate matching passages with vector or hybrid retrieval.
 
     Args:
         query: Text to locate (keywords or a phrase)
         k: Max passages (default 10)
         paper_id: Optional scope to one paper
         section: Optional substring filter on section name
-        hybrid: Use vector+BM25 fusion (paper-level dedup, no scoping)
+        hybrid: Fuse vector and lexical results; falls back to lexical if the
+                active vector provider is unavailable
     """
-    try:
-        if hybrid:
-            from scholar import rag
-
-            results = rag.search_rag_hybrid(query, limit=max(1, min(k, 20)))
-            results = [
-                {
-                    "paper_id": r.get("paper_id", ""),
-                    "section": r.get("section", ""),
-                    "content": (r.get("content") or "")[:160],
-                    "similarity": r.get("similarity", 0),
-                }
-                for r in results
-            ]
-        else:
-            results = vecstore.search_passages(
-                query,
-                k=max(1, min(k, 20)),
-                paper_id=_resolve(paper_id) if paper_id else None,
-                section=section,
-            )
-    except vecstore.IndexUnavailable:
-        return "Passage search unavailable: the server passage index is not ready."
-    except vecstore.EmbedUnavailable:
-        return "Passage search unavailable: the server embedding provider is not ready."
-    except vecstore.DatabaseUnavailable:
-        return "Passage search unavailable: the server vector database cannot be reached."
-    except Exception as error:
-        logger.warning("passage search failed (%s)", type(error).__name__)
-        return "Passage search failed."
-    if not results:
-        return (
-            f"No passages for '{query}'. If the vector index is empty, "
-            f"run `scholar sync`."
-        )
-    lines = [f"Passages matching '{query}' ({len(results)})"]
-    for r in results:
-        lines.append(
-            f"  [{r['paper_id']}] {(r.get('section') or '')[:20]}  "
-            f"{(r.get('content') or '')[:120]}  sim={r.get('similarity')}"
-        )
-    lines.append("Next: scholar_section <paper_id> <heading> for the full section.")
-    return "\n".join(lines)
+    return _corpus_call(
+        v2_adapter.passages,
+        query,
+        max(1, min(k, 20)),
+        paper_id,
+        section,
+        hybrid,
+    )
 
 
-# ─── Horizontal: citation / concept graph (in-memory, was Neo4j) ───────────
+# ─── Horizontal: citation / concept graph ──────────────────────────────────
 
 
 @mcp.tool()
 def scholar_cite_network(paper_id: str | None = None) -> str:
-    """Citation network. Without paper_id: global stats+hubs. With paper_id:
-    what this paper cites (forward) and who cites it (backward).
+    """Citation network. Without paper_id: aggregate graph counts. With
+    paper_id: internal-library outgoing and incoming citations.
 
     Args:
         paper_id: Optional Paper ID (ULID/arXiv/DOI/slug)
     """
-    try:
-        gm = graph_mem.ensure_graph()
-    except Exception as error:
-        logger.warning("citation graph unavailable (%s)", type(error).__name__)
-        return "Graph unavailable."
-    if not paper_id:
-        st = gm.stats()
-        lines = [
-            f"Papers: {st['papers']}  CITES edges (library-internal): "
-            f"{st['cites_edges']}  Resolved refs: {st['resolved_refs']}",
-            "\nMost cited:",
-        ]
-        for p in st["most_cited"]:
-            lines.append(
-                f"  [{p['ulid']}] {(p.get('title') or '')[:60]}  "
-                f"cited by {p['in_degree']}"
-            )
-        lines.append("\nBridge papers (connect fields):")
-        for p in st["top_bridge"][:5]:
-            lines.append(
-                f"  [{p['ulid']}] {(p.get('title') or '')[:60]}  "
-                f"bridge={p['bridge_score']}"
-            )
-        return "\n".join(lines)
-    ulid = _resolve(paper_id)
-    if ulid not in gm.papers:
-        return f"Paper not in graph: {paper_id}"
-    fwd = gm.forward_citations(ulid)
-    bwd = gm.backward_citations(ulid)
-    lines = [
-        f"[{ulid}] {(gm.papers[ulid].get('title') or '')[:70]}",
-        f"\nForward citations ({len(fwd['cited'])} in-library):",
-    ]
-    for p in fwd["cited"][:10]:
-        lines.append(f"  -> [{p.get('year', '?')}] {(p.get('title') or '')[:60]}")
-    if fwd["unresolved_refs"]:
-        lines.append(f"  (…+{len(fwd['unresolved_refs'])} refs outside the library)")
-    lines.append(f"\nBackward citations ({len(bwd)}):")
-    for p in bwd[:10]:
-        lines.append(f"  <- [{p.get('year', '?')}] {(p.get('title') or '')[:60]}")
-    lines.append("Next: scholar_lineage <a> <b> traces the citation path.")
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.cite_network, paper_id)
 
 
 @mcp.tool()
 def scholar_graph_query(concept: str) -> str:
-    """Papers tagged with a concept + related concepts (co-occurrence).
+    """Find lexical paper candidates for a concept.
+
+    This compatibility tool does not infer semantic concept relationships.
 
     Args:
         concept: Concept name (e.g., 'transformer', 'MoE', 'diffusion')
     """
-    try:
-        gm = graph_mem.ensure_graph()
-    except Exception as error:
-        logger.warning("concept graph unavailable (%s)", type(error).__name__)
-        return "Graph unavailable."
-    papers = gm.papers_by_concept(concept)
-    if not papers:
-        return (
-            f"Concept '{concept}' not found. Concepts come from paper tags "
-            f"and the alias vocabulary — try a broader name."
-        )
-    lines = [f"Papers with concept '{concept}' ({len(papers)})"]
-    for p in papers[:20]:
-        lines.append(
-            f"  [{p['ulid']}] {(p.get('title') or '')[:60]}  "
-            f"{p.get('year', '')}  {p.get('venue', '')}"
-        )
-    related = gm.related_concepts(concept, top_n=8)
-    if related:
-        lines.append("\nRelated concepts:")
-        lines.extend(f"  {r['id']} (weight {r['weight']})" for r in related)
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.graph_query, concept)
 
 
 @mcp.tool()
@@ -536,44 +203,13 @@ def scholar_lineage(paper_a: str, paper_b: str) -> str:
         paper_a: Paper ID (ULID/arXiv/DOI/slug)
         paper_b: Paper ID (ULID/arXiv/DOI/slug)
     """
-    try:
-        gm = graph_mem.ensure_graph()
-    except Exception as error:
-        logger.warning("lineage graph unavailable (%s)", type(error).__name__)
-        return "Graph unavailable."
-    ua, ub = _resolve(paper_a), _resolve(paper_b)
-    result = gm.lineage(ua, ub)
-    if result["hops"] < 0:
-        return (
-            f"No citation path between '{paper_a}' and '{paper_b}' "
-            f"(library-internal edges only)."
-        )
-    lines = [f"Citation path ({result['hops']} hops):"]
-    for i, node in enumerate(result["path"]):
-        lines.append(
-            f"  {'  ' * i}[{node['ulid']}] "
-            f"{(node.get('title') or '')[:60]}  {node.get('year', '')}"
-        )
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.lineage, paper_a, paper_b)
 
 
 @mcp.tool()
 def scholar_graph_stats() -> str:
-    """Graph statistics: papers, citation edges, refs resolution, concepts, hubs."""
-    try:
-        gm = graph_mem.ensure_graph()
-    except Exception as error:
-        logger.warning("graph statistics unavailable (%s)", type(error).__name__)
-        return "Graph unavailable."
-    st = gm.stats()
-    return (
-        f"Papers:            {st['papers']}\n"
-        f"CITES edges:       {st['cites_edges']} (library-internal)\n"
-        f"Refs resolved:     {st['resolved_refs']}\n"
-        f"Refs unresolved:   {st['unresolved_refs']}\n"
-        f"Concepts:          {st['concepts']} ({st['concept_links']} links)\n"
-        f"Innovations:       {st['innovations']}  Replacements: {st['replacements']}"
-    )
+    """Graph counts for papers, authors, citations, and authorship edges."""
+    return _corpus_call(v2_adapter.graph_stats)
 
 
 # ─── Utilities ──────────────────────────────────────────────────────────────
@@ -587,26 +223,7 @@ def scholar_list_papers(year: int | None = None, offset: int = 0) -> str:
         year: Optional year filter (e.g., 2023)
         offset: Pagination offset
     """
-    papers = []
-    for paper_id in dbmod.list_parsed():
-        data = _load_parsed(paper_id)
-        if data:
-            if year and data.get("year") != year:
-                continue
-            papers.append(data)
-    papers.sort(key=lambda x: x.get("year") or 0, reverse=True)
-    total_count = len(papers)
-    papers = papers[offset : offset + 30]
-    lines = [
-        f"Parsed Papers ({len(papers)} shown, total {total_count}, offset {offset})"
-    ]
-    for p in papers:
-        lines.append(
-            f"  {p.get('paper_id', '')}  "
-            f"{(p.get('title') or 'N/A')[:50]}  {p.get('year', '')}  "
-            f"{p.get('venue', '') or ''}"
-        )
-    return "\n".join(lines)
+    return _corpus_call(v2_adapter.list_papers, year, max(0, offset))
 
 
 @mcp.tool()
@@ -618,8 +235,6 @@ def scholar_arxiv_search(query: str, max_results: int = 10) -> str:
         max_results: Max results (default 10)
     """
     try:
-        import xml.etree.ElementTree as ET
-
         xml_data = scholar_config.arxiv_request(f"all:{query}", max_results=max_results)
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(xml_data)
@@ -670,28 +285,12 @@ def read_parsed_paper(paper_id: str, full: bool = False) -> str:
         paper_id: Paper ID (ULID/arXiv/DOI/slug)
         full: Escape hatch for the complete parsed JSON (capped at 200KB)
     """
-    ulid = _resolve(paper_id)
-    data = _load_parsed(ulid)
-    if not data:
-        return f"Paper not parsed: {paper_id}"
-    if not full:
-        return (
-            "\n".join(_digest_lines(data))
-            + "\n\n(reading ladder: use scholar_section for specific "
-            "sections instead of full JSON)"
-        )
-    try:
-        path = dbmod.parsed_path(ulid)
-        raw = path.read_text(encoding="utf-8")
-    except (OSError, ValueError) as error:
-        logger.warning("parsed paper read failed (%s)", type(error).__name__)
-        return "Read failed."
-    if len(raw) > MAX_FULL_JSON_CHARS:
-        return (
-            raw[:MAX_FULL_JSON_CHARS]
-            + f"\n…[truncated at {MAX_FULL_JSON_CHARS} of {len(raw)} chars]"
-        )
-    return raw
+    return _corpus_call(
+        v2_adapter.parsed_paper,
+        paper_id,
+        full,
+        MAX_FULL_JSON_CHARS,
+    )
 
 
 @mcp.tool()
@@ -764,21 +363,7 @@ def scholar_auto_notes(paper_id: str | None = None, force: bool = False) -> str:
         paper_id: Optional Paper ID; omit for batch over all papers
         force: Overwrite existing notes
     """
-    try:
-        from scholar import auto_notes as an
-
-        if paper_id:
-            ulid = _resolve(paper_id)
-            result = an.generate_single_note(ulid, force=force)
-            state = get_state()
-            if state:
-                state.invalidate_parsed(ulid)
-            return json.dumps(result, ensure_ascii=False)
-        result = an.generate_all_notes(force=force)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as error:
-        logger.warning("auto notes failed (%s)", type(error).__name__)
-        return json.dumps({"error": "auto notes failed"}, ensure_ascii=False)
+    return _corpus_call(v2_adapter.auto_notes, paper_id, force)
 
 
 @mcp.tool()
@@ -802,8 +387,6 @@ def scholar_interests(
         interests_found: Count found (for mark-analyzed)
         project: Project name (for mark-analyzed)
     """
-    from scholar import research_loop as rl
-
     if action in ("logs", "mark-analyzed"):
         args = ["interests", action]
         if week:
