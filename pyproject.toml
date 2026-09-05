@@ -35,4 +35,4 @@ scholar = "scholar.cli:main"
 include = ["scholar*", "scholar_mcp*"]
 
 [tool.setuptools.package-data]
-scholar = ["*.json", "*.txt", "templates/**/*", "schemas/*.json"]
+scholar = ["*.json", "*.txt", "templates/**/*", "schemas/*.json", "v2/*.sql"]

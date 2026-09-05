@@ -44,7 +44,7 @@ class InvalidToolPolicy(ValueError):
 
 def validate_tool_policy(tool_names: object) -> tuple[str, ...]:
     """Return a stable policy after rejecting unknown tool names."""
-    if not isinstance(tool_names, (list, tuple, set, frozenset)):
+    if not isinstance(tool_names, list | tuple | set | frozenset):
         raise InvalidToolPolicy("Scholar tool policy must be a collection")
     normalized: set[str] = set()
     for tool_name in tool_names:

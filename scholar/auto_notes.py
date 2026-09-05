@@ -12,6 +12,7 @@ Each note includes:
   5. Section structure tree
   6. Citation summary
 """
+
 import json
 import re
 import ast
@@ -19,11 +20,13 @@ from pathlib import Path
 from typing import Optional
 
 from . import config
+from . import db as dbmod
 
 
 # ===================================================================
 # Single paper note generation
 # ===================================================================
+
 
 def generate_note(data: dict) -> str:
     """
@@ -155,7 +158,7 @@ def generate_note(data: dict) -> str:
 
     # Footer
     lines.append("---")
-    lines.append(f"*Auto-generated from `{pid}` parsed JSON.*")
+    lines.append(f"*Auto-generated from Scholar source data for `{pid}`.*")
 
     return "\n".join(lines)
 
@@ -164,12 +167,13 @@ def generate_note(data: dict) -> str:
 # Extraction helpers
 # ===================================================================
 
+
 def _extract_first_sentence(text: str) -> str:
     """Extract the first meaningful sentence from text."""
     if not text:
         return ""
     # Split on sentence boundaries
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     for s in sentences:
         s = s.strip()
         if len(s) > 30:  # Skip very short fragments
@@ -196,7 +200,10 @@ def _extract_contributions(data: dict) -> list[str]:
     target_sections = []
     for s in sections:
         heading = (s.get("heading") or "").lower()
-        if any(kw in heading for kw in ["introduction", "conclusion", "summary", "contribution"]):
+        if any(
+            kw in heading
+            for kw in ["introduction", "conclusion", "summary", "contribution"]
+        ):
             target_sections.append(s.get("content", ""))
 
     # Fallback to abstract
@@ -205,9 +212,9 @@ def _extract_contributions(data: dict) -> list[str]:
 
     # Extract contribution patterns
     contribution_patterns = [
-        r'we\s+(?:propose|introduce|present|develop|design|show|demonstrate)\s+[^.]+',
-        r'(?:our|the\s+main|a\s+key)\s+contribution[^.]*',
-        r'this\s+(?:paper|work|study)\s+(?:proposes|introduces|presents|develops|shows)[^.]+',
+        r"we\s+(?:propose|introduce|present|develop|design|show|demonstrate)\s+[^.]+",
+        r"(?:our|the\s+main|a\s+key)\s+contribution[^.]*",
+        r"this\s+(?:paper|work|study)\s+(?:proposes|introduces|presents|develops|shows)[^.]+",
     ]
 
     contributions = []
@@ -235,8 +242,16 @@ def _extract_method_overview(data: dict) -> Optional[str]:
         except Exception:
             sections = []
 
-    method_keywords = ["method", "approach", "model", "architecture", "framework",
-                       "proposed", "technique", "algorithm"]
+    method_keywords = [
+        "method",
+        "approach",
+        "model",
+        "architecture",
+        "framework",
+        "proposed",
+        "technique",
+        "algorithm",
+    ]
 
     for s in sections:
         heading = (s.get("heading") or "").lower()
@@ -279,8 +294,10 @@ def _select_top_formulas(formulas: list[dict], n: int = 5) -> list[dict]:
 # Batch processing
 # ===================================================================
 
-def generate_all_notes(parsed_dir: Path = None, notes_dir: Path = None,
-                       force: bool = False) -> dict:
+
+def generate_all_notes(
+    parsed_dir: Path = None, notes_dir: Path = None, force: bool = False
+) -> dict:
     """
     Generate auto-notes for all parsed papers.
 
@@ -334,8 +351,6 @@ def generate_single_note(ulid: str, force: bool = False) -> dict:
     Returns:
         {status: str, path: str, content: str}
     """
-    from . import db as dbmod
-
     data = dbmod.load_parsed(ulid)
     if data is None:
         return {"status": "not_found", "path": "", "content": ""}
