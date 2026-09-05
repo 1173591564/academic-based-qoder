@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import runpy
 
 import pytest
 
@@ -10,6 +11,15 @@ from scholar.v2.models import EvidencePointer, ScholarError, ToolEnvelope
 
 PAPER_ID = "01KT6MTARQMB6JVJNZA9PJVTS2"
 SNAPSHOT_ID = "snapshot-test"
+
+
+def test_module_entrypoint_calls_server_main(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr("scholar_mcp.server.main", lambda: calls.append(True))
+
+    runpy.run_module("scholar_mcp", run_name="__main__")
+
+    assert calls == [True]
 
 
 def envelope(data: dict, degraded: bool = False) -> ToolEnvelope:
